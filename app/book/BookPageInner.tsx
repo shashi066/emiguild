@@ -521,25 +521,24 @@ export default function BookPageInner() {
                     <span style={{ width: 12, height: 12, background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', borderRadius: 2, opacity: 0.4 }} />
                     Booked
                   </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.35)', borderRadius: 2 }} />
-                    <Snowflake size={10} style={{ color: '#00d4ff' }} /> Walk-in Reserved
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, background: 'rgba(255,64,64,0.15)', border: '1px solid rgba(255,64,64,0.3)', borderRadius: 2, opacity: 0.5 }} />
-                    Past
-                  </span>
                 </div>
               </>
             )}
 
             {selectedTime && (
-              <div className="alert alert-success" style={{ marginTop: 'var(--space-lg)' }}>
-                <CheckCircle size={16} />
-                Selected:{' '}
-                <strong>{formatTime(selectedTime)}</strong> —{' '}
-                <strong>{formatTime(addHours(selectedTime, selectedDuration))}</strong>
-                &nbsp;· Total: <strong>{formatCurrency(totalPrice)}</strong>
+              <div
+                className="alert alert-success"
+                style={{ marginTop: 'var(--space-lg)', flexWrap: 'wrap', gap: 4 }}
+              >
+                <CheckCircle size={16} style={{ flexShrink: 0 }} />
+                <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                  <span>Selected:</span>
+                  <strong>{formatTime(selectedTime)}</strong>
+                  <span>—</span>
+                  <strong>{formatTime(addHours(selectedTime, selectedDuration))}</strong>
+                  <span>·</span>
+                  <span>Total: <strong>{formatCurrency(totalPrice)}</strong></span>
+                </span>
               </div>
             )}
           </div>

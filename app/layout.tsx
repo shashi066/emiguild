@@ -6,16 +6,41 @@ import { auth } from '@/auth';
 
 export const metadata: Metadata = {
   title: {
-    default: 'GameZone Cafe — Book Your Gaming Session',
-    template: '%s | GameZone Cafe',
+    default: 'EmiGuild Cafe — PS5 & Racing Simulator Booking',
+    template: '%s | EmiGuild Cafe',
   },
-  description:
-    'Book your gaming station at GameZone Cafe. High-performance PCs, VR setups, racing simulators & more. Reserve your slot online in seconds.',
-  keywords: ['gaming cafe', 'PC gaming', 'book gaming station', 'VR gaming'],
+  description: 
+    'EmiGuild Cafe in [Your City] offers PS5, racing simulators, and premium gaming stations. Reserve your slot online for an immersive gaming experience. Walk in ready to play!',
+  keywords: [
+    'EmiGuild Cafe',
+    'EmiGuild Gaming',
+    'EmiGuild Gaming Cafe',
+    'gaming cafe',
+    'PS5 gaming',
+    'racing simulator',
+    'book gaming station',
+    'VR gaming',
+    'PlayStation 5',
+    'gaming lounge',
+    'online booking',
+    'high-end gaming',
+    'gaming cafe near me',
+    'gaming cafe in kothapet'
+  ],
+  icons: {
+    icon: '/images/logoImage.png',
+    apple: '/images/logoImage.png',
+  },
   openGraph: {
-    title: 'GameZone Cafe — Book Your Gaming Session',
-    description: 'Premium gaming cafe with 10+ high-end gaming stations. Book online!',
+    title: 'EmiGuild Cafe — Book PS5 & Racing Simulator Sessions',
+    description: 'Premium gaming cafe with PS5, racing simulators, and high-end gaming stations. Reserve your session online for the ultimate experience!',
     type: 'website',
+    images: [
+      {
+        url: '/images/logoImage.png',
+        alt: 'EmiGuild Cafe Logo',
+      }
+    ]
   },
 };
 
