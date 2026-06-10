@@ -40,16 +40,6 @@ http://localhost:3000
 
 ---
 
-## 🔐 Demo Credentials
-
-| Role  | Email                     | Password  |
-|-------|---------------------------|-----------|
-| Admin | admin@gamingcafe.com      | admin123  |
-| User  | rahul@example.com         | user123   |
-| User  | priya@example.com         | user123   |
-
----
-
 ## 📁 Project Structure
 
 ```
