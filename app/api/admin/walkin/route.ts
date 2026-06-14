@@ -14,6 +14,8 @@ const walkinSchema = z.object({
   extraControllers: z.number().int().min(0).max(3).optional(),
   notes:            z.string().optional(),
   status:           z.enum(['PENDING', 'CONFIRMED']).optional(),
+  usePass:          z.boolean().optional(),
+  linkedUserId:     z.string().optional(), // registered user's id (for pass lookup)
 });
 
 // GET — list all offline (walk-in) bookings
@@ -91,6 +93,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const { usePass, linkedUserId } = result.data;
+
     // Fetch controller price from settings
     let controllerUnitPrice = 0;
     if (extraControllers > 0) {
@@ -98,25 +102,66 @@ export async function POST(req: NextRequest) {
       controllerUnitPrice = parseFloat(setting?.value ?? '0');
     }
     const controllerCharge = extraControllers * controllerUnitPrice * duration;
-    const totalPrice = station.hourlyRate * duration + controllerCharge;
+
+    // ── Pass logic ─────────────────────────────────────────────────────────
+    let userPassId: string | null = null;
+    let passHoursDeducted = 0;
+    let sessionPrice = station.hourlyRate * duration;
+
+    if (usePass && linkedUserId) {
+      const now = new Date();
+      const pass = await prisma.userPass.findFirst({
+        where: {
+          userId: linkedUserId,
+          status: 'ACTIVE',
+          expiresAt: { gte: now },
+        },
+        orderBy: { purchasedAt: 'desc' },
+      });
+
+      if (!pass) {
+        return NextResponse.json({ error: 'No active pass found for this user.' }, { status: 400 });
+      }
+      const remaining = pass.totalHours - pass.usedHours;
+      if (remaining < duration) {
+        return NextResponse.json(
+          { error: `Not enough pass hours. ${remaining} hr(s) remaining, need ${duration}.` },
+          { status: 400 }
+        );
+      }
+
+      const newUsed = pass.usedHours + duration;
+      await prisma.userPass.update({
+        where: { id: pass.id },
+        data: { usedHours: newUsed, status: newUsed >= pass.totalHours ? 'EXHAUSTED' : 'ACTIVE' },
+      });
+
+      userPassId        = pass.id;
+      passHoursDeducted = duration;
+      sessionPrice      = 0;
+    }
+
+    const totalPrice = sessionPrice + controllerCharge;
 
     const booking = await prisma.booking.create({
       data: {
-        userId:          session.user.id,
+        userId:           usePass && linkedUserId ? linkedUserId : session.user.id,
         stationId,
         date,
         startTime,
         endTime,
         duration,
         totalPrice,
-        status:          status ?? 'CONFIRMED',
-        bookingType:     'OFFLINE',
+        status:           status ?? 'CONFIRMED',
+        bookingType:      'OFFLINE',
         customerName,
-        customerPhone:   customerPhone ?? null,
-        paymentStatus:   'UNPAID',
+        customerPhone:    customerPhone ?? null,
+        paymentStatus:    usePass ? 'PAID' : 'UNPAID',
         extraControllers,
         controllerCharge,
-        notes:           notes ?? null,
+        notes:            notes ?? null,
+        userPassId,
+        passHoursDeducted,
       },
       include: {
         station: { select: { id: true, name: true } },

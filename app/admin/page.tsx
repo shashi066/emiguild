@@ -5,10 +5,10 @@ import {
   TrendingUp, Clock, CheckCircle, XCircle,
   ChevronRight,
 } from 'lucide-react';
-import { formatCurrency, formatDate, formatTime } from '@/lib/utils';
+import { formatCurrency, formatDate, formatTime, getTodayString } from '@/lib/utils';
 
 async function getDashboardData() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayString();
 
   const [
     totalBookings, todayBookings, pendingBookings,

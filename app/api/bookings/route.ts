@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
     const { stationId, date, startTime, duration, notes } = result.data;
     const endTime = addHours(startTime, duration);
     const extraControllers = Math.min(3, Math.max(0, parseInt(String(body.extraControllers ?? 0))));
+    const usePass: boolean = body.usePass === true;
 
     // Check station exists
     const station = await prisma.station.findUnique({ where: { id: stationId } });
@@ -79,13 +80,11 @@ export async function POST(req: NextRequest) {
 
     // Reject bookings for past time slots on today's date
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
     if (date === todayStr) {
       const [slotHour, slotMin] = startTime.split(':').map(Number);
-      const currentHour = today.getHours();
-      const currentMin = today.getMinutes();
       const slotTotalMins = slotHour * 60 + slotMin;
-      const nowTotalMins = currentHour * 60 + currentMin;
+      const nowTotalMins = today.getHours() * 60 + today.getMinutes();
       if (slotTotalMins <= nowTotalMins) {
         return NextResponse.json(
           { error: 'Cannot book a time slot that has already passed.' },
@@ -96,19 +95,15 @@ export async function POST(req: NextRequest) {
 
     // Check for conflicts
     const conflictingBookings = await prisma.booking.findMany({
-      where: {
-        stationId,
-        date,
-        status: { not: 'CANCELLED' },
-      },
+      where: { stationId, date, status: { not: 'CANCELLED' } },
     });
 
     const [startH] = startTime.split(':').map(Number);
-    const [endH] = endTime.split(':').map(Number);
+    const [endH]   = endTime.split(':').map(Number);
 
     for (const existing of conflictingBookings) {
       const [existStartH] = existing.startTime.split(':').map(Number);
-      const [existEndH] = existing.endTime.split(':').map(Number);
+      const [existEndH]   = existing.endTime.split(':').map(Number);
       if (startH < existEndH && endH > existStartH) {
         return NextResponse.json(
           { error: 'This time slot is already booked. Please choose a different time.' },
@@ -117,30 +112,73 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fetch controller price from settings
+    // Controller price from settings
     let controllerUnitPrice = 0;
     if (extraControllers > 0) {
       const setting = await prisma.setting.findUnique({ where: { key: 'controller_price' } });
       controllerUnitPrice = parseFloat(setting?.value ?? '0');
     }
     const controllerCharge = extraControllers * controllerUnitPrice * duration;
-    const totalPrice = station.hourlyRate * duration + controllerCharge;
+
+    // ── Pass logic ────────────────────────────────────────────────────────
+    let userPassId: string | null = null;
+    let passHoursDeducted = 0;
+    let sessionPrice = station.hourlyRate * duration;
+
+    if (usePass) {
+      const now = new Date();
+      const pass = await prisma.userPass.findFirst({
+        where: {
+          userId: session.user.id!,
+          status: 'ACTIVE',
+          expiresAt: { gte: now },
+        },
+        orderBy: { purchasedAt: 'desc' },
+      });
+
+      if (!pass) {
+        return NextResponse.json({ error: 'No active pass found.' }, { status: 400 });
+      }
+
+      const remaining = pass.totalHours - pass.usedHours;
+      if (remaining < duration) {
+        return NextResponse.json(
+          { error: `Not enough pass hours. You have ${remaining} hr(s) remaining but need ${duration} hr(s).` },
+          { status: 400 }
+        );
+      }
+
+      const newUsedHours = pass.usedHours + duration;
+      const newStatus = newUsedHours >= pass.totalHours ? 'EXHAUSTED' : 'ACTIVE';
+      await prisma.userPass.update({
+        where: { id: pass.id },
+        data: { usedHours: newUsedHours, status: newStatus },
+      });
+
+      userPassId        = pass.id;
+      passHoursDeducted = duration;
+      sessionPrice      = 0; // covered by pass
+    }
+
+    const totalPrice = sessionPrice + controllerCharge;
 
     const booking = await prisma.booking.create({
       data: {
-        userId:          session.user.id,
+        userId:           session.user.id,
         stationId,
         date,
         startTime,
         endTime,
         duration,
         totalPrice,
-        notes:           notes ?? null,
-        status:          'CONFIRMED',
-        bookingType:     'ONLINE',
-        paymentStatus:   'UNPAID',
+        notes:            notes ?? null,
+        status:           'CONFIRMED',
+        bookingType:      'ONLINE',
+        paymentStatus:    usePass ? 'PAID' : 'UNPAID',
         extraControllers,
         controllerCharge,
+        userPassId,
+        passHoursDeducted,
       },
       include: {
         station: true,

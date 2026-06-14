@@ -51,6 +51,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Validation failed' }, { status: 400 });
   }
 
+  // ── Restore pass hours if cancelling a pass-backed booking ───────────
+  if (result.data.status === 'CANCELLED' && booking.userPassId && booking.passHoursDeducted > 0) {
+    const pass = await prisma.userPass.findUnique({ where: { id: booking.userPassId } });
+    if (pass) {
+      const restoredUsedHours = Math.max(0, pass.usedHours - booking.passHoursDeducted);
+      const restoredStatus = pass.status === 'EXPIRED' ? 'EXPIRED' : 'ACTIVE';
+      await prisma.userPass.update({
+        where: { id: pass.id },
+        data: { usedHours: restoredUsedHours, status: restoredStatus },
+      });
+    }
+  }
+
   const updated = await prisma.booking.update({
     where: { id },
     data: {

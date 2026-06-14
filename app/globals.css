@@ -916,32 +916,59 @@ input.form-input[type="time"]:focus {
   padding: 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.03);
   cursor: pointer;
   text-align: center;
   font-size: 0.85rem;
   font-weight: 600;
+  color: var(--color-text-primary);
   transition: all var(--transition-fast);
   user-select: none;
 }
 
-.time-slot:hover:not(.unavailable) {
+/* Available slot hover */
+.time-slot:hover:not(.slot-past):not(.slot-booked):not(.slot-frozen):not(.selected) {
   border-color: var(--color-accent-primary);
   color: var(--color-accent-primary);
-  background: rgba(108, 99, 255, 0.08);
+  background: rgba(108, 99, 255, 0.1);
 }
 
+/* Selected */
 .time-slot.selected {
   background: var(--gradient-primary);
   border-color: transparent;
   color: white;
-  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.4);
+  box-shadow: 0 4px 15px rgba(108, 99, 255, 0.45);
 }
 
-.time-slot.unavailable {
-  opacity: 0.35;
+/* Past — already passed */
+.time-slot.slot-past {
+  opacity: 0.22;
   cursor: not-allowed;
   text-decoration: line-through;
+  background: transparent;
+  color: var(--color-text-muted);
 }
+
+/* Booked — taken by someone */
+.time-slot.slot-booked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: line-through;
+  background: rgba(239, 68, 68, 0.05);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+/* Frozen — reserved for walk-in */
+.time-slot.slot-frozen {
+  cursor: not-allowed;
+  background: rgba(0, 212, 255, 0.06);
+  border-color: rgba(0, 212, 255, 0.3);
+  color: #00d4ff;
+  opacity: 0.75;
+}
+
 
 /* ============================================================
    BOOKING STEPS
@@ -1555,6 +1582,14 @@ input.form-input[type="time"]:focus {
 }
 .footer-map-link:hover {
   color: var(--color-accent-primary);
+}
+
+.pass-cta-link {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.pass-cta-link:hover {
+  opacity: 0.82;
+  transform: translateY(-2px);
 }
 
 /* ============================================================

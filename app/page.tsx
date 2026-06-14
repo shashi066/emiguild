@@ -15,6 +15,7 @@ import {
   Wifi,
   Phone,
   MapPin,
+  Award,
 } from 'lucide-react';
 
 async function getStations() {
@@ -146,6 +147,18 @@ export default async function HomePage() {
                 View Stations
                 <ChevronRight size={18} />
               </ScrollToSection>
+              <Link
+                href="/passes"
+                className="btn btn-ghost btn-lg"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,215,0,0.1), rgba(205,127,50,0.1))',
+                  border: '1px solid rgba(255,215,0,0.3)',
+                  color: '#FFD700',
+                }}
+              >
+                <Award size={18} />
+                Monthly Passes
+              </Link>
             </div>
 
             <div className="hero-stats">
@@ -157,10 +170,10 @@ export default async function HomePage() {
                 <div className="hero-stat-value">{stats.totalUsers}+</div>
                 <div className="hero-stat-label">Active Gamers</div>
               </div>
-              <div>
+              {/* <div>
                 <div className="hero-stat-value">{stats.totalBookings}+</div>
                 <div className="hero-stat-label">Sessions Booked</div>
-              </div>
+              </div> */}
             </div>
           </div>
         </div>

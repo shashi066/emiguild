@@ -6,11 +6,11 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   Calendar, Monitor, Clock, CheckCircle, ChevronRight,
-  ChevronLeft, AlertCircle, Zap, Snowflake, Gamepad2, Plus, Minus,
+  ChevronLeft, AlertCircle, Zap, Snowflake, Gamepad2, Plus, Minus, Award,
 } from 'lucide-react';
 import {
   TIME_SLOTS, DURATION_OPTIONS, CLOSING_HOUR, formatTime, formatDate,
-  formatCurrency, getTodayString, isSlotAvailable, addHours, getTimeSlotsForDate,
+  formatCurrency, getTodayString, toLocalDateString, isSlotAvailable, addHours, getTimeSlotsForDate,
 } from '@/lib/utils';
 
 type Station = {
@@ -52,9 +52,13 @@ export default function BookPageInner() {
   const [selectedStation, setSelectedStation]   = useState<Station | null>(null);
   const [selectedTime, setSelectedTime]         = useState('');
   const [selectedDuration, setSelectedDuration] = useState(2);
-  const [extraControllers, setExtraControllers] = useState(0);  // 0–3 extra
-  const [controllerPrice, setControllerPrice]   = useState(0);  // fetched from settings
+  const [extraControllers, setExtraControllers] = useState(0);
+  const [controllerPrice, setControllerPrice]   = useState(0);
   const [notes, setNotes]                       = useState('');
+  const [usePass, setUsePass]                   = useState(false);
+  const [activePass, setActivePass]             = useState<{
+    id: string; passType: string; totalHours: number; usedHours: number; expiresAt: string;
+  } | null>(null);
 
   const controllerSectionRef = useRef<HTMLDivElement>(null);
   // Load stations
@@ -70,6 +74,16 @@ export default function BookPageInner() {
       .then((r) => r.json())
       .then((d) => setControllerPrice(parseFloat(d.controller_price ?? '0')));
   }, []);
+
+  // Fetch active pass when session is available
+  useEffect(() => {
+    if (session?.user) {
+      fetch('/api/user/pass')
+        .then((r) => (r.ok ? r.json() : { pass: null }))
+        .then((d) => setActivePass(d.pass ?? null))
+        .catch(() => setActivePass(null));
+    }
+  }, [session]);
 
   // Pre-select station from URL param after stations load
   useEffect(() => {
@@ -103,9 +117,8 @@ export default function BookPageInner() {
   }, [loadSlots]);
 
   const controllerCharge = extraControllers * controllerPrice * selectedDuration;
-  const totalPrice = selectedStation
-    ? selectedStation.hourlyRate * selectedDuration + controllerCharge
-    : 0;
+  const sessionCost = selectedStation ? selectedStation.hourlyRate * selectedDuration : 0;
+  const totalPrice = (usePass ? 0 : sessionCost) + controllerCharge;
 
   const handleSubmit = async () => {
     if (!session) {
@@ -125,6 +138,7 @@ export default function BookPageInner() {
           duration:        selectedDuration,
           extraControllers,
           notes,
+          usePass,
         }),
       });
       const data = await res.json();
@@ -150,7 +164,7 @@ export default function BookPageInner() {
   const today = getTodayString();
   const maxDate = new Date();
   maxDate.setDate(maxDate.getDate() + 30);
-  const maxDateStr = maxDate.toISOString().split('T')[0];
+  const maxDateStr = toLocalDateString(maxDate);
 
   return (
     <div className="page-wrapper">
@@ -229,7 +243,7 @@ export default function BookPageInner() {
               {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
                 const d = new Date();
                 d.setDate(d.getDate() + offset);
-                const dateStr = d.toISOString().split('T')[0];
+                const dateStr = toLocalDateString(d);
                 const label =
                   offset === 0
                     ? 'Today'
@@ -472,74 +486,151 @@ export default function BookPageInner() {
                     const booked = !isFrozen && !isSlotAvailable(time, selectedDuration, bookedSlots);
                     const unavailable = isPast || isFrozen || booked;
 
+                    // Determine slot state class
+                    const slotClass = isPast    ? 'slot-past'
+                                    : isFrozen  ? 'slot-frozen'
+                                    : booked    ? 'slot-booked'
+                                    : selectedTime === time ? 'selected'
+                                    : '';
+
                     return (
                       <button
                         key={time}
-                        className={`time-slot ${
-                          unavailable ? 'unavailable'
-                            : selectedTime === time ? 'selected'
-                            : ''
-                        }`}
+                        className={`time-slot ${slotClass}`}
                         onClick={() => !unavailable && setSelectedTime(time)}
                         disabled={unavailable}
                         title={
-                          isPast   ? 'This time has already passed'
-                          : isFrozen ? 'Reserved for walk-in customer'
-                          : booked   ? 'Already booked'
+                          isPast    ? 'This time has already passed'
+                          : isFrozen  ? 'Reserved for walk-in customer'
+                          : booked    ? 'Already booked'
                           : `Book from ${formatTime(time)}`
                         }
-                        style={{
-                          ...(isPast   ? { textDecoration: 'line-through', opacity: 0.25 } : {}),
-                          ...(isFrozen ? { borderColor: 'rgba(0,212,255,0.35)', background: 'rgba(0,212,255,0.06)', color: '#00d4ff', opacity: 0.7 } : {}),
-                        }}
                       >
-                        {isFrozen ? <><Snowflake size={11} style={{ display:'inline', marginRight: 2 }} />{formatTime(time)}</> : formatTime(time)}
+                        {isFrozen
+                          ? <><Snowflake size={11} style={{ display: 'inline', marginRight: 2 }} />{formatTime(time)}</>
+                          : formatTime(time)
+                        }
                       </button>
                     );
                   })}
                 </div>
 
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 'var(--space-lg)',
-                    marginTop: 'var(--space-lg)',
-                    fontSize: '0.8rem',
-                    color: 'var(--color-text-muted)',
-                    flexWrap: 'wrap',
-                  }}
-                >
+                <div style={{ display: 'flex', gap: 'var(--space-lg)', marginTop: 'var(--space-lg)', fontSize: '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+                  {/* Available */}
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, background: 'var(--gradient-primary)', borderRadius: 2 }} />
-                    Selected
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, background: 'rgba(108,99,255,0.08)', border: '1px solid rgba(108,99,255,0.25)', borderRadius: 2 }} />
+                    <span style={{ width: 12, height: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)', borderRadius: 2 }} />
                     Available
                   </span>
+                  {/* Selected */}
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', borderRadius: 2, opacity: 0.4 }} />
-                    Booked
+                    <span style={{ width: 12, height: 12, background: 'var(--gradient-primary)', borderRadius: 2, boxShadow: '0 2px 6px rgba(108,99,255,0.45)' }} />
+                    Selected
+                  </span>
+                  {/* Past */}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: 0.5 }}>
+                    <span style={{ width: 12, height: 12, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 2 }} />
+                    <span style={{ textDecoration: 'line-through' }}>Past</span>
+                  </span>
+                  {/* Booked */}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 12, height: 12, background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 2 }} />
+                    <span style={{ color: '#ef4444', textDecoration: 'line-through' }}>Booked</span>
                   </span>
                 </div>
+
               </>
             )}
 
             {selectedTime && (
-              <div
-                className="alert alert-success"
-                style={{ marginTop: 'var(--space-lg)', flexWrap: 'wrap', gap: 4 }}
-              >
-                <CheckCircle size={16} style={{ flexShrink: 0 }} />
-                <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                  <span>Selected:</span>
-                  <strong>{formatTime(selectedTime)}</strong>
-                  <span>—</span>
-                  <strong>{formatTime(addHours(selectedTime, selectedDuration))}</strong>
-                  <span>·</span>
-                  <span>Total: <strong>{formatCurrency(totalPrice)}</strong></span>
-                </span>
-              </div>
+              <>
+                {/* Pass payment toggle */}
+                {activePass && (() => {
+                  const remaining = activePass.totalHours - activePass.usedHours;
+                  const canUse = remaining >= selectedDuration;
+                  const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700' };
+                  const color = PASS_COLOR[activePass.passType] ?? '#FFD700';
+                  return (
+                    <div style={{ marginTop: 'var(--space-lg)' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                        Payment Method
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {/* Pass option */}
+                        <button
+                          onClick={() => canUse && setUsePass(true)}
+                          disabled={!canUse}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            padding: '14px 16px', borderRadius: 'var(--radius-md)', textAlign: 'left',
+                            border: `2px solid ${usePass ? color : canUse ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
+                            background: usePass ? `rgba(${activePass.passType === 'BRONZE' ? '205,127,50' : activePass.passType === 'SILVER' ? '192,192,192' : '255,215,0'},0.08)` : 'var(--color-bg-card)',
+                            cursor: canUse ? 'pointer' : 'not-allowed',
+                            opacity: canUse ? 1 : 0.5,
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {usePass && <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.875rem', color: usePass ? color : 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <Award size={14} />
+                              Use {activePass.passType.charAt(0) + activePass.passType.slice(1).toLowerCase()} Pass
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                              {canUse
+                                ? `${remaining} hrs remaining → ${remaining - selectedDuration} after this session`
+                                : `Only ${remaining} hr(s) left — need ${selectedDuration} hr(s)`}
+                            </div>
+                          </div>
+                          {canUse && <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#4ade80' }}>FREE</div>}
+                        </button>
+
+                        {/* Pay at counter option */}
+                        <button
+                          onClick={() => setUsePass(false)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            padding: '14px 16px', borderRadius: 'var(--radius-md)', textAlign: 'left',
+                            border: `2px solid ${!usePass ? 'var(--color-accent-primary)' : 'rgba(255,255,255,0.12)'}`,
+                            background: !usePass ? 'rgba(108,99,255,0.08)' : 'var(--color-bg-card)',
+                            cursor: 'pointer', transition: 'all 0.15s',
+                          }}
+                        >
+                          <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid var(--color-accent-primary)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {!usePass && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-accent-primary)' }} />}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.875rem', color: !usePass ? 'var(--color-accent-primary)' : 'var(--color-text-primary)' }}>Pay at Counter</div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>Pay when you arrive at the guild</div>
+                          </div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{formatCurrency(sessionCost + controllerCharge)}</div>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div
+                  className="alert alert-success"
+                  style={{ marginTop: 'var(--space-lg)', flexWrap: 'wrap', gap: 4 }}
+                >
+                  <CheckCircle size={16} style={{ flexShrink: 0 }} />
+                  <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                    <span>Selected:</span>
+                    <strong>{formatTime(selectedTime)}</strong>
+                    <span>—</span>
+                    <strong>{formatTime(addHours(selectedTime, selectedDuration))}</strong>
+                    <span>·</span>
+                    <span>
+                      {usePass
+                        ? <><strong style={{ color: '#4ade80' }}>Pass Booking</strong>{controllerCharge > 0 ? ` + ${formatCurrency(controllerCharge)} controllers` : ''}</>
+                        : <>Total: <strong>{formatCurrency(totalPrice)}</strong></>
+                      }
+                    </span>
+                  </span>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -595,10 +686,17 @@ export default function BookPageInner() {
               </div>
 
               {/* Pricing breakdown */}
-              <div className="booking-detail-item" style={{ background: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)' }}>
+              <div className="booking-detail-item" style={{ background: usePass ? 'rgba(0,230,118,0.04)' : 'rgba(255,255,255,0.02)', borderColor: usePass ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.06)' }}>
                 <div className="booking-detail-label">Session Cost</div>
                 <div className="booking-detail-value" style={{ fontSize: '0.95rem' }}>
-                  {formatCurrency(selectedStation!.hourlyRate)} × {selectedDuration}h = {formatCurrency(selectedStation!.hourlyRate * selectedDuration)}
+                  {usePass ? (
+                    <span>
+                      <s style={{ opacity: 0.4, marginRight: 8 }}>{formatCurrency(selectedStation!.hourlyRate)} × {selectedDuration}h = {formatCurrency(sessionCost)}</s>
+                      <span style={{ color: 'var(--color-accent-success)', fontWeight: 700 }}>₹0 (Pass)</span>
+                    </span>
+                  ) : (
+                    <>{formatCurrency(selectedStation!.hourlyRate)} × {selectedDuration}h = {formatCurrency(sessionCost)}</>
+                  )}
                 </div>
               </div>
               {extraControllers > 0 && (
@@ -614,16 +712,16 @@ export default function BookPageInner() {
               <div
                 className="booking-detail-item"
                 style={{
-                  background: 'rgba(108, 99, 255, 0.08)',
-                  borderColor: 'rgba(108, 99, 255, 0.25)',
+                  background: usePass ? 'rgba(0,230,118,0.08)' : 'rgba(108,99,255,0.08)',
+                  borderColor: usePass ? 'rgba(0,230,118,0.25)' : 'rgba(108,99,255,0.25)',
                 }}
               >
                 <div className="booking-detail-label">Total Price</div>
                 <div
                   className="booking-detail-value"
-                  style={{ color: 'var(--color-accent-primary)', fontSize: '1.2rem' }}
+                  style={{ color: usePass ? 'var(--color-accent-success)' : 'var(--color-accent-primary)', fontSize: '1.2rem' }}
                 >
-                  {formatCurrency(totalPrice)}
+                  {formatCurrency(totalPrice)}{usePass && <span style={{ fontSize: '0.75rem', fontWeight: 400, marginLeft: 8, color: 'var(--color-accent-success)' }}>(Pass applied)</span>}
                 </div>
               </div>
             </div>

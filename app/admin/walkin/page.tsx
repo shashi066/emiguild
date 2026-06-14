@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   UserPlus, Plus, Trash2, AlertCircle, RefreshCw,
-  Calendar, Clock, Monitor, X, CheckCircle, Phone, User, Search,
+  Calendar, Clock, Monitor, X, CheckCircle, Phone, User, Search, Award, ChevronDown,
 } from 'lucide-react';
 import { formatDate, formatTime, formatCurrency, getTodayString, isSlotAvailable, getTimeSlotsForDate } from '@/lib/utils';
 
@@ -22,8 +22,12 @@ type WalkinBooking = {
   extraControllers: number;
   status: string;
   notes: string | null;
+  passHoursDeducted?: number;
   station: { id: string; name: string };
 };
+type FoundUser = { id: string; name: string; email: string; phone: string | null };
+type ActivePass = { id: string; passType: string; totalHours: number; usedHours: number; expiresAt: string };
+const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700' };
 
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12];
 
@@ -56,6 +60,16 @@ export default function WalkinBookingPage() {
     notes: '',
   });
 
+  // Search-select state
+  const [allUsers, setAllUsers]         = useState<FoundUser[]>([]);
+  const [userQuery, setUserQuery]       = useState('');
+  const [showUserDrop, setShowUserDrop] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<FoundUser | null>(null);
+  const [activePass, setActivePass]     = useState<ActivePass | null>(null);
+  const [usePass, setUsePass]           = useState(false);
+  const [loadingPass, setLoadingPass]   = useState(false);
+  const userWrapRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     fetch('/api/stations')
       .then((r) => r.json())
@@ -65,6 +79,22 @@ export default function WalkinBookingPage() {
       .then((d) => {
         if (d.controller_price) setControllerPrice(parseFloat(d.controller_price));
       });
+    // Load all users once for the search-select
+    fetch('/api/admin/passes/users')
+      .then((r) => r.json())
+      .then((d) => setAllUsers(d.users ?? []))
+      .catch(() => {});
+  }, []);
+
+  // Close user dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (userWrapRef.current && !userWrapRef.current.contains(e.target as Node)) {
+        setShowUserDrop(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const loadBookings = useCallback(async () => {
@@ -93,7 +123,58 @@ export default function WalkinBookingPage() {
 
   const selectedStation = stations.find((s) => s.id === form.stationId);
   const controllerCharge = form.extraControllers * controllerPrice * form.duration;
-  const estimatedTotal = selectedStation ? selectedStation.hourlyRate * form.duration + controllerCharge : 0;
+  const sessionCost = selectedStation ? selectedStation.hourlyRate * form.duration : 0;
+  const estimatedTotal = (usePass ? 0 : sessionCost) + controllerCharge;
+
+  // Filtered user list for dropdown
+  const filteredUsers = userQuery.trim().length < 1 ? [] : allUsers.filter((u) => {
+    const q = userQuery.toLowerCase();
+    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.phone ?? '').includes(q);
+  }).slice(0, 8);
+
+  const fetchPassForUser = async (userId: string) => {
+    setLoadingPass(true);
+    setActivePass(null);
+    setUsePass(false);
+    try {
+      const res = await fetch(`/api/admin/passes?userId=${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setActivePass((data.passes ?? [])[0] ?? null);
+      }
+    } finally {
+      setLoadingPass(false);
+    }
+  };
+
+  const handleSelectUser = (user: FoundUser) => {
+    setSelectedUser(user);
+    setUserQuery('');
+    setShowUserDrop(false);
+    setForm((f) => ({
+      ...f,
+      customerName: user.name,
+      customerPhone: user.phone ?? '',
+    }));
+    fetchPassForUser(user.id);
+  };
+
+  const handleClearUser = () => {
+    setSelectedUser(null);
+    setActivePass(null);
+    setUsePass(false);
+    setUserQuery('');
+    setForm((f) => ({ ...f, customerName: '', customerPhone: '' }));
+  };
+
+  // Reset user/pass state when form is reset
+  const resetForm = () => {
+    setForm({ customerName: '', customerPhone: '', stationId: '', date: getTodayString(), startTime: '10:00', duration: 2, extraControllers: 0, notes: '' });
+    setSelectedUser(null);
+    setActivePass(null);
+    setUsePass(false);
+    setUserQuery('');
+  };
 
   // Filter available time slots: within opening hours, not past, not conflicting
   const SHOP_CLOSE_HOUR = 24; // shop closes at 12AM (midnight)
@@ -118,13 +199,18 @@ export default function WalkinBookingPage() {
       const res = await fetch('/api/admin/walkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, duration: Number(form.duration) }),
+        body: JSON.stringify({
+          ...form,
+          duration: Number(form.duration),
+          usePass,
+          linkedUserId: selectedUser?.id ?? null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Booking failed.'); return; }
       setSuccess(`✅ Walk-in booking created for ${data.booking.customerName} — ${data.booking.station.name}`);
       setShowForm(false);
-      setForm({ customerName: '', customerPhone: '', stationId: '', date: getTodayString(), startTime: '10:00', duration: 2, extraControllers: 0, notes: '' });
+      resetForm();
       loadBookings();
     } finally {
       setSubmitting(false);
@@ -319,6 +405,16 @@ export default function WalkinBookingPage() {
                             }}>
                               🚶 Walk-in
                             </span>
+                            {/* Pass badge */}
+                            {(booking.passHoursDeducted ?? 0) > 0 && (
+                              <span style={{
+                                padding: '3px 8px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700,
+                                background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)',
+                                display: 'flex', alignItems: 'center', gap: 4,
+                              }}>
+                                <Award size={10} /> Pass Used
+                              </span>
+                            )}
                           </div>
 
                           {/* Station + time */}
@@ -407,11 +503,95 @@ export default function WalkinBookingPage() {
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 'var(--space-md)' }}>
                   Customer Details
                 </div>
+
+                {/* Search-select for registered users */}
+                <div className="form-group" style={{ marginBottom: 'var(--space-md)' }}>
+                  <label className="form-label">Search Registered Customer <span style={{ color: 'var(--color-text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(optional)</span></label>
+                  <div ref={userWrapRef} style={{ position: 'relative' }}>
+                    <div
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '0 12px', height: 42,
+                        background: 'var(--color-bg-elevated)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'text',
+                        transition: 'border-color 0.15s',
+                      }}
+                      onClick={() => { if (!selectedUser) document.getElementById('walkin-user-search')?.focus(); }}
+                    >
+                      <Search size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                      {selectedUser ? (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          padding: '3px 10px 3px 8px', borderRadius: 999,
+                          background: 'rgba(108,99,255,0.15)', border: '1px solid rgba(108,99,255,0.3)',
+                          fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-accent-primary)',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          <User size={11} />
+                          {selectedUser.name}{selectedUser.phone ? ` · ${selectedUser.phone}` : ''}
+                          <button type="button" onClick={(e) => { e.stopPropagation(); handleClearUser(); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent-primary)', display: 'flex', alignItems: 'center', padding: 0 }}>
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ) : (
+                        <input
+                          id="walkin-user-search"
+                          type="text"
+                          placeholder="Search by name, email or phone…"
+                          value={userQuery}
+                          onChange={(e) => { setUserQuery(e.target.value); setShowUserDrop(true); }}
+                          onFocus={() => { if (userQuery) setShowUserDrop(true); }}
+                          style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--color-text-primary)', fontFamily: 'inherit', fontSize: '0.875rem' }}
+                        />
+                      )}
+                      <ChevronDown size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0, transform: showUserDrop ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+                    </div>
+
+                    {/* Dropdown */}
+                    {!selectedUser && showUserDrop && (
+                      <div style={{
+                        position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
+                        background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border-accent)',
+                        borderRadius: 'var(--radius-md)', boxShadow: '0 10px 32px rgba(0,0,0,0.4)',
+                        overflow: 'hidden',
+                      }}>
+                        {filteredUsers.length > 0 ? filteredUsers.map((u) => (
+                          <button key={u.id} type="button"
+                            onMouseDown={() => handleSelectUser(u)}
+                            style={{
+                              width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none',
+                              border: 'none', borderBottom: '1px solid var(--color-border)', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', gap: 10,
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(108,99,255,0.1)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                          >
+                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--gradient-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <User size={14} style={{ color: 'white' }} />
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-text-primary)' }}>{u.name}</div>
+                              <div style={{ fontSize: '0.73rem', color: 'var(--color-text-muted)' }}>{u.phone ?? 'No phone'} · {u.email}</div>
+                            </div>
+                          </button>
+                        )) : (
+                          <div style={{ padding: '12px 16px', fontSize: '0.82rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                            {userQuery.trim() ? `No customers matching "${userQuery}"` : 'Start typing to search…'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {loadingPass && <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Checking pass…</div>}
+                </div>
+
+                {/* Name + Phone — always editable, pre-filled when user selected */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="walkin-name">
-                      Customer Name *
-                    </label>
+                    <label className="form-label" htmlFor="walkin-name">Customer Name *</label>
                     <input
                       id="walkin-name"
                       type="text"
@@ -437,6 +617,7 @@ export default function WalkinBookingPage() {
                   </div>
                 </div>
               </div>
+
 
               {/* Booking section */}
               <div style={{ background: 'rgba(0,212,255,0.03)', border: '1px solid rgba(0,212,255,0.1)', borderRadius: 'var(--radius-md)', padding: 'var(--space-md)' }}>
@@ -552,6 +733,58 @@ export default function WalkinBookingPage() {
                 </div>
               </div>
 
+              {/* Pass toggle — shown only when registered user has an active pass */}
+              {selectedUser && activePass && (
+                <div style={{
+                  borderRadius: 'var(--radius-md)',
+                  border: usePass ? `1px solid ${PASS_COLOR[activePass.passType]}55` : '1px solid var(--color-border)',
+                  background: usePass ? `${PASS_COLOR[activePass.passType]}0a` : 'var(--color-bg-elevated)',
+                  padding: 'var(--space-md)',
+                  transition: 'all 0.2s',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: usePass ? 10 : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Award size={15} style={{ color: PASS_COLOR[activePass.passType] }} />
+                      <span style={{ fontWeight: 700, fontSize: '0.875rem', color: PASS_COLOR[activePass.passType] }}>
+                        {activePass.passType} PASS available
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                        {activePass.totalHours - activePass.usedHours}/{activePass.totalHours} hrs left
+                      </span>
+                    </div>
+                    {/* Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setUsePass(!usePass)}
+                      style={{
+                        width: 44, height: 24, borderRadius: 12,
+                        background: usePass ? PASS_COLOR[activePass.passType] : 'rgba(255,255,255,0.1)',
+                        border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                      }}
+                    >
+                      <span style={{
+                        position: 'absolute', top: 2, left: usePass ? 22 : 2, width: 20, height: 20,
+                        borderRadius: '50%', background: 'white', transition: 'left 0.2s', display: 'block',
+                      }} />
+                    </button>
+                  </div>
+                  {usePass && (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', display: 'flex', gap: 16 }}>
+                      <span>✅ Session cost: <s style={{ opacity: 0.5 }}>{selectedStation ? `₹${(selectedStation.hourlyRate * form.duration).toLocaleString('en-IN')}` : '—'}</s> <strong style={{ color: 'var(--color-accent-success)' }}>₹0</strong></span>
+                      <span style={{ color: 'var(--color-text-muted)' }}>Expires: {new Date(activePass.expiresAt).toLocaleDateString('en-IN')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* No pass found for registered user */}
+              {selectedUser && !activePass && !loadingPass && (
+                <div style={{ padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', fontSize: '0.8rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Award size={13} />
+                  {selectedUser.name} has no active pass — booking will be charged normally.
+                </div>
+              )}
+
               {/* Summary preview */}
               {form.stationId && form.date && form.customerName && (
                 <div style={{
@@ -572,15 +805,15 @@ export default function WalkinBookingPage() {
                     {formatDate(form.date)} · {formatTime(form.startTime)} for {form.duration}h
                     {form.extraControllers > 0 && ` · +${form.extraControllers} controller${form.extraControllers > 1 ? 's' : ''}`}
                   </div>
-                  <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, fontFamily: 'Orbitron, sans-serif' }}>
-                    Total: {formatCurrency(estimatedTotal)} — Pay at counter
+                  <div style={{ color: usePass ? 'var(--color-accent-success)' : 'var(--color-accent-primary)', fontWeight: 700, fontFamily: 'Orbitron, sans-serif' }}>
+                    Total: {estimatedTotal === 0 ? <span>₹0 <span style={{ fontSize: '0.75rem', fontWeight: 400 }}>(pass used)</span></span> : `${formatCurrency(estimatedTotal)} — Pay at counter`}
                   </div>
                 </div>
               )}
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)' }}>
-                <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowForm(false)}>
+                <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { setShowForm(false); resetForm(); }}>
                   Cancel
                 </button>
                 <button
@@ -591,7 +824,7 @@ export default function WalkinBookingPage() {
                   id="walkin-submit-btn"
                 >
                   <UserPlus size={16} />
-                  {submitting ? 'Creating...' : 'Confirm Walk-in Booking'}
+                  {submitting ? 'Creating...' : usePass ? `Book with ${activePass?.passType} Pass` : 'Confirm Walk-in Booking'}
                 </button>
               </div>
             </form>
