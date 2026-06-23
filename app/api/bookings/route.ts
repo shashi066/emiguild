@@ -72,11 +72,17 @@ export async function POST(req: NextRequest) {
     const extraControllers = Math.min(3, Math.max(0, parseInt(String(body.extraControllers ?? 0))));
     const usePass: boolean = body.usePass === true;
 
-    // Check station exists
-    const station = await prisma.station.findUnique({ where: { id: stationId } });
+    // Check station exists and fetch the booking user's profile in parallel
+    const [station, bookingUser] = await Promise.all([
+      prisma.station.findUnique({ where: { id: stationId } }),
+      prisma.user.findUnique({ where: { id: session.user.id! }, select: { name: true, phone: true } }),
+    ]);
     if (!station || !station.isActive) {
       return NextResponse.json({ error: 'Station not found or inactive' }, { status: 404 });
     }
+
+    // Server-side guard: ignore controller add-ons for stations that don't support them
+    const safeExtraControllers = station.hasControllers ? extraControllers : 0;
 
     // Reject bookings only if slot start is more than 15 mins in the past
     const today = new Date();
@@ -115,11 +121,11 @@ export async function POST(req: NextRequest) {
 
     // Controller price from settings
     let controllerUnitPrice = 0;
-    if (extraControllers > 0) {
+    if (safeExtraControllers > 0) {
       const setting = await prisma.setting.findUnique({ where: { key: 'controller_price' } });
       controllerUnitPrice = parseFloat(setting?.value ?? '0');
     }
-    const controllerCharge = extraControllers * controllerUnitPrice * duration;
+    const controllerCharge = safeExtraControllers * controllerUnitPrice * duration;
 
     // ── Pass logic ────────────────────────────────────────────────────────
     let userPassId: string | null = null;
@@ -176,10 +182,12 @@ export async function POST(req: NextRequest) {
         status:           'CONFIRMED',
         bookingType:      'ONLINE',
         paymentStatus:    usePass ? 'PAID' : 'UNPAID',
-        extraControllers,
+        extraControllers: safeExtraControllers,
         controllerCharge,
         userPassId,
         passHoursDeducted,
+        customerName:     bookingUser?.name ?? null,
+        customerPhone:    bookingUser?.phone ?? null,
       },
       include: {
         station: true,

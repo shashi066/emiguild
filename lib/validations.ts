@@ -16,7 +16,7 @@ export const bookingSchema = z.object({
   stationId: z.string().min(1, 'Station is required'),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Invalid start time'),
-  duration: z.number().int().min(1).max(8),
+  duration: z.number().min(0.5).max(12).refine((v) => v % 0.5 === 0, 'Duration must be in 30-min increments'),
   notes: z.string().optional(),
 });
 

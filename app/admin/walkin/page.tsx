@@ -5,9 +5,9 @@ import {
   UserPlus, Plus, Trash2, AlertCircle, RefreshCw,
   Calendar, Clock, Monitor, X, CheckCircle, Phone, User, Search, Award, ChevronDown,
 } from 'lucide-react';
-import { formatDate, formatTime, formatCurrency, getTodayString, isSlotAvailable, getTimeSlotsForDate } from '@/lib/utils';
+import { formatDate, formatTime, formatCurrency, getTodayString, isSlotAvailable, getTimeSlotsForDate, getDurationOptions } from '@/lib/utils';
 
-type Station = { id: string; name: string; hourlyRate: number };
+type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 type BookedSlot = { startTime: string; endTime: string; status: string };
 type WalkinBooking = {
   id: string;
@@ -29,7 +29,7 @@ type FoundUser = { id: string; name: string; email: string; phone: string | null
 type ActivePass = { id: string; passType: string; totalHours: number; usedHours: number; expiresAt: string };
 const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700' };
 
-const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12];
+// DURATION_OPTIONS is now generated dynamically via getDurationOptions()
 
 export default function WalkinBookingPage() {
   const [stations, setStations] = useState<Station[]>([]);
@@ -176,15 +176,14 @@ export default function WalkinBookingPage() {
     setUserQuery('');
   };
 
-  // Filter available time slots: within opening hours, not past, not conflicting
-  const SHOP_CLOSE_MINS = 23 * 60; // 11 PM in minutes
-  const availableSlots = getTimeSlotsForDate(form.date).filter((time) => {
+  const SHOP_CLOSE_MINS = 23 * 60;
+  const stationMinDuration = selectedStation?.minDuration ?? 1;
+  const slotStep: 30 | 60 = stationMinDuration <= 0.5 ? 30 : 60;
+  const availableSlots = getTimeSlotsForDate(form.date, slotStep).filter((time) => {
     const [h, m] = time.split(':').map(Number);
     const slotStartMins = h * 60 + m;
     const slotEndMins = slotStartMins + Math.round(form.duration * 60);
-    // Must fit within closing time
     if (slotEndMins > SHOP_CLOSE_MINS) return false;
-    // Block past times if today
     if (form.date === getTodayString()) {
       const now = new Date();
       const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -634,7 +633,10 @@ export default function WalkinBookingPage() {
                       id="walkin-station"
                       className="form-input"
                       value={form.stationId}
-                      onChange={(e) => setForm({ ...form, stationId: e.target.value })}
+                      onChange={(e) => {
+                        const st = stations.find((s) => s.id === e.target.value);
+                        setForm({ ...form, stationId: e.target.value, duration: st?.minDuration ?? 1 });
+                      }}
                       required
                     >
                       <option value="">Select a station...</option>
@@ -684,20 +686,20 @@ export default function WalkinBookingPage() {
                   <div className="form-group">
                     <label className="form-label">Duration *</label>
                     <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
-                      {DURATION_OPTIONS.map((d) => (
+                      {getDurationOptions(selectedStation?.minDuration ?? 1).map((opt) => (
                         <button
-                          key={d}
+                          key={opt.value}
                           type="button"
-                          className={`btn btn-sm ${form.duration === d ? 'btn-primary' : 'btn-ghost'}`}
-                          onClick={() => setForm({ ...form, duration: d })}
+                          className={`btn btn-sm ${form.duration === opt.value ? 'btn-primary' : 'btn-ghost'}`}
+                          onClick={() => setForm({ ...form, duration: opt.value })}
                         >
-                          {d}h
+                          {opt.label}
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {controllerPrice > 0 && (
+                  {controllerPrice > 0 && selectedStation?.hasControllers && (
                     <div className="form-group">
                       <label className="form-label">
                         Extra Controllers

@@ -5,23 +5,51 @@ export const TIME_SLOTS = [
 
 export const CLOSING_HOUR = 23; // Shop closes 11 PM
 
-// Weekdays (Mon–Fri): 4:00 PM – 11:00 PM (last slot 10:00 PM for 1hr min)
-const WEEKDAY_SLOTS = [
-  '16:00', '16:30', '17:00', '17:30', '18:00', '18:30',
-  '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00',
+// Weekdays (Mon–Fri): 12:00–22:00, Weekends (Sat–Sun): 10:00–22:00
+// 60-min step (default)
+const WEEKDAY_SLOTS_60 = [
+  '12:00', '13:00', '14:00', '15:00', '16:00', '17:00',
+  '18:00', '19:00', '20:00', '21:00', '22:00',
 ];
-// Weekends (Sat–Sun): 11:00 AM – 11:00 PM (last slot 10:00 PM for 1hr min)
-const WEEKEND_SLOTS = [
-  '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
-  '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
-  '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
-  '20:00', '20:30', '21:00', '21:30', '22:00',
+const WEEKEND_SLOTS_60 = [
+  '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
+  '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00',
+];
+// 30-min step (for stations with 30-min minimum)
+const WEEKDAY_SLOTS_30 = [
+  '12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30',
+  '16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30',
+  '20:00','20:30','21:00','21:30','22:00',
+];
+const WEEKEND_SLOTS_30 = [
+  '10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30',
+  '14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30',
+  '18:00','18:30','19:00','19:30','20:00','20:30','21:00','21:30','22:00',
 ];
 
-export function getTimeSlotsForDate(dateStr: string): string[] {
+export function getTimeSlotsForDate(dateStr: string, stepMins: 30 | 60 = 60): string[] {
   const date = new Date(dateStr + 'T00:00:00');
   const day = date.getDay(); // 0 = Sun, 6 = Sat
-  return day === 0 || day === 6 ? WEEKEND_SLOTS : WEEKDAY_SLOTS;
+  const isWeekend = day === 0 || day === 6;
+  if (stepMins === 30) return isWeekend ? WEEKEND_SLOTS_30 : WEEKDAY_SLOTS_30;
+  return isWeekend ? WEEKEND_SLOTS_60 : WEEKDAY_SLOTS_60;
+}
+
+/** Returns duration options (in hours) for a given minDuration.
+ *  If minDuration = 0.5: [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6]
+ *  If minDuration = 1:   [1, 2, 3, 4, 5, 6]
+ */
+export function getDurationOptions(minDuration: number): { value: number; label: string }[] {
+  const step = minDuration <= 0.5 ? 0.5 : 1;
+  const max = 6;
+  const options: { value: number; label: string }[] = [];
+  for (let v = minDuration; v <= max; v = Math.round((v + step) * 10) / 10) {
+    options.push({
+      value: v,
+      label: v === 0.5 ? '30 min' : v % 1 === 0 ? `${v} Hour${v > 1 ? 's' : ''}` : `${v} Hours`,
+    });
+  }
+  return options;
 }
 
 export const DURATION_OPTIONS = [

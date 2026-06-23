@@ -27,16 +27,18 @@ model User {
 }
 
 model Station {
-  id          String   @id @default(cuid())
-  name        String
-  description String
-  specs       String
-  hourlyRate  Float
-  imageUrl    String?
-  isActive    Boolean  @default(true)
-  position    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  description     String
+  specs           String
+  hourlyRate      Float
+  minDuration     Float    @default(1)
+  hasControllers  Boolean  @default(true)
+  imageUrl        String?
+  isActive        Boolean  @default(true)
+  position        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   bookings Booking[]
 
@@ -50,7 +52,7 @@ model Booking {
   date              String
   startTime         String
   endTime           String
-  duration          Int
+  duration          Float
   totalPrice        Float
   status            String   @default("PENDING")
   bookingType       String   @default("ONLINE")

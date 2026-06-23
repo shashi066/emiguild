@@ -11,6 +11,7 @@ import {
 import {
   TIME_SLOTS, DURATION_OPTIONS, CLOSING_HOUR, formatTime, formatDate,
   formatCurrency, getTodayString, toLocalDateString, isSlotAvailable, addHours, getTimeSlotsForDate,
+  getDurationOptions,
 } from '@/lib/utils';
 
 type Station = {
@@ -19,6 +20,8 @@ type Station = {
   description: string;
   specs: string;
   hourlyRate: number;
+  minDuration: number;
+  hasControllers: boolean;
   position: number;
 };
 
@@ -51,7 +54,7 @@ export default function BookPageInner() {
   const [selectedDate, setSelectedDate]         = useState(getTodayString());
   const [selectedStation, setSelectedStation]   = useState<Station | null>(null);
   const [selectedTime, setSelectedTime]         = useState('');
-  const [selectedDuration, setSelectedDuration] = useState(2);
+  const [selectedDuration, setSelectedDuration] = useState<number>(1);
   const [extraControllers, setExtraControllers] = useState(0);
   const [controllerPrice, setControllerPrice]   = useState(0);
   const [notes, setNotes]                       = useState('');
@@ -291,6 +294,8 @@ export default function BookPageInner() {
                   className={`station-card ${selectedStation?.id === station.id ? 'selected' : ''}`}
                   onClick={() => {
                     setSelectedStation(station);
+                    setSelectedDuration(station.minDuration ?? 1);
+                    setSelectedTime('');
                     setExtraControllers(0);
                     setTimeout(() => controllerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
                   }}
@@ -299,6 +304,8 @@ export default function BookPageInner() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       setSelectedStation(station);
+                      setSelectedDuration(station.minDuration ?? 1);
+                      setSelectedTime('');
                       setExtraControllers(0);
                       setTimeout(() => controllerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
                     }
@@ -327,8 +334,8 @@ export default function BookPageInner() {
               ))}
             </div>
 
-            {/* ── Controller Selector (appears after station is picked) ── */}
-            {selectedStation && (
+            {/* ── Controller Selector (appears after station is picked, only if station supports controllers) ── */}
+            {selectedStation && selectedStation.hasControllers && (
               <div className="controller-selector" ref={controllerSectionRef}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-sm)' }}>
                   <div>
@@ -429,7 +436,7 @@ export default function BookPageInner() {
             <div className="form-group" style={{ marginBottom: 'var(--space-xl)' }}>
               <label className="form-label">Session Duration</label>
               <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
-                {DURATION_OPTIONS.map((opt) => (
+                {getDurationOptions(selectedStation?.minDuration ?? 1).map((opt) => (
                   <button
                     key={opt.value}
                     className={`btn ${
@@ -462,7 +469,7 @@ export default function BookPageInner() {
                   Available Start Times
                 </div>
                 <div className="time-slots-grid">
-                  {getTimeSlotsForDate(selectedDate).map((time) => {
+                  {getTimeSlotsForDate(selectedDate, selectedStation?.minDuration === 0.5 ? 30 : 60).map((time) => {
                     const [slotH, slotM] = time.split(':').map(Number);
                     const slotStartMinsVal = slotH * 60 + slotM;
                     const slotEndMinsVal = slotStartMinsVal + Math.round(selectedDuration * 60);
@@ -669,22 +676,24 @@ export default function BookPageInner() {
               <div className="booking-detail-item">
                 <div className="booking-detail-label">Duration</div>
                 <div className="booking-detail-value">
-                  {selectedDuration} Hour{selectedDuration > 1 ? 's' : ''}
+                  {selectedDuration === 0.5 ? '30 min' : `${selectedDuration} Hour${selectedDuration > 1 ? 's' : ''}`}
                 </div>
               </div>
 
-              {/* Controllers */}
-              <div className="booking-detail-item">
-                <div className="booking-detail-label">🎮 Controllers</div>
-                <div className="booking-detail-value" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span>1 × Free (included)</span>
-                  {extraControllers > 0 && (
-                    <span style={{ color: 'var(--color-accent-primary)', fontSize: '0.85rem' }}>
-                      + {extraControllers} extra = {formatCurrency(controllerCharge)}
-                    </span>
-                  )}
+              {/* Controllers — only shown for stations that support them */}
+              {selectedStation?.hasControllers && (
+                <div className="booking-detail-item">
+                  <div className="booking-detail-label">🎮 Controllers</div>
+                  <div className="booking-detail-value" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span>1 × Free (included)</span>
+                    {extraControllers > 0 && (
+                      <span style={{ color: 'var(--color-accent-primary)', fontSize: '0.85rem' }}>
+                        + {extraControllers} extra = {formatCurrency(controllerCharge)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Pricing breakdown */}
               <div className="booking-detail-item" style={{ background: usePass ? 'rgba(0,230,118,0.04)' : 'rgba(255,255,255,0.02)', borderColor: usePass ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.06)' }}>
@@ -700,7 +709,7 @@ export default function BookPageInner() {
                   )}
                 </div>
               </div>
-              {extraControllers > 0 && (
+              {selectedStation?.hasControllers && extraControllers > 0 && (
                 <div className="booking-detail-item" style={{ background: 'rgba(108,99,255,0.04)', borderColor: 'rgba(108,99,255,0.12)' }}>
                   <div className="booking-detail-label">Controller Add-on</div>
                   <div className="booking-detail-value" style={{ fontSize: '0.95rem', color: 'var(--color-accent-primary)' }}>

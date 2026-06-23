@@ -10,7 +10,7 @@ const walkinSchema = z.object({
   stationId:        z.string().min(1),
   date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime:        z.string().regex(/^\d{2}:\d{2}$/),
-  duration:         z.number().int().min(1).max(12),
+  duration:         z.number().min(0.5).max(12).refine((v) => v % 0.5 === 0, 'Duration must be in 30-min increments'),
   extraControllers: z.number().int().min(0).max(3).optional(),
   notes:            z.string().optional(),
   status:           z.enum(['PENDING', 'CONFIRMED']).optional(),
@@ -73,6 +73,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Station not found or inactive' }, { status: 404 });
     }
 
+    // Server-side guard: ignore controllers for stations that don't support them
+    const safeExtraControllers = station.hasControllers ? extraControllers : 0;
+
     // Conflict detection (same as regular bookings)
     const conflicts = await prisma.booking.findMany({
       where: { stationId, date, status: { not: 'CANCELLED' } },
@@ -98,11 +101,11 @@ export async function POST(req: NextRequest) {
 
     // Fetch controller price from settings
     let controllerUnitPrice = 0;
-    if (extraControllers > 0) {
+    if (safeExtraControllers > 0) {
       const setting = await prisma.setting.findUnique({ where: { key: 'controller_price' } });
       controllerUnitPrice = parseFloat(setting?.value ?? '0');
     }
-    const controllerCharge = extraControllers * controllerUnitPrice * duration;
+    const controllerCharge = safeExtraControllers * controllerUnitPrice * duration;
 
     // ── Pass logic ─────────────────────────────────────────────────────────
     let userPassId: string | null = null;
@@ -158,7 +161,7 @@ export async function POST(req: NextRequest) {
         customerName,
         customerPhone:    customerPhone ?? null,
         paymentStatus:    usePass ? 'PAID' : 'UNPAID',
-        extraControllers,
+        extraControllers: safeExtraControllers,
         controllerCharge,
         notes:            notes ?? null,
         userPassId,

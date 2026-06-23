@@ -394,8 +394,8 @@ export default async function HomePage() {
             <div>
               <div style={{ fontWeight: 700, marginBottom: 'var(--space-md)', fontSize: '0.9rem' }}>Hours</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                <span>Mon–Fri: 12 PM – 12 AM</span>
-                <span>Sat–Sun: 10 AM – 12 AM</span>
+                <span>Mon–Fri: 04 PM – 11 PM</span>
+                <span>Sat–Sun: 11 AM – 11 PM</span>
               </div>
             </div>
             <div>

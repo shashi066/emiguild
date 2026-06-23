@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Monitor, Plus, CheckCircle, XCircle, Edit2, AlertCircle, X } from 'lucide-react';
+import { Monitor, Plus, CheckCircle, XCircle, Edit2, AlertCircle, X, Clock } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 type Station = {
@@ -10,6 +10,8 @@ type Station = {
   description: string;
   specs: string;
   hourlyRate: number;
+  minDuration: number;
+  hasControllers: boolean;
   position: number;
   isActive: boolean;
 };
@@ -19,8 +21,20 @@ const STATION_ICONS: Record<number, string> = {
   6:'🥽', 7:'📡', 8:'🎯', 9:'🏎️', 10:'✈️',
 };
 
-type FormData = { name: string; description: string; specs: string; hourlyRate: string; position: string };
-const EMPTY_FORM: FormData = { name: '', description: '', specs: '', hourlyRate: '', position: '' };
+const MIN_DURATION_OPTIONS = [
+  { value: 0.5, label: '30 Minutes' },
+  { value: 1,   label: '1 Hour (default)' },
+  { value: 1.5, label: '1.5 Hours' },
+  { value: 2,   label: '2 Hours' },
+];
+
+type FormData = {
+  name: string; description: string; specs: string;
+  hourlyRate: string; position: string; minDuration: string; hasControllers: boolean;
+};
+const EMPTY_FORM: FormData = {
+  name: '', description: '', specs: '', hourlyRate: '', position: '', minDuration: '1', hasControllers: true,
+};
 
 export default function AdminStationsPage() {
   const [stations, setStations] = useState<Station[]>([]);
@@ -59,6 +73,8 @@ export default function AdminStationsPage() {
       specs: station.specs,
       hourlyRate: String(station.hourlyRate),
       position: String(station.position),
+      minDuration: String(station.minDuration ?? 1),
+      hasControllers: station.hasControllers ?? true,
     });
     setError('');
     setShowModal(true);
@@ -69,18 +85,25 @@ export default function AdminStationsPage() {
     setError('');
     setSubmitting(true);
     try {
+      const payload = {
+        ...form,
+        hourlyRate: parseFloat(form.hourlyRate),
+        minDuration: parseFloat(form.minDuration),
+        hasControllers: form.hasControllers,
+        position: parseInt(form.position) || 0,
+      };
       if (editStation) {
         const res = await fetch(`/api/stations/${editStation.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...form, hourlyRate: parseFloat(form.hourlyRate) }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) { setError('Failed to update station.'); return; }
       } else {
         const res = await fetch('/api/stations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...form, hourlyRate: parseFloat(form.hourlyRate), position: parseInt(form.position) || 0 }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) { setError('Failed to create station.'); return; }
       }
@@ -101,6 +124,9 @@ export default function AdminStationsPage() {
   };
 
   const activeCount = stations.filter((s) => s.isActive).length;
+
+  const minLabel = (v: number) =>
+    v === 0.5 ? '30 min min' : v === 1 ? '1 hr min' : `${v} hrs min`;
 
   return (
     <div>
@@ -156,6 +182,24 @@ export default function AdminStationsPage() {
                 </div>
                 <div className="station-description">{station.description}</div>
                 <div className="station-specs">{station.specs}</div>
+                {/* Min duration badge */}
+                {station.minDuration && station.minDuration < 1 && (
+                  <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '3px 8px', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700,
+                    background: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)',
+                  }}>
+                    <Clock size={10} /> {minLabel(station.minDuration)}
+                  </div>
+                )}
+                {/* No controllers badge */}
+                {station.hasControllers === false && (
+                  <div style={{ marginTop: 6, marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '3px 8px', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700,
+                    background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)',
+                  }}>
+                    🎮 No Controllers
+                  </div>
+                )}
                 <div className="station-footer">
                   <div>
                     <div className="station-price">{formatCurrency(station.hourlyRate)}</div>
@@ -217,7 +261,7 @@ export default function AdminStationsPage() {
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
               <div className="form-group">
                 <label className="form-label" htmlFor="station-name">Station Name</label>
-                <input id="station-name" type="text" className="form-input" placeholder="e.g. Gaming Pod Alpha"
+                <input id="station-name" type="text" className="form-input" placeholder="e.g. Racing Simulator Pro"
                   value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
 
@@ -229,7 +273,7 @@ export default function AdminStationsPage() {
 
               <div className="form-group">
                 <label className="form-label" htmlFor="station-specs">Specs</label>
-                <input id="station-specs" type="text" className="form-input" placeholder="e.g. RTX 4080 | i9-13900K | 32GB | 4K 144Hz"
+                <input id="station-specs" type="text" className="form-input" placeholder="e.g. Steering wheel | Gear shifter | Racing pedals | 4K display"
                   value={form.specs} onChange={(e) => setForm({ ...form, specs: e.target.value })} required />
               </div>
 
@@ -243,6 +287,73 @@ export default function AdminStationsPage() {
                   <label className="form-label" htmlFor="station-pos">Position</label>
                   <input id="station-pos" type="number" className="form-input" placeholder="1"
                     value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} min={1} />
+                </div>
+              </div>
+
+              {/* Minimum booking duration */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="station-min-duration">
+                  <Clock size={13} style={{ display: 'inline', marginRight: 5, color: 'var(--color-accent-primary)' }} />
+                  Minimum Booking Duration
+                </label>
+                <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+                  {MIN_DURATION_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`btn btn-sm ${parseFloat(form.minDuration) === opt.value ? 'btn-primary' : 'btn-ghost'}`}
+                      onClick={() => setForm({ ...form, minDuration: String(opt.value) })}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {parseFloat(form.minDuration) === 0.5 && (
+                  <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--color-accent-secondary)' }}>
+                    ⚡ 30-min slots will be shown for this station. Price = hourly rate ÷ 2.
+                  </div>
+                )}
+              </div>
+
+              {/* Extra controllers toggle */}
+              <div className="form-group">
+                <label className="form-label">Extra Controllers</label>
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px', borderRadius: 'var(--radius-md)',
+                    background: form.hasControllers ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+                    border: `1px solid ${form.hasControllers ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.2)'}`,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text-primary)' }}>
+                      {form.hasControllers ? '🎮 Controllers Available' : '🚫 No Controllers'}
+                    </div>
+                    <div style={{ fontSize: '0.73rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                      {form.hasControllers
+                        ? 'Users can add extra controllers when booking'
+                        : 'Controller add-on will be hidden for this station'}
+                    </div>
+                  </div>
+                  {/* Toggle switch */}
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, hasControllers: !form.hasControllers })}
+                    style={{
+                      width: 44, height: 24, borderRadius: 12, flexShrink: 0,
+                      background: form.hasControllers ? '#10b981' : 'rgba(255,255,255,0.15)',
+                      border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s',
+                    }}
+                  >
+                    <span style={{
+                      position: 'absolute', top: 2,
+                      left: form.hasControllers ? 22 : 2,
+                      width: 20, height: 20, borderRadius: '50%',
+                      background: 'white', transition: 'left 0.2s', display: 'block',
+                    }} />
+                  </button>
                 </div>
               </div>
 
