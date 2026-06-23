@@ -57,6 +57,56 @@ async function main() {
     console.log(`✅ Stations already exist (${existing} found)`);
   }
 
+  // ── Sample Draw (Admin-managed weekly draw) ─────────────────
+  const drawTitle = 'EMI Guild Weekly Draw #1';
+  const existingDraw = await prisma.draw.findFirst({ where: { title: drawTitle, isDeleted: false } });
+  let draw;
+  if (!existingDraw) {
+    draw = await prisma.draw.create({
+      data: {
+        title: drawTitle,
+        description: 'Weekly giveaway for EMI Guild members',
+        prizeName: 'Bronze Pass',
+        startAt: new Date(),
+        endAt: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000), // 6 days from now
+        status: 'ACTIVE',
+      },
+    });
+    console.log(`✅ Sample draw created: ${drawTitle}`);
+  } else {
+    draw = existingDraw;
+    console.log(`✅ Draw already exists: ${drawTitle}`);
+  }
+
+  // ── Sample participants for the draw ───────────────────────
+  // Create two sample users and create entries if not present
+  const sampleUsers = [
+    { email: 'alice@example.com', name: 'Alice', password: 'Test@123', phone: '9876543210' },
+    { email: 'bob@example.com',   name: 'Bob',   password: 'Test@123', phone: '9123456789' },
+  ];
+
+  for (const u of sampleUsers) {
+    const hashedPwd = await bcrypt.hash(u.password, 12);
+    const user = await prisma.user.upsert({
+      where: { email: u.email },
+      update: {},
+      create: {
+        email: u.email,
+        name: u.name,
+        password: hashedPwd,
+        phone: u.phone,
+      },
+    });
+
+    // create draw entry if not exists
+    const existingEntry = await prisma.drawEntry.findFirst({ where: { drawId: draw.id, userId: user.id } });
+    if (!existingEntry) {
+      await prisma.drawEntry.create({ data: { drawId: draw.id, userId: user.id, phone: user.phone } });
+    }
+  }
+
+  console.log('✅ Sample draw participants ensured');
+
   console.log('🎉 Seed complete!');
 }
 

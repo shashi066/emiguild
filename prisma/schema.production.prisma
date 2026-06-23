@@ -23,6 +23,7 @@ model User {
 
   bookings Booking[]
   passes   UserPass[]
+  drawEntries DrawEntry[]
 
   @@map("users")
 }
@@ -103,4 +104,43 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+// Draws: admin-managed campaigns, weekly/monthly giveaways, etc.
+model Draw {
+  id           String      @id @default(cuid())
+  title        String
+  description  String?
+  prizeName    String?
+  startAt      DateTime?
+  endAt        DateTime?
+  status       String      @default("DRAFT") // DRAFT | ACTIVE | COMPLETED | CANCELLED
+  winnerUserId String?     
+  isDeleted    Boolean     @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  entries      DrawEntry[]
+
+  @@map("draws")
+  @@index([status])
+}
+
+model DrawEntry {
+  id         String   @id @default(cuid())
+  drawId     String
+  userId     String
+  phone      String?
+  createdAt  DateTime @default(now())
+  isDeleted  Boolean  @default(false)
+  deletedAt  DateTime?
+
+  draw Draw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("draw_entries")
+  @@index([drawId])
+  @@index([userId])
+  @@unique([drawId, userId])
 }

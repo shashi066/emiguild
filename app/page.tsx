@@ -26,6 +26,23 @@ async function getStations() {
   });
 }
 
+async function getActiveDraw() {
+  return prisma.draw.findFirst({
+    where: { status: 'ACTIVE', isDeleted: false },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, title: true, prizeName: true, startAt: true, endAt: true },
+  });
+}
+
+async function getUpcomingDraw() {
+  const now = new Date();
+  return prisma.draw.findFirst({
+    where: { startAt: { gt: now }, isDeleted: false },
+    orderBy: { startAt: 'asc' },
+    select: { id: true, title: true, prizeName: true, startAt: true },
+  });
+}
+
 async function getStats() {
   const [totalBookings, totalUsers, totalStations] = await Promise.all([
     prisma.booking.count(),
@@ -110,7 +127,11 @@ const PRICING_TIERS = [
 ];
 
 export default async function HomePage() {
-  const [stations, stats, session] = await Promise.all([getStations(), getStats(), auth()]);
+  const [stations, stats, session] = await Promise.all([
+    getStations(),
+    getStats(),
+    auth(),
+  ]);
 
   return (
     <>
@@ -159,6 +180,11 @@ export default async function HomePage() {
                 <Award size={18} />
                 Monthly Passes
               </Link>
+              <Link href="/draws" className="btn btn-outline btn-lg" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Award size={16} />
+                {'🎁 Guild Drop'}
+              </Link>
+              {/* Active draw quick summary removed per request */}
             </div>
 
             <div className="hero-stats">
