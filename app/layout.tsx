@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: '%s | EmiGuild Gaming Cafe',
   },
   description: 
-    'EmiGuild Gaming Cafe in [Your City] offers PS5, racing simulators, and premium gaming stations. Reserve your slot online for an immersive gaming experience. Walk in ready to play!',
+    'EmiGuild Gaming Cafe in Kothapet, Hyderabad offers PS5, racing simulators, and premium gaming stations. Reserve your slot online for an immersive gaming experience. Walk in ready to play!',
   keywords: [
     'EmiGuild Cafe',
     'EmiGuild Gaming',
