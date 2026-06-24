@@ -12,6 +12,30 @@ async function main() {
     update: {},
     create: { key: 'controller_price', value: '30', label: 'Extra Controller Price (per controller, per booking)' },
   });
+  
+  await prisma.setting.upsert({
+    where: { key: 'daily_spin_enabled' },
+    update: {},
+    create: { key: 'daily_spin_enabled', value: 'true', label: 'Enable Daily Spin Feature' },
+  });
+
+  await prisma.setting.upsert({
+    where: { key: 'daily_spin_retries_enabled' },
+    update: {},
+    create: { key: 'daily_spin_retries_enabled', value: 'false', label: 'Allow Retries for Daily Spin' },
+  });
+
+  await prisma.setting.upsert({
+    where: { key: 'daily_spin_max_retries' },
+    update: {},
+    create: { key: 'daily_spin_max_retries', value: '1', label: 'Maximum Retries for Daily Spin' },
+  });
+
+  await prisma.setting.upsert({
+    where: { key: 'daily_spin_reset_hour' },
+    update: {},
+    create: { key: 'daily_spin_reset_hour', value: '0', label: 'Daily Reset Hour in IST (0-23)' },
+  });
   console.log('✅ Settings seeded');
 
   // ── Admin User ────────────────────────────────────────────────
@@ -56,6 +80,31 @@ async function main() {
   } else {
     console.log(`✅ Stations already exist (${existing} found)`);
   }
+
+  // ── Sample Loot Items ─────────────────────────────────────────
+  const lootItems = [
+    { name: '5% Discount', description: 'Get 5% off your next booking.', weight: 40, rarity: 'COMMON' },
+    { name: '10% Discount', description: 'Get 10% off your next booking.', weight: 20, rarity: 'UNCOMMON' },
+    { name: 'Extra XP', description: 'Double XP on your profile for 24h.', weight: 15, rarity: 'UNCOMMON' },
+    { name: 'Free Drink', description: 'Redeem for one free beverage.', weight: 10, rarity: 'RARE' },
+    { name: 'Bronze Pass', description: '10 hours of premium gaming.', weight: 5, rarity: 'EPIC' },
+    { name: 'Gold Pass', description: '30 hours of premium gaming.', weight: 1, rarity: 'LEGENDARY' },
+  ];
+
+  for (const item of lootItems) {
+    await prisma.lootItem.upsert({
+      where: { id: item.name }, // Hack for idempotent seed without a unique name field. Better to use a findFirst check.
+      update: {},
+      create: item,
+    }).catch(async () => {
+        // Fallback if ID is generated and we want to check by name
+        const existingItem = await prisma.lootItem.findFirst({ where: { name: item.name }});
+        if (!existingItem) {
+            await prisma.lootItem.create({ data: item });
+        }
+    });
+  }
+  console.log('✅ Sample loot items created/checked');
 
   console.log('🎉 Seed complete!');
 }
