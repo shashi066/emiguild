@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Monitor, Users,
-  Gamepad2, ChevronRight, UserPlus, Settings, Award,
+  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/admin/walkin',   label: 'Walk-in Booking', icon: UserPlus },
   { href: '/admin/passes',   label: 'Passes',         icon: Award },
   { href: '/admin/stations', label: 'Stations',       icon: Monitor },
+  { href: '/admin/daily-spin',label: 'Daily Spin',    icon: Gift },
   { href: '/admin/users',    label: 'Users',          icon: Users },
   { href: '/admin/settings', label: 'Settings',       icon: Settings },
 ];
