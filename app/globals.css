@@ -1884,3 +1884,30 @@ select.form-input option {
   .table-wrapper { overflow-x: auto; }
   .data-table { min-width: 700px; }
 }
+
+/* ============================================================
+   LUCKY DRAW / GUILD DROP
+   ============================================================ */
+.draw-card-featured {
+  background: linear-gradient(135deg, rgba(108,99,255,0.15) 0%, rgba(0,212,255,0.1) 100%);
+  border: 1px solid rgba(108,99,255,0.4);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2xl);
+  position: relative;
+  overflow: hidden;
+}
+
+.winner-card {
+  background: linear-gradient(135deg, rgba(0,0,0,0.9) 0%, rgba(108,99,255,0.2) 100%);
+  border: 2px solid var(--color-accent-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2xl);
+  text-align: center;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .winner-card { border: 2px solid #6c63ff; background: #0a0a0f; color: white; }
+}

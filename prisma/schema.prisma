@@ -20,8 +20,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bookings Booking[]
-  passes   UserPass[]
+  bookings    Booking[]
+  passes      UserPass[]
+  drawEntries DrawEntry[]
+  wonDraws    LuckyDraw[] @relation("DrawWinner")
 
   @@map("users")
 }
@@ -102,4 +104,36 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+model LuckyDraw {
+  id             String    @id @default(cuid())
+  title          String
+  description    String?
+  prize          String
+  status         String    @default("DRAFT")
+  startsAt       DateTime?
+  endsAt         DateTime?
+  winnerId       String?
+  winnerPickedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  entries DrawEntry[]
+  winner  User?       @relation("DrawWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+
+  @@map("lucky_draws")
+}
+
+model DrawEntry {
+  id        String   @id @default(cuid())
+  drawId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  draw LuckyDraw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([drawId, userId])
+  @@map("draw_entries")
 }
