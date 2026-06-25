@@ -7,11 +7,7 @@ import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import {
   Calendar, BookOpen, User, LogOut,
-<<<<<<< Updated upstream
-  LayoutDashboard, LogIn, UserPlus, Menu, X, Award,
-=======
-  LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw
->>>>>>> Stashed changes
+  LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw, Gift,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -29,12 +25,8 @@ export function Navbar() {
     { href: '/',           label: 'Home',        icon: null },
     { href: '/book',       label: 'Book a Slot', icon: <Calendar size={15} /> },
     { href: '/passes',     label: 'Passes',      icon: <Award size={15} /> },
-<<<<<<< Updated upstream
+    { href: '/daily-spin', label: 'Lucky Spin',   icon: <RotateCw size={15} /> },
     { href: '/draws',      label: '🎁 Guild Drop', icon: null },
-=======
-    { href: '/daily-spin', label: 'Lucky Spin',    icon: <RotateCw size={15} /> },
-    { href: '/draws',      label: '🎁 Guild Drop',  icon: null },
->>>>>>> Stashed changes
     ...(session ? [{ href: '/my-bookings', label: 'My Bookings', icon: <BookOpen size={15} /> }] : []),
     ...(isAdmin  ? [{ href: '/admin',      label: 'Admin',       icon: <LayoutDashboard size={15} /> }] : []),
   ];

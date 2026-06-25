@@ -20,10 +20,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bookings    Booking[]
-  passes      UserPass[]
-  drawEntries DrawEntry[]
-  wonDraws    LuckyDraw[] @relation("DrawWinner")
+  bookings      Booking[]
+  passes        UserPass[]
+  dailySpins    UserDailySpin[]
+  drawEntries   DrawEntry[]
+  wonDraws      LuckyDraw[] @relation("DrawWinner")
 
   @@map("users")
 }
@@ -104,6 +105,38 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+model LootItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  iconUrl     String?
+  weight      Int
+  enabled     Boolean  @default(true)
+  rarity      String?  @default("COMMON")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  spins UserDailySpin[]
+
+  @@map("loot_items")
+}
+
+model UserDailySpin {
+  id         String   @id @default(cuid())
+  userId     String
+  lootItemId String?
+  spinDate   String   // YYYY-MM-DD in IST
+  attempts   Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User      @relation(fields: [userId],     references: [id], onDelete: Cascade)
+  lootItem LootItem? @relation(fields: [lootItemId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, spinDate])
+  @@map("user_daily_spins")
 }
 
 model LuckyDraw {
