@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Gift, Save, Plus, Trash2, Edit, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Gift, Save, Plus, Trash2, Edit, CheckCircle, AlertCircle, RefreshCw, History } from 'lucide-react';
 
 type LootItem = {
   id: string;
@@ -13,6 +13,27 @@ type LootItem = {
   rarity: string | null;
 };
 
+type SpinRecord = {
+  id: string;
+  spinDate: string;
+  attempts: number;
+  createdAt: string;
+  user:     { name: string | null; email: string | null };
+  lootItem: { name: string; rarity: string | null; description: string | null } | null;
+};
+
+const RARITY_COLORS: Record<string, string> = {
+  LEGENDARY: '#f59e0b',
+  EPIC:      '#a855f7',
+  RARE:      '#3b82f6',
+  UNCOMMON:  '#22c55e',
+  COMMON:    '#9ca3af',
+};
+
+function getTodayIST() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+
 export function AdminDailySpin() {
   const [items, setItems] = useState<LootItem[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -20,13 +41,31 @@ export function AdminDailySpin() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  
+
+  // Spin history state
+  const [history, setHistory] = useState<SpinRecord[]>([]);
+  const [historyDate, setHistoryDate] = useState(getTodayIST());
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   // Item Form State
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<LootItem>>({
     name: '', description: '', iconUrl: '', weight: 10, enabled: true, rarity: 'COMMON'
   });
+
+  const loadHistory = async (date: string) => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/admin/daily-spin/history?date=${date}`);
+      const data = await res.json();
+      setHistory(data.spins || []);
+    } catch {
+      // silently fail
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -50,7 +89,7 @@ export function AdminDailySpin() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); loadHistory(getTodayIST()); }, []);
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -317,6 +356,80 @@ export function AdminDailySpin() {
             </div>
 
           </div>
+
+          {/* Spin History */}
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)', flexWrap: 'wrap', gap: 'var(--space-sm)' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <History size={20} /> Spin History
+              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                <input
+                  type="date"
+                  className="form-input"
+                  style={{ width: 'auto' }}
+                  value={historyDate}
+                  onChange={e => { setHistoryDate(e.target.value); loadHistory(e.target.value); }}
+                />
+                <button className="btn btn-ghost btn-sm" onClick={() => loadHistory(historyDate)}>
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+            </div>
+
+            {historyLoading ? (
+              <div className="loading-state"><div className="spinner" />Loading history...</div>
+            ) : history.length === 0 ? (
+              <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: 'var(--space-lg)' }}>No spins recorded for this date.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <th style={{ padding: 'var(--space-sm)' }}>User</th>
+                      <th style={{ padding: 'var(--space-sm)' }}>Reward Won</th>
+                      <th style={{ padding: 'var(--space-sm)' }}>Rarity</th>
+                      <th style={{ padding: 'var(--space-sm)' }}>Attempts</th>
+                      <th style={{ padding: 'var(--space-sm)' }}>Time (IST)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map(spin => (
+                      <tr key={spin.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: 'var(--space-sm)' }}>
+                          <strong>{spin.user.name ?? '—'}</strong>
+                          {spin.user.email && <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>{spin.user.email}</div>}
+                        </td>
+                        <td style={{ padding: 'var(--space-sm)' }}>
+                          {spin.lootItem ? (
+                            <>
+                              <strong>{spin.lootItem.name}</strong>
+                              {spin.lootItem.description && <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>{spin.lootItem.description}</div>}
+                            </>
+                          ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                        </td>
+                        <td style={{ padding: 'var(--space-sm)' }}>
+                          {spin.lootItem?.rarity ? (
+                            <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.78rem', fontWeight: 600, background: `${RARITY_COLORS[spin.lootItem.rarity] ?? '#9ca3af'}22`, color: RARITY_COLORS[spin.lootItem.rarity] ?? '#9ca3af' }}>
+                              {spin.lootItem.rarity}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td style={{ padding: 'var(--space-sm)' }}>{spin.attempts}</td>
+                        <td style={{ padding: 'var(--space-sm)', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                          {new Date(spin.createdAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={{ marginTop: 'var(--space-sm)', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                  {history.length} spin{history.length !== 1 ? 's' : ''} on {historyDate}
+                </p>
+              </div>
+            )}
+          </div>
+
         </div>
       )}
     </div>
