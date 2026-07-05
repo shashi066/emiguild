@@ -102,42 +102,25 @@ export function DailySpinWidget() {
     return cells;
   })();
 
-  const handleSpin = async () => {
+  const handleSpin = () => {
     if (!spinStatus?.canSpin || spinning) return;
     setSpinning(true);
     setError('');
     setReward(null);
 
-    // 1. Call API first so we know the real winner
-    let wonItem: LootItem | null = null;
-    try {
-      const res  = await fetch('/api/daily-spin', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      wonItem = data.reward as LootItem;
-    } catch (err: any) {
-      setError(err.message || 'Spin failed');
-      setSpinning(false);
-      return;
-    }
-
-    // 2. Animate: fast random highlight sweep for ~3s, then land on winner cell
     const totalCells = gridItems.length;
-    if (totalCells === 0 || !wonItem) {
-      setReward(wonItem);
-      loadStatus();
+    if (totalCells === 0) {
       setSpinning(false);
       return;
     }
 
-    // Find first cell index that matches the winner
-    const winnerCellIndex = gridItems.findIndex((item) => item.id === wonItem!.id);
-    const landIndex = winnerCellIndex >= 0 ? winnerCellIndex : 0;
-
+    // Start animation immediately (before API response)
     let current = 0;
     let delay   = 60; // start fast
     let steps   = 0;
     const totalSteps = 28;
+    let wonItem: LootItem | null = null;
+    let landIndex = 0;
 
     const animate = () => {
       current = Math.floor(Math.random() * totalCells);
@@ -162,12 +145,27 @@ export function DailySpinWidget() {
       }
     };
 
+    // Start animation immediately
     spinIntervalRef.current = setTimeout(animate, delay);
+
+    // Fetch winner in background (non-blocking)
+    fetch('/api/daily-spin', { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.reward) throw new Error(data.error || 'No reward data');
+        wonItem = data.reward as LootItem;
+        // Find first cell index that matches the winner
+        const winnerCellIndex = gridItems.findIndex((item) => item.id === wonItem!.id);
+        landIndex = winnerCellIndex >= 0 ? winnerCellIndex : 0;
+      })
+      .catch(err => {
+        setError(err.message || 'Spin failed');
+      });
   };
 
   const shareReward = async () => {
     if (!reward) return;
-    const text = `I just won ${reward.name} in the GameZone Daily Guild Vault! 🎮✨`;
+    const text = `I just won ${reward.name} in the GameZone Daily Guild Spin! 🎮✨`;
     if (navigator.share) {
       try { await navigator.share({ title: 'GameZone Loot', text, url: window.location.href }); }
       catch { navigator.clipboard.writeText(text); }
@@ -202,8 +200,8 @@ export function DailySpinWidget() {
     return (
       <div className="card" style={{ textAlign: 'center', padding: 'var(--space-2xl)' }}>
         <Gift size={48} style={{ color: 'var(--color-text-muted)', margin: '0 auto var(--space-md)' }} />
-        <h2>Daily Guild Vault Disabled</h2>
-        <p style={{ color: 'var(--color-text-secondary)' }}>The Daily Guild Vault feature is currently disabled by the administrator.</p>
+        <h2>Daily Guild Spin Disabled</h2>
+        <p style={{ color: 'var(--color-text-secondary)' }}>The Daily Guild Spin feature is currently disabled by the administrator.</p>
       </div>
     );
   }
@@ -252,7 +250,7 @@ export function DailySpinWidget() {
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
           marginBottom: 'var(--space-sm)',
         }}>
-          Daily Guild Vault
+          Daily Guild Spin
         </h2>
         <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-xl)' }}>
           {spinStatus?.canSpin

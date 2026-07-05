@@ -172,7 +172,7 @@ export function AdminDailySpin() {
             <Gift size={26} style={{ display: 'inline', marginRight: 10, color: 'var(--color-accent-tertiary)' }} />
             Daily Loot Spin
           </h1>
-          <p className="page-subtitle">Manage Daily Guild Vault settings and rewards</p>
+          <p className="page-subtitle">Manage Daily Guild Spin settings and rewards</p>
         </div>
         <button className="btn btn-ghost btn-sm" onClick={loadData}>
           <RefreshCw size={15} /> Refresh
@@ -201,7 +201,7 @@ export function AdminDailySpin() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-md)' }}>
               
               <div>
-                <label className="form-label">Enable Daily Guild Vault</label>
+                <label className="form-label">Enable Daily Guild Spin</label>
                 <select
                   className="form-input"
                   value={settings.daily_spin_enabled || 'true'}

@@ -25,7 +25,7 @@ export function Navbar() {
     { href: '/',           label: 'Home',        icon: null },
     { href: '/book',       label: 'Book a Slot', icon: <Calendar size={15} /> },
     { href: '/passes',     label: 'Passes',      icon: <Award size={15} /> },
-    { href: '/daily-spin', label: 'Guild Vault',   icon: <RotateCw size={15} /> },
+    { href: '/daily-spin', label: 'Guild Spin',   icon: <RotateCw size={15} /> },
     { href: '/draws',      label: '🎁 Guild Drop', icon: null },
     ...(session ? [{ href: '/my-bookings', label: 'My Bookings', icon: <BookOpen size={15} /> }] : []),
     ...(isAdmin  ? [{ href: '/admin',      label: 'Admin',       icon: <LayoutDashboard size={15} /> }] : []),
