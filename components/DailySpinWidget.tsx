@@ -259,6 +259,9 @@ export function DailySpinWidget() {
             ? 'Test your luck — spin the grid to win a free perk!'
             : 'Come back tomorrow for another drop!'}
         </p>
+        <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', textAlign: 'left', fontSize: '0.86rem' }}>
+          Daily spin gifts are redeemable only with a booking made on the same day.
+        </div>
 
         {error && <div className="alert alert-error" style={{ marginBottom: 'var(--space-lg)' }}>{error}</div>}
 
@@ -382,7 +385,7 @@ export function DailySpinWidget() {
               <Clock size={16} /> Next drop in: {timeLeft || 'Calculating...'}
             </div>
             <div className="alert alert-info" style={{ fontSize: '0.85rem', marginBottom: 'var(--space-md)', textAlign: 'left' }}>
-              <strong>How to claim:</strong> Show this to EMI Guild staff at the front desk to redeem your reward.
+              <strong>How to claim:</strong> Show this to EMI Guild staff at the front desk. Daily spin gifts are valid only with a same-day booking.
             </div>
             <button className="btn btn-secondary btn-sm" onClick={shareReward}>
               <Share2 size={16} /> Share Result
