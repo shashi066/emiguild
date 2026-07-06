@@ -109,6 +109,66 @@ const PRICING_TIERS = [
   },
 ];
 
+const AVAILABLE_GAMES = [
+  {
+    category: 'Single-Player Adventures',
+    games: [
+      'Black Myth: Wukong',
+      'God of War Ragnarök',
+      'Ghost of Tsushima Director\'s Cut',
+      'Marvel\'s Spider-Man: Miles Morales',
+      'Horizon Forbidden West',
+      'Red Dead Redemption 2',
+      'The Witcher 3: Wild Hunt',
+      'Hogwarts Legacy',
+      'Final Fantasy XVI',
+      'Final Fantasy VII Rebirth',
+      'Death Stranding Director\'s Cut',
+      'Ratchet & Clank: Rift Apart',
+      'Assassin\'s Creed Valhalla',
+      'Assassin\'s Creed Mirage',
+      'Uncharted: Legacy of Thieves Collection',
+      'Mafia Trilogy',
+      'Resident Evil 4 Remake',
+      'Resident Evil Village',
+      'Days Gone',
+      'Alan Wake 2',
+      'Dead Space Remake',
+      'The Callisto Protocol',
+    ],
+  },
+  {
+    category: 'Multiplayer, Co-op & Competitive',
+    games: [
+      'EA Sports FC 26',
+      'Cricket 24',
+      'WWE 2K26',
+      'NBA 2K26',
+      'GTA V Online',
+      'Call of Duty: Black Ops III',
+      'Call of Duty: Black Ops 6',
+      'Tekken 8',
+      'Mortal Kombat 1',
+      'Mortal Kombat 11',
+      'Injustice 2',
+      'Street Fighter 6',
+      'Rainbow Six Siege',
+      'Helldivers 2',
+      'Destiny 2',
+      'Overwatch 2',
+      'Evil Dead: The Game',
+      'It Takes Two',
+      'A Way Out',
+      'Overcooked! All You Can Eat',
+      'Sackboy: A Big Adventure',
+    ],
+  },
+  {
+    category: 'Racing & Simulator Experience',
+    games: ['F1 25', 'Gran Turismo 7', 'Forza Horizon 5', 'The Crew Motorfest', 'Need for Speed Unbound'],
+  },
+];
+
 export default async function HomePage() {
   const [stations, stats, session] = await Promise.all([getStations(), getStats(), auth()]);
 
@@ -158,6 +218,18 @@ export default async function HomePage() {
               >
                 <Award size={18} />
                 Monthly Passes
+              </Link>
+              <Link
+                href="/games"
+                className="btn btn-ghost btn-lg btn-xl btn-highlight"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(0, 230, 118, 0.12), rgba(0, 150, 80, 0.08))',
+                  border: '1px solid rgba(0, 230, 118, 0.35)',
+                  color: '#e8ffed',
+                }}
+              >
+                <Gamepad2 size={18} />
+                Available Games
               </Link>
             </div>
 

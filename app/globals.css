@@ -315,6 +315,24 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.btn-highlight {
+  background: rgba(108, 99, 255, 0.1);
+  border-color: rgba(0, 230, 118, 0.6);
+  color: #f4f7ff;
+  box-shadow: inset 0 0 0 1px rgba(0, 230, 118, 0.16), 0 10px 30px rgba(0, 230, 118, 0.14);
+}
+
+.btn-highlight:hover {
+  background: rgba(108, 99, 255, 0.16);
+  border-color: rgba(0, 230, 118, 0.9);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(0, 230, 118, 0.24), 0 12px 32px rgba(0, 230, 118, 0.18);
+}
+
+.btn-highlight::after {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .btn-sm {
   padding: 6px 14px;
   font-size: 0.8rem;
@@ -322,6 +340,11 @@ h1, h2, h3, h4, h5, h6 {
 
 .btn-lg {
   padding: 14px 28px;
+  font-size: 1rem;
+}
+
+.btn-xl {
+  padding: 14px 22px;
   font-size: 1rem;
 }
 
@@ -695,6 +718,73 @@ input.form-input[type="time"]:focus {
   max-width: 600px;
   margin: 0 auto;
   line-height: 1.7;
+}
+
+/* ============================================================
+   AVAILABLE GAMES SECTION
+   ============================================================ */
+.games-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-lg);
+}
+
+.games-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.games-category-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.games-category-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(108, 99, 255, 0.08), transparent 60%);
+  pointer-events: none;
+}
+
+.games-category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(108, 99, 255, 0.12);
+  border: 1px solid rgba(108, 99, 255, 0.2);
+  color: var(--color-accent-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: var(--space-md);
+}
+
+.games-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+}
+
+.games-list li {
+  color: var(--color-text-secondary);
+  padding-left: 1rem;
+  position: relative;
+  line-height: 1.5;
+}
+
+.games-list li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--color-accent-secondary);
 }
 
 /* ============================================================
