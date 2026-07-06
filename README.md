@@ -110,28 +110,3 @@ npx prisma db push     # Apply schema changes
 
 ---
 
-## 🎁 Daily Loot Spin Feature
-
-The Daily Loot Spin allows authenticated users to win daily rewards.
-
-### Seeded Rewards (Default Drop Table)
-The database seed scripts inserts the following default items and weights:
-- **5% Discount** (Weight: 40) - 40% Drop Rate
-- **10% Discount** (Weight: 20) - 20% Drop Rate
-- **Extra XP** (Weight: 15) - 15% Drop Rate
-- **Free Drink** (Weight: 10) - 10% Drop Rate
-- **Bronze Pass** (Weight: 5) - 5% Drop Rate
-- **Gold Pass** (Weight: 1) - ~1% Drop Rate
-
-### How to Test Locally
-1. Sync schema: `npx prisma db push`
-2. Seed rewards: `npm run db:seed`
-3. Start the app: `npx next dev --webpack`
-4. Visit `/admin/daily-spin` (as admin) to manage rewards and settings (e.g. reset hour, allow retries).
-5. Visit `/daily-spin` as a user to test the spin.
-
-### Running Tests
-To run the unit and API behavior tests for the daily spin feature:
-```bash
-node --test test/daily-spin/*.js
-```
