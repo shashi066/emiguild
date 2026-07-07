@@ -54,6 +54,7 @@ const animationStyles: Record<AnimationVariant, React.CSSProperties> = {
   none: {},
   spin: { animation: 'spin-pulse 2s ease-in-out infinite' },
   lucky: {},
+  tournament: {},
 };
 
 export default function HeroButton({

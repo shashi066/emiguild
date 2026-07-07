@@ -1,67 +1,36 @@
 import Link from 'next/link';
 import { Gamepad2, Calendar, ChevronRight, Award } from 'lucide-react';
+import { prisma } from '@/lib/prisma';
 
-const AVAILABLE_GAMES = [
-  {
-    category: 'Single-Player Adventures',
-    games: [
-      'Black Myth: Wukong',
-      'God of War Ragnarök',
-      'Ghost of Tsushima Director\'s Cut',
-      'Marvel\'s Spider-Man: Miles Morales',
-      'Horizon Forbidden West',
-      'Red Dead Redemption 2',
-      'The Witcher 3: Wild Hunt',
-      'Hogwarts Legacy',
-      'Final Fantasy XVI',
-      'Final Fantasy VII Rebirth',
-      'Death Stranding Director\'s Cut',
-      'Ratchet & Clank: Rift Apart',
-      'Assassin\'s Creed Valhalla',
-      'Assassin\'s Creed Mirage',
-      'Uncharted: Legacy of Thieves Collection',
-      'Mafia Trilogy',
-      'Resident Evil 4 Remake',
-      'Resident Evil Village',
-      'Days Gone',
-      'Alan Wake 2',
-      'Dead Space Remake',
-      'The Callisto Protocol',
-    ],
-  },
-  {
-    category: 'Multiplayer, Co-op & Competitive',
-    games: [
-      'EA Sports FC 26',
-      'Cricket 24',
-      'WWE 2K26',
-      'NBA 2K26',
-      'GTA V Online',
-      'Call of Duty: Black Ops III',
-      'Call of Duty: Black Ops 6',
-      'Tekken 8',
-      'Mortal Kombat 1',
-      'Mortal Kombat 11',
-      'Injustice 2',
-      'Street Fighter 6',
-      'Rainbow Six Siege',
-      'Helldivers 2',
-      'Destiny 2',
-      'Overwatch 2',
-      'Evil Dead: The Game',
-      'It Takes Two',
-      'A Way Out',
-      'Overcooked! All You Can Eat',
-      'Sackboy: A Big Adventure',
-    ],
-  },
-  {
-    category: 'Racing & Simulator Experience',
-    games: ['F1 25', 'Gran Turismo 7', 'Forza Horizon 5', 'The Crew Motorfest', 'Need for Speed Unbound'],
-  },
+const CATEGORIES = [
+  'Single-Player Adventures',
+  'Multiplayer, Co-op & Competitive',
+  'Racing & Simulator Experience',
 ];
 
-export default function GamesPage() {
+async function getGames() {
+  try {
+    const games = await prisma.game.findMany({
+      where: { isActive: true },
+      orderBy: [{ category: 'asc' }, { position: 'asc' }, { name: 'asc' }],
+    });
+    return games;
+  } catch (error) {
+    console.error('Error fetching games:', error);
+    return [];
+  }
+}
+
+export default async function GamesPage() {
+  const games = await getGames();
+
+  // Group games by category
+  const groupedGames = games.reduce((acc, game) => {
+    if (!acc[game.category]) acc[game.category] = [];
+    acc[game.category].push(game);
+    return acc;
+  }, {} as Record<string, typeof games>);
+
   return (
     <main className="page-shell">
       <section className="section">
@@ -99,21 +68,33 @@ export default function GamesPage() {
             </div>
           </div>
 
-          <div className="games-library-grid">
-            {AVAILABLE_GAMES.map((group) => (
-              <div key={group.category} className="card card-hover games-category-card">
-                <div className="games-category-badge">
-                  <Gamepad2 size={16} />
-                  {group.category}
-                </div>
-                <ul className="games-list">
-                  {group.games.map((game) => (
-                    <li key={game}>{game}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+          {games.length === 0 ? (
+            <div className="card" style={{ padding: 'var(--space-2xl)', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <Gamepad2 size={48} style={{ marginBottom: 'var(--space-md)', opacity: 0.5 }} />
+              <p>No games available at the moment. Check back soon!</p>
+            </div>
+          ) : (
+            <div className="games-library-grid">
+              {CATEGORIES.map((category) => {
+                const categoryGames = groupedGames[category] || [];
+                if (categoryGames.length === 0) return null;
+
+                return (
+                  <div key={category} className="card card-hover games-category-card">
+                    <div className="games-category-badge">
+                      <Gamepad2 size={16} />
+                      {category}
+                    </div>
+                    <ul className="games-list">
+                      {categoryGames.map((game) => (
+                        <li key={game.id}>{game.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
     </main>
