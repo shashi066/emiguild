@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import ScrollToSection from '@/components/ScrollToSection';
+import HeroActions from '@/components/HeroActions';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { formatCurrency } from '@/lib/utils';
@@ -16,6 +17,8 @@ import {
   Phone,
   MapPin,
   Award,
+  RotateCcw,
+  Gift,
 } from 'lucide-react';
 
 async function getStations() {
@@ -198,40 +201,7 @@ export default async function HomePage() {
               Book your Play Station online in seconds and step in ready for action.
             </p>
 
-            <div className="hero-actions">
-              <Link href="/book" className="btn btn-primary btn-lg" id="hero-book-btn">
-                <Calendar size={18} />
-                Book a Slot Now
-              </Link>
-              <ScrollToSection targetId="stations" className="btn btn-ghost btn-lg">
-                View Stations
-                <ChevronRight size={18} />
-              </ScrollToSection>
-              <Link
-                href="/passes"
-                className="btn btn-ghost btn-lg"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255,215,0,0.1), rgba(205,127,50,0.1))',
-                  border: '1px solid rgba(255,215,0,0.3)',
-                  color: '#FFD700',
-                }}
-              >
-                <Award size={18} />
-                Monthly Passes
-              </Link>
-              <Link
-                href="/games"
-                className="btn btn-ghost btn-lg btn-xl btn-highlight"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(0, 230, 118, 0.12), rgba(0, 150, 80, 0.08))',
-                  border: '1px solid rgba(0, 230, 118, 0.35)',
-                  color: '#e8ffed',
-                }}
-              >
-                <Gamepad2 size={18} />
-                Available Games
-              </Link>
-            </div>
+            <HeroActions />
 
             <div className="hero-stats">
               <div>
