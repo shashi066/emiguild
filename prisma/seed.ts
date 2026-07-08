@@ -106,6 +106,71 @@ async function main() {
   }
   console.log('✅ Sample loot items created/checked');
 
+  // ── Sample Games ──────────────────────────────────────────────
+  const games = [
+    // Single-Player Adventures
+    { name: 'Black Myth: Wukong', category: 'Single-Player Adventures', position: 1 },
+    { name: 'God of War Ragnarök', category: 'Single-Player Adventures', position: 2 },
+    { name: "Ghost of Tsushima Director's Cut", category: 'Single-Player Adventures', position: 3 },
+    { name: "Marvel's Spider-Man: Miles Morales", category: 'Single-Player Adventures', position: 4 },
+    { name: 'Horizon Forbidden West', category: 'Single-Player Adventures', position: 5 },
+    { name: 'Red Dead Redemption 2', category: 'Single-Player Adventures', position: 6 },
+    { name: 'The Witcher 3: Wild Hunt', category: 'Single-Player Adventures', position: 7 },
+    { name: 'Hogwarts Legacy', category: 'Single-Player Adventures', position: 8 },
+    { name: 'Final Fantasy XVI', category: 'Single-Player Adventures', position: 9 },
+    { name: 'Final Fantasy VII Rebirth', category: 'Single-Player Adventures', position: 10 },
+    { name: 'Death Stranding Director\'s Cut', category: 'Single-Player Adventures', position: 11 },
+    { name: 'Ratchet & Clank: Rift Apart', category: 'Single-Player Adventures', position: 12 },
+    { name: "Assassin's Creed Valhalla", category: 'Single-Player Adventures', position: 13 },
+    { name: "Assassin's Creed Mirage", category: 'Single-Player Adventures', position: 14 },
+    { name: 'Uncharted: Legacy of Thieves Collection', category: 'Single-Player Adventures', position: 15 },
+    { name: 'Mafia Trilogy', category: 'Single-Player Adventures', position: 16 },
+    { name: 'Resident Evil 4 Remake', category: 'Single-Player Adventures', position: 17 },
+    { name: 'Resident Evil Village', category: 'Single-Player Adventures', position: 18 },
+    { name: 'Days Gone', category: 'Single-Player Adventures', position: 19 },
+    { name: 'Alan Wake 2', category: 'Single-Player Adventures', position: 20 },
+    { name: 'Dead Space Remake', category: 'Single-Player Adventures', position: 21 },
+    { name: 'The Callisto Protocol', category: 'Single-Player Adventures', position: 22 },
+
+    // Multiplayer, Co-op & Competitive
+    { name: 'EA Sports FC 26', category: 'Multiplayer, Co-op & Competitive', position: 1 },
+    { name: 'Cricket 24', category: 'Multiplayer, Co-op & Competitive', position: 2 },
+    { name: 'WWE 2K26', category: 'Multiplayer, Co-op & Competitive', position: 3 },
+    { name: 'NBA 2K26', category: 'Multiplayer, Co-op & Competitive', position: 4 },
+    { name: 'GTA V Online', category: 'Multiplayer, Co-op & Competitive', position: 5 },
+    { name: 'Call of Duty: Black Ops III', category: 'Multiplayer, Co-op & Competitive', position: 6 },
+    { name: 'Call of Duty: Black Ops 6', category: 'Multiplayer, Co-op & Competitive', position: 7 },
+    { name: 'Tekken 8', category: 'Multiplayer, Co-op & Competitive', position: 8 },
+    { name: 'Mortal Kombat 1', category: 'Multiplayer, Co-op & Competitive', position: 9 },
+    { name: 'Mortal Kombat 11', category: 'Multiplayer, Co-op & Competitive', position: 10 },
+    { name: 'Injustice 2', category: 'Multiplayer, Co-op & Competitive', position: 11 },
+    { name: 'Street Fighter 6', category: 'Multiplayer, Co-op & Competitive', position: 12 },
+    { name: 'Rainbow Six Siege', category: 'Multiplayer, Co-op & Competitive', position: 13 },
+    { name: 'Helldivers 2', category: 'Multiplayer, Co-op & Competitive', position: 14 },
+    { name: 'Destiny 2', category: 'Multiplayer, Co-op & Competitive', position: 15 },
+    { name: 'Overwatch 2', category: 'Multiplayer, Co-op & Competitive', position: 16 },
+    { name: 'Evil Dead: The Game', category: 'Multiplayer, Co-op & Competitive', position: 17 },
+    { name: 'It Takes Two', category: 'Multiplayer, Co-op & Competitive', position: 18 },
+    { name: 'A Way Out', category: 'Multiplayer, Co-op & Competitive', position: 19 },
+    { name: 'Overcooked! All You Can Eat', category: 'Multiplayer, Co-op & Competitive', position: 20 },
+    { name: 'Sackboy: A Big Adventure', category: 'Multiplayer, Co-op & Competitive', position: 21 },
+
+    // Racing & Simulator Experience
+    { name: 'F1 25', category: 'Racing & Simulator Experience', position: 1 },
+    { name: 'Gran Turismo 7', category: 'Racing & Simulator Experience', position: 2 },
+    { name: 'Forza Horizon 5', category: 'Racing & Simulator Experience', position: 3 },
+    { name: 'The Crew Motorfest', category: 'Racing & Simulator Experience', position: 4 },
+    { name: 'Need for Speed Unbound', category: 'Racing & Simulator Experience', position: 5 },
+  ];
+
+  const existingGames = await prisma.game.count();
+  if (existingGames === 0) {
+    await prisma.game.createMany({ data: games });
+    console.log('✅ Sample games created');
+  } else {
+    console.log(`✅ Games already exist (${existingGames} found)`);
+  }
+
   console.log('🎉 Seed complete!');
 }
 

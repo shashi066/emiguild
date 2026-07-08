@@ -3,10 +3,11 @@
 interface ScrollToSectionProps {
   targetId: string;
   className?: string;
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }
 
-export default function ScrollToSection({ targetId, className, children }: ScrollToSectionProps) {
+export default function ScrollToSection({ targetId, className, style, children }: ScrollToSectionProps) {
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     const target = document.getElementById(targetId);
@@ -16,7 +17,7 @@ export default function ScrollToSection({ targetId, className, children }: Scrol
   };
 
   return (
-    <button onClick={handleClick} className={className}>
+    <button onClick={handleClick} className={className} style={style}>
       {children}
     </button>
   );
