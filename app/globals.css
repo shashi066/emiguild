@@ -4,39 +4,39 @@
    CSS DESIGN TOKENS — Gaming Cafe Dark Theme
    ============================================================ */
 :root {
-  /* Colors - Hyper Vibrant Gen Z Palette */
-  --color-bg-base: #050505;
-  --color-bg-surface: #0a0a0a;
-  --color-bg-elevated: rgba(20, 20, 20, 0.6);
-  --color-bg-card: rgba(25, 25, 25, 0.4);
-  --color-bg-card-hover: rgba(40, 40, 40, 0.5);
+  /* Colors */
+  --color-bg-base: #080b14;
+  --color-bg-surface: #0d1117;
+  --color-bg-elevated: #111827;
+  --color-bg-card: #141e2e;
+  --color-bg-card-hover: #1a2540;
 
-  --color-accent-primary: #8a2be2;       /* Vibrant Purple */
-  --color-accent-secondary: #00ffff;     /* Hyper Cyan */
-  --color-accent-tertiary: #ff007f;      /* Hot Pink */
-  --color-accent-success: #39ff14;       /* Neon Green */
-  --color-accent-warning: #ffb300;       /* Mango */
-  --color-accent-danger: #ff3333;        /* Bright Red */
+  --color-accent-primary: #6c63ff;       /* Electric Purple */
+  --color-accent-secondary: #00d4ff;     /* Neon Cyan */
+  --color-accent-tertiary: #ff2d55;      /* Neon Pink */
+  --color-accent-success: #00e676;       /* Neon Green */
+  --color-accent-warning: #ffaa00;       /* Amber */
+  --color-accent-danger: #ff4040;        /* Red */
 
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #a1a1aa;
-  --color-text-muted: #71717a;
+  --color-text-primary: #f0f4ff;
+  --color-text-secondary: #8b9cb8;
+  --color-text-muted: #4a5568;
 
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-accent: rgba(138, 43, 226, 0.5);
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-accent: rgba(108, 99, 255, 0.3);
 
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #8a2be2 0%, #00ffff 100%);
-  --gradient-card: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
-  --gradient-hero: linear-gradient(135deg, #050505 0%, #0a0a0a 50%, #000000 100%);
-  --gradient-danger: linear-gradient(135deg, #ff007f 0%, #ff3333 100%);
-  --gradient-success: linear-gradient(135deg, #39ff14 0%, #00c853 100%);
+  --gradient-primary: linear-gradient(135deg, #6c63ff 0%, #00d4ff 100%);
+  --gradient-card: linear-gradient(135deg, rgba(108, 99, 255, 0.1) 0%, rgba(0, 212, 255, 0.05) 100%);
+  --gradient-hero: linear-gradient(135deg, #080b14 0%, #0d1a2e 50%, #0a0e1a 100%);
+  --gradient-danger: linear-gradient(135deg, #ff2d55 0%, #ff4040 100%);
+  --gradient-success: linear-gradient(135deg, #00e676 0%, #00c853 100%);
 
-  /* Shadows - Glow */
-  --shadow-glow: 0 0 40px rgba(138, 43, 226, 0.4);
-  --shadow-glow-cyan: 0 0 40px rgba(0, 255, 255, 0.4);
-  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-card-hover: 0 16px 48px rgba(138, 43, 226, 0.25);
+  /* Shadows */
+  --shadow-glow: 0 0 30px rgba(108, 99, 255, 0.3);
+  --shadow-glow-cyan: 0 0 30px rgba(0, 212, 255, 0.3);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 16px 48px rgba(108, 99, 255, 0.2);
 
   /* Spacing */
   --space-xs: 0.25rem;
@@ -54,10 +54,10 @@
   --radius-xl: 24px;
   --radius-full: 9999px;
 
-  /* Transitions - Springy & Gen Z */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-base: 300ms cubic-bezier(0.34, 1.56, 0.64, 1); /* Bouncy spring */
-  --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
 }
 
 /* ============================================================
@@ -82,94 +82,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
-  position: relative;
-  overflow-x: hidden;
-}
-
-.content-wrapper {
-  position: relative;
-  z-index: 10;
-}
-
-/* ============================================================
-   AURORA BACKGROUND EFFECTS
-   ============================================================ */
-.aurora-bg {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-  background: var(--color-bg-base);
-}
-
-.aurora-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.5;
-  animation: aurora-float 20s infinite ease-in-out alternate;
-}
-
-.aurora-1 {
-  width: 60vw;
-  height: 60vh;
-  background: radial-gradient(circle, rgba(138,43,226,0.3) 0%, transparent 70%);
-  top: -10%;
-  left: -10%;
-  animation-delay: 0s;
-}
-
-.aurora-2 {
-  width: 70vw;
-  height: 70vh;
-  background: radial-gradient(circle, rgba(0,255,255,0.2) 0%, transparent 70%);
-  bottom: -20%;
-  right: -10%;
-  animation-delay: -5s;
-}
-
-.aurora-3 {
-  width: 50vw;
-  height: 50vh;
-  background: radial-gradient(circle, rgba(255,0,127,0.15) 0%, transparent 70%);
-  top: 30%;
-  left: 40%;
-  animation-delay: -10s;
-}
-
-@keyframes aurora-float {
-  0% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(5%, 10%) scale(1.1); }
-  66% { transform: translate(-5%, 5%) scale(0.9); }
-  100% { transform: translate(10%, -5%) scale(1.05); }
-}
-
-/* ============================================================
-   GLASSMORPHISM UTILITIES
-   ============================================================ */
-.glass-panel {
-  background: var(--color-bg-card);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-  border-radius: var(--radius-lg);
-}
-
-.bento-card {
-  background: var(--color-bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
-}
-.bento-card:hover {
-  transform: translateY(-4px) scale(1.01);
-  box-shadow: var(--shadow-card-hover);
-  border-color: rgba(255,255,255,0.15);
 }
 
 /* Scrollbar */
@@ -320,28 +232,20 @@ h1, h2, h3, h4, h5, h6 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-full); /* Pill shaped Gen Z buttons */
-  font-weight: 700;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  font-family: 'Outfit', sans-serif;
   font-size: 0.9rem;
-  letter-spacing: 0.02em;
-  transition: all var(--transition-base);
+  font-weight: 600;
   cursor: pointer;
+  transition: all var(--transition-base);
   border: none;
   outline: none;
-  text-decoration: none;
   white-space: nowrap;
-  user-select: none;
-  font-family: 'Outfit', sans-serif;
-}
-
-.btn:hover {
-  transform: translateY(-2px) scale(1.03);
-}
-
-.btn:active {
-  transform: translateY(1px) scale(0.97);
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
 }
 
 .btn::after {
@@ -354,6 +258,10 @@ h1, h2, h3, h4, h5, h6 {
 
 .btn:hover::after {
   background: rgba(255,255,255,0.06);
+}
+
+.btn:active {
+  transform: scale(0.98);
 }
 
 .btn-primary {
@@ -451,18 +359,17 @@ h1, h2, h3, h4, h5, h6 {
    ============================================================ */
 .card {
   background: var(--color-bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
+  padding: var(--space-xl);
+  transition: all var(--transition-base);
 }
 
 .card-hover:hover {
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: var(--shadow-card-hover);
+  background: var(--color-bg-card-hover);
   border-color: var(--color-border-accent);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
 }
 
 .card-glass {

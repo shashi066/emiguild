@@ -59,14 +59,12 @@
   display: flex;
   flex-direction: column;
   background: var(--color-bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   padding: 1.25rem;
   text-decoration: none;
   color: inherit;
-  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  transition: transform 200ms, border-color 200ms, box-shadow 200ms;
   position: relative;
   overflow: hidden;
 }
@@ -75,15 +73,15 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(138, 43, 226, 0.1), transparent);
+  background: linear-gradient(135deg, rgba(108, 99, 255, 0.05), transparent);
   opacity: 0;
-  transition: opacity var(--transition-base);
+  transition: opacity 200ms;
 }
 
 .tourn-card:hover {
-  transform: translateY(-4px) scale(1.02);
-  border-color: rgba(138, 43, 226, 0.4);
-  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-3px);
+  border-color: rgba(108, 99, 255, 0.35);
+  box-shadow: 0 12px 40px rgba(108, 99, 255, 0.15);
 }
 
 .tourn-card:hover::before {
@@ -183,10 +181,8 @@
 
 /* Layout Header + Tabs */
 .tourn-layout-header {
-  background: rgba(10, 10, 10, 0.7);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid rgba(108, 99, 255, 0.12);
   position: sticky;
   top: 72px;
   z-index: 90;
@@ -239,20 +235,12 @@
 
 .tourn-stat-card {
   background: var(--color-bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   padding: 1rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-}
-
-.tourn-stat-card:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: var(--shadow-glow-cyan);
 }
 
 .tourn-stat-icon {

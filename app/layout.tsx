@@ -54,14 +54,9 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="aurora-bg">
-          <div className="aurora-orb aurora-1"></div>
-          <div className="aurora-orb aurora-2"></div>
-          <div className="aurora-orb aurora-3"></div>
-        </div>
         <SessionProvider session={session}>
           <Navbar />
-          <main className="content-wrapper">{children}</main>
+          <main>{children}</main>
         </SessionProvider>
       </body>
     </html>
