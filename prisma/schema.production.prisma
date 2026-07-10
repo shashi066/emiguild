@@ -21,11 +21,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bookings   Booking[]
-  passes     UserPass[]
-  dailySpins    UserDailySpin[]
-  wonDraws      LuckyDraw[] @relation("DrawWinner")
-  drawEntries   DrawEntry[]
+  bookings          Booking[]
+  passes            UserPass[]
+  dailySpins        UserDailySpin[]
+  wonDraws          LuckyDraw[] @relation("DrawWinner")
+  drawEntries       DrawEntry[]
+  tournamentPlayers TournamentPlayer[]
 
   @@map("users")
 }
@@ -183,4 +184,64 @@ model Game {
   updatedAt DateTime @updatedAt
 
   @@map("games")
+}
+
+model Tournament {
+  id           String   @id @default(cuid())
+  name         String
+  game         String   @default("FC26")
+  date         String
+  entryFee     String   @default("Free")
+  prizePool    String   @default("")
+  maxPlayers   Int      @default(16)
+  status       String   @default("REGISTRATION_OPEN")
+  bracketGenerated Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  players TournamentPlayer[]
+  matches TournamentMatch[]
+
+  @@map("tournaments")
+}
+
+model TournamentPlayer {
+  id           String   @id @default(cuid())
+  tournamentId String
+  userId       String?
+  name         String
+  seed         Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  matchesAsP1 TournamentMatch[] @relation("MatchPlayer1")
+  matchesAsP2 TournamentMatch[] @relation("MatchPlayer2")
+  matchesWon  TournamentMatch[] @relation("MatchWinner")
+
+  @@map("tournament_players")
+}
+
+model TournamentMatch {
+  id           String   @id @default(cuid())
+  tournamentId String
+  round        Int
+  matchIndex   Int
+  player1Id    String?
+  player2Id    String?
+  score1       Int      @default(0)
+  score2       Int      @default(0)
+  winnerId     String?
+  status       String   @default("PENDING")
+  isBye        Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament        @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player1    TournamentPlayer? @relation("MatchPlayer1", fields: [player1Id], references: [id], onDelete: SetNull)
+  player2    TournamentPlayer? @relation("MatchPlayer2", fields: [player2Id], references: [id], onDelete: SetNull)
+  winner     TournamentPlayer? @relation("MatchWinner",  fields: [winnerId],  references: [id], onDelete: SetNull)
+
+  @@map("tournament_matches")
 }
