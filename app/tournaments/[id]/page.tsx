@@ -7,6 +7,7 @@ import {
   Trophy, Calendar, Users, DollarSign, Zap, Edit3, Trash2,
   Lock, Unlock, Play, RotateCcw, X, Check,
 } from 'lucide-react';
+import Loading from './loading';
 
 interface Tournament {
   id: string;
@@ -24,10 +25,10 @@ interface Tournament {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-  REGISTRATION_OPEN:   { label: 'Registration Open',   color: '#00e676', bg: 'rgba(0,230,118,0.12)', icon: <Unlock size={14} /> },
+  REGISTRATION_OPEN: { label: 'Registration Open', color: '#00e676', bg: 'rgba(0,230,118,0.12)', icon: <Unlock size={14} /> },
   REGISTRATION_CLOSED: { label: 'Registration Closed', color: '#ffaa00', bg: 'rgba(255,170,0,0.12)', icon: <Lock size={14} /> },
-  ONGOING:             { label: 'Ongoing',              color: '#00d4ff', bg: 'rgba(0,212,255,0.12)', icon: <Play size={14} /> },
-  FINISHED:            { label: 'Finished',             color: '#FFD700', bg: 'rgba(255,215,0,0.08)', icon: <Trophy size={14} /> },
+  ONGOING: { label: 'Ongoing', color: '#00d4ff', bg: 'rgba(0,212,255,0.12)', icon: <Play size={14} /> },
+  FINISHED: { label: 'Finished', color: '#FFD700', bg: 'rgba(255,215,0,0.08)', icon: <Trophy size={14} /> },
 };
 
 export default function TournamentOverviewPage() {
@@ -45,6 +46,8 @@ export default function TournamentOverviewPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [regError, setRegError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => { fetchTournament(); }, [id]);
 
@@ -117,32 +120,32 @@ export default function TournamentOverviewPage() {
 
   async function handleRegister() {
     setRegistering(true);
+    setRegError(null);
     const res = await fetch(`/api/tournaments/${id}/register`, { method: 'POST' });
     if (!res.ok) {
       const data = await res.json();
-      alert(data.error || 'Failed to register');
+      setRegError(data.error || 'Failed to register');
+    } else {
+      fetchTournament();
     }
     setRegistering(false);
-    fetchTournament();
   }
 
   async function handleWithdraw() {
     if (!confirm('Are you sure you want to withdraw from this tournament?')) return;
     setRegistering(true);
+    setRegError(null);
     const res = await fetch(`/api/tournaments/${id}/register`, { method: 'DELETE' });
     if (!res.ok) {
       const data = await res.json();
-      alert(data.error || 'Failed to withdraw');
+      setRegError(data.error || 'Failed to withdraw');
+    } else {
+      fetchTournament();
     }
     setRegistering(false);
-    fetchTournament();
   }
 
-  if (loading) return (
-    <div style={{ textAlign: 'center', padding: '4rem' }}>
-      <div className="tourn-spinner" />
-    </div>
-  );
+  if (loading) return <Loading />;
 
   if (!tournament) return (
     <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--color-text-muted)' }}>
@@ -155,9 +158,9 @@ export default function TournamentOverviewPage() {
   const completedMatches = tournament.matches.filter((m) => m.status === 'COMPLETED').length;
   const champion = tournament.status === 'FINISHED'
     ? tournament.players.find((p) => {
-        const finalMatch = tournament.matches.find((m) => m.round === Math.max(...tournament.matches.map((x) => x.round)));
-        return finalMatch?.winnerId === p.id;
-      })
+      const finalMatch = tournament.matches.find((m) => m.round === Math.max(...tournament.matches.map((x) => x.round)));
+      return finalMatch?.winnerId === p.id;
+    })
     : null;
 
   return (
@@ -208,6 +211,11 @@ export default function TournamentOverviewPage() {
             >
               {registering ? 'Registering...' : tournament._count.players >= tournament.maxPlayers ? 'Tournament Full' : 'Register Now'}
             </button>
+          )}
+          {regError && (
+            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', borderRadius: '8px', fontSize: '0.85rem', width: '100%', maxWidth: '300px', textAlign: 'center' }}>
+              {regError}
+            </div>
           )}
         </div>
       )}
@@ -345,7 +353,7 @@ export default function TournamentOverviewPage() {
                 <div className="tourn-form-group">
                   <label>Max Players</label>
                   <select value={editForm.maxPlayers} onChange={(e) => setEditForm({ ...editForm, maxPlayers: e.target.value })} className="tourn-input">
-                    {[4,8,16,32,64].map((n) => <option key={n} value={n}>{n}</option>)}
+                    {[4, 8, 16, 32, 64].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </div>
                 <div className="tourn-form-group">

@@ -110,8 +110,8 @@ export default function BracketPage() {
   function openMatch(match: Match) {
     if (!isAdmin || match.isBye || (!match.player1Id && !match.player2Id)) return;
     setSelectedMatch(match);
-    setScore1(String(match.score1 || ''));
-    setScore2(String(match.score2 || ''));
+    setScore1(match.score1 != null ? String(match.score1) : '0');
+    setScore2(match.score2 != null ? String(match.score2) : '0');
   }
 
   if (loading) return (

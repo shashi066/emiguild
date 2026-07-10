@@ -4,7 +4,8 @@ import './tournament.css';
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { Trophy, Plus, Users, Calendar, Zap, ChevronRight, Gamepad2, X } from 'lucide-react';
+import { Trophy, Plus, Users, Calendar, Zap, ChevronRight, Gamepad2, X, ArrowLeft } from 'lucide-react';
+import Loading from './loading';
 
 interface Tournament {
   id: string;
@@ -20,10 +21,10 @@ interface Tournament {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  REGISTRATION_OPEN:   { label: 'Registration Open',   color: '#00e676', bg: 'rgba(0,230,118,0.12)' },
+  REGISTRATION_OPEN: { label: 'Registration Open', color: '#00e676', bg: 'rgba(0,230,118,0.12)' },
   REGISTRATION_CLOSED: { label: 'Registration Closed', color: '#ffaa00', bg: 'rgba(255,170,0,0.12)' },
-  ONGOING:             { label: 'Ongoing',              color: '#00d4ff', bg: 'rgba(0,212,255,0.12)' },
-  FINISHED:            { label: 'Finished',             color: '#8b9cb8', bg: 'rgba(139,156,184,0.12)' },
+  ONGOING: { label: 'Ongoing', color: '#00d4ff', bg: 'rgba(0,212,255,0.12)' },
+  FINISHED: { label: 'Finished', color: '#8b9cb8', bg: 'rgba(139,156,184,0.12)' },
 };
 
 export default function TournamentsPage() {
@@ -78,7 +79,10 @@ export default function TournamentsPage() {
       {/* Hero Banner */}
       <div className="tourn-hero">
         <div className="tourn-hero-bg" />
-        <div className="container" style={{ position: 'relative', zIndex: 1, paddingTop: '4rem', paddingBottom: '3rem' }}>
+        <div className="container" style={{ position: 'relative', zIndex: 1, paddingTop: '2.5rem', paddingBottom: '3rem' }}>
+          <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', textDecoration: 'none', marginBottom: '1.5rem', fontSize: '0.9rem', transition: 'color 0.2s ease' }}>
+            <ArrowLeft size={16} /> Back to Home
+          </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
             <div className="tourn-trophy-icon">
               <Trophy size={32} color="#FFD700" />
@@ -111,9 +115,7 @@ export default function TournamentsPage() {
 
       <div className="container" style={{ paddingBottom: '4rem' }}>
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--color-text-muted)' }}>
-            <div className="tourn-spinner" />
-          </div>
+          <Loading />
         ) : tournaments.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: '4rem', marginTop: '2rem' }}>
             <Gamepad2 size={48} style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }} />

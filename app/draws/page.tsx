@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import EnterDrawButton from './EnterDrawButton'
 
 export const dynamic = 'force-dynamic'
@@ -35,7 +36,10 @@ export default async function DrawsPage() {
 
   return (
     <div className="page-wrapper">
-      <div className="container" style={{ maxWidth: 760, paddingTop: 'var(--space-3xl)' }}>
+      <div className="container" style={{ maxWidth: 760, paddingTop: 'var(--space-xl)' }}>
+        <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', textDecoration: 'none', marginBottom: '1.5rem', fontSize: '0.9rem', transition: 'color 0.2s ease' }}>
+          <ArrowLeft size={16} /> Back to Home
+        </Link>
         <div className="page-header">
           <h1 className="page-title font-orbitron">
             🎁 <span className="text-gradient">Guild Drop</span>

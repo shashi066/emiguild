@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Gamepad2, Calendar, ChevronRight, Award } from 'lucide-react';
+import { Gamepad2, Calendar, ChevronRight, Award, ArrowLeft } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 
 const CATEGORIES = [
@@ -35,6 +35,9 @@ export default async function GamesPage() {
     <main className="page-shell">
       <section className="section">
         <div className="container">
+          <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', textDecoration: 'none', marginBottom: '1.5rem', fontSize: '0.9rem', transition: 'color 0.2s ease' }}>
+            <ArrowLeft size={16} /> Back to Home
+          </Link>
           <div className="section-header">
             <div className="section-tag">Available Games</div>
             <h1 className="section-title">
@@ -49,10 +52,7 @@ export default async function GamesPage() {
                 <Calendar size={18} />
                 Book a Slot Now
               </Link>
-              <Link href="/" className="btn btn-ghost">
-                Back Home
-                <ChevronRight size={18} />
-              </Link>
+
               <Link
                 href="/passes"
                 className="btn btn-ghost"
