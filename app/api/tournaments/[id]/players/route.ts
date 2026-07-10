@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const { name } = await req.json();
+  const { name, phone, userId } = await req.json();
 
   if (!name?.trim()) {
     return NextResponse.json({ error: 'Player name is required' }, { status: 400 });
@@ -35,7 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const player = await prisma.tournamentPlayer.create({
     data: {
       tournamentId: id,
+      userId: userId || null,
       name: name.trim(),
+      phone: phone?.trim() || null,
       seed: nextSeed,
     },
   });

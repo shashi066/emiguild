@@ -21,6 +21,7 @@ CREATE TABLE "tournament_players" (
     "tournamentId" TEXT NOT NULL,
     "userId" TEXT,
     "name" TEXT NOT NULL,
+    "phone" TEXT,
     "seed" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

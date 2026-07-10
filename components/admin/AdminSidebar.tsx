@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, BookOpen, Monitor, Users,
-  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw,
+  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, LayoutDashboard, BookOpen, Monitor, Users,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -16,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/admin/stations', label: 'Stations',       icon: Monitor },
   { href: '/admin/games',    label: 'Games',          icon: Gamepad2 },
   { href: '/admin/daily-spin', label: 'Guild Spin', icon: RotateCw },
+  { href: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { href: '/admin/users',    label: 'Users',          icon: Users },
   { href: '/admin/settings', label: 'Settings',       icon: Settings },
 ];

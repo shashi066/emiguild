@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { Trophy, X, Check, RotateCcw, Zap } from 'lucide-react';
+import { Trophy, X, Zap } from 'lucide-react';
 
 interface Player { id: string; name: string; seed: number; }
 interface Match {
@@ -49,16 +48,9 @@ function getRoundName(round: number, totalRounds: number): string {
 
 export default function BracketPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === 'ADMIN';
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [score1, setScore1] = useState('');
-  const [score2, setScore2] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [champion, setChampion] = useState<Player | null>(null);
   const [showChampion, setShowChampion] = useState(false);
 
@@ -83,37 +75,6 @@ export default function BracketPage() {
     }
   }, [id]);
 
-  async function handleSaveResult() {
-    if (!selectedMatch) return;
-    setSaving(true);
-    const s1 = parseInt(score1) || 0;
-    const s2 = parseInt(score2) || 0;
-    await fetch(`/api/tournaments/${id}/matches/${selectedMatch.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ score1: s1, score2: s2 }),
-    });
-    setSaving(false);
-    setSelectedMatch(null);
-    fetchTournament();
-  }
-
-  async function handleResetMatch() {
-    if (!selectedMatch) return;
-    setResetting(true);
-    await fetch(`/api/tournaments/${id}/matches/${selectedMatch.id}/reset`, { method: 'POST' });
-    setResetting(false);
-    setSelectedMatch(null);
-    fetchTournament();
-  }
-
-  function openMatch(match: Match) {
-    if (!isAdmin || match.isBye || (!match.player1Id && !match.player2Id)) return;
-    setSelectedMatch(match);
-    setScore1(match.score1 != null ? String(match.score1) : '0');
-    setScore2(match.score2 != null ? String(match.score2) : '0');
-  }
-
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '4rem' }}><div className="tourn-spinner" /></div>
   );
@@ -128,9 +89,7 @@ export default function BracketPage() {
         <Zap size={40} style={{ color: 'var(--color-accent-primary)', marginBottom: '1rem' }} />
         <h3 style={{ fontFamily: 'Orbitron, sans-serif', marginBottom: '0.75rem' }}>Bracket Not Generated</h3>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>
-          {isAdmin
-            ? 'Go to the Overview tab and click "Generate Bracket" to create the knockout bracket.'
-            : 'The bracket will be available once the admin generates it.'}
+          The bracket will be available once the admin generates it.
         </p>
       </div>
     </div>
@@ -179,7 +138,6 @@ export default function BracketPage() {
                     const hasPlayers = match.player1Id || match.player2Id;
                     const isCompleted = match.status === 'COMPLETED';
                     const isInProgress = match.status === 'IN_PROGRESS';
-                    const canClick = isAdmin && !match.isBye && hasPlayers;
 
                     // Compute connector spacing: each match occupies 2^(round-1) slots
                     const spacingMultiplier = Math.pow(2, round - 1);
@@ -202,8 +160,7 @@ export default function BracketPage() {
                         )}
 
                         <div
-                          className={`bracket-match-card${isCompleted ? ' completed' : ''}${isInProgress ? ' in-progress' : ''}${match.isBye ? ' bye' : ''}${canClick ? ' clickable' : ''}${isLastRound ? ' final-match' : ''}`}
-                          onClick={() => canClick && openMatch(match)}
+                          className={`bracket-match-card${isCompleted ? ' completed' : ''}${isInProgress ? ' in-progress' : ''}${match.isBye ? ' bye' : ''}${isLastRound ? ' final-match' : ''}`}
                         >
                           {isLastRound && (
                             <div className="bracket-final-badge">
@@ -242,7 +199,7 @@ export default function BracketPage() {
                               ) : isInProgress ? (
                                 <span style={{ color: '#00d4ff' }}>● Live</span>
                               ) : (
-                                <span style={{ color: 'var(--color-text-muted)' }}>{canClick ? 'Click to enter result' : 'Pending'}</span>
+                                <span style={{ color: 'var(--color-text-muted)' }}>Pending</span>
                               )}
                             </div>
                           )}
@@ -278,72 +235,6 @@ export default function BracketPage() {
           )}
         </div>
       </div>
-
-      {/* Match Result Modal */}
-      {selectedMatch && (
-        <div className="tourn-modal-overlay" onClick={() => setSelectedMatch(null)}>
-          <div className="tourn-modal" style={{ maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="tourn-modal-header">
-              <h2 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '0.95rem' }}>
-                Enter Match Result
-              </h2>
-              <button onClick={() => setSelectedMatch(null)} className="tourn-modal-close"><X size={18} /></button>
-            </div>
-
-            <div style={{ padding: '1.25rem 0' }}>
-              <div className="match-score-grid">
-                <div className="match-score-player">
-                  <div className="match-score-player-name">{selectedMatch.player1?.name ?? 'TBD'}</div>
-                  <input
-                    type="number"
-                    value={score1}
-                    onChange={(e) => setScore1(e.target.value)}
-                    min="0"
-                    className="tourn-input match-score-input"
-                    placeholder="0"
-                  />
-                </div>
-                <div className="match-score-vs">VS</div>
-                <div className="match-score-player">
-                  <div className="match-score-player-name">{selectedMatch.player2?.name ?? 'TBD'}</div>
-                  <input
-                    type="number"
-                    value={score2}
-                    onChange={(e) => setScore2(e.target.value)}
-                    min="0"
-                    className="tourn-input match-score-input"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              {parseInt(score1) === parseInt(score2) && score1 !== '' && (
-                <p style={{ color: '#ffaa00', fontSize: '0.8rem', textAlign: 'center', marginTop: '0.75rem' }}>
-                  ⚠ Tie — a clear winner is needed to advance
-                </p>
-              )}
-            </div>
-
-            <div className="tourn-modal-actions" style={{ justifyContent: 'space-between' }}>
-              {selectedMatch.status === 'COMPLETED' && (
-                <button onClick={handleResetMatch} disabled={resetting} className="btn btn-ghost btn-sm" style={{ color: '#ff4040', borderColor: 'rgba(255,64,64,0.3)' }}>
-                  <RotateCcw size={14} /> {resetting ? 'Resetting…' : 'Reset'}
-                </button>
-              )}
-              <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto' }}>
-                <button onClick={() => setSelectedMatch(null)} className="btn btn-ghost btn-sm">Cancel</button>
-                <button
-                  onClick={handleSaveResult}
-                  disabled={saving || score1 === '' || score2 === '' || parseInt(score1) === parseInt(score2)}
-                  className="btn btn-primary btn-sm"
-                >
-                  <Check size={14} /> {saving ? 'Saving…' : 'Save Result'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

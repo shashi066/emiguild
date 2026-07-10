@@ -13,6 +13,7 @@ export async function POST(
   }
 
   const { id } = await params;
+  try {
 
   // Get tournament
   const tournament = await prisma.tournament.findUnique({
@@ -41,16 +42,27 @@ export async function POST(
   // Get current player count for seed
   const count = await prisma.tournamentPlayer.count({ where: { tournamentId: id } });
 
+  // Fetch user for phone
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { phone: true }
+  });
+
   const player = await prisma.tournamentPlayer.create({
     data: {
       tournamentId: id,
       userId: session.user.id,
       name: session.user.name || 'Player',
+      phone: user?.phone || null,
       seed: count,
     },
   });
 
   return NextResponse.json({ player }, { status: 201 });
+  } catch (error: any) {
+    console.error("REGISTER ERROR:", error);
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });
+  }
 }
 
 // DELETE /api/tournaments/[id]/register  — logged-in user withdraws

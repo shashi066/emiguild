@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Swords, Check, RotateCcw, X, Shield } from 'lucide-react';
+import { Swords, Check, Shield } from 'lucide-react';
 
 interface Player { id: string; name: string; }
 interface Match {
@@ -47,16 +47,9 @@ function getRoundName(round: number, totalRounds: number): string {
 
 export default function MatchesPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === 'ADMIN';
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [score1, setScore1] = useState('');
-  const [score2, setScore2] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [activeRound, setActiveRound] = useState<number | null>(null);
 
   useEffect(() => { fetchTournament(); }, [id]);
@@ -75,28 +68,6 @@ export default function MatchesPage() {
     }
     setLoading(false);
   }, [id]);
-
-  async function handleSaveResult() {
-    if (!selectedMatch) return;
-    setSaving(true);
-    await fetch(`/api/tournaments/${id}/matches/${selectedMatch.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ score1: parseInt(score1) || 0, score2: parseInt(score2) || 0 }),
-    });
-    setSaving(false);
-    setSelectedMatch(null);
-    fetchTournament();
-  }
-
-  async function handleReset() {
-    if (!selectedMatch) return;
-    setResetting(true);
-    await fetch(`/api/tournaments/${id}/matches/${selectedMatch.id}/reset`, { method: 'POST' });
-    setResetting(false);
-    setSelectedMatch(null);
-    fetchTournament();
-  }
 
   if (loading) return <div style={{ textAlign: 'center', padding: '4rem' }}><div className="tourn-spinner" /></div>;
 
@@ -146,13 +117,11 @@ export default function MatchesPage() {
       <div className="tourn-matches-grid">
         {displayMatches.map((match) => {
           const statusCfg = STATUS_CONFIG[match.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.PENDING;
-          const canClick = isAdmin && !match.isBye && (match.player1Id || match.player2Id);
 
           return (
             <div
               key={match.id}
-              className={`tourn-match-card${canClick ? ' clickable' : ''}${match.isBye ? ' bye' : ''}`}
-              onClick={() => canClick && (setSelectedMatch(match), setScore1(String(match.score1 || '')), setScore2(String(match.score2 || '')))}
+              className={`tourn-match-card${match.isBye ? ' bye' : ''}`}
             >
               <div className="tourn-match-header">
                 <span style={{ fontSize: '0.75rem', fontFamily: 'Orbitron, sans-serif', color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
@@ -184,58 +153,10 @@ export default function MatchesPage() {
                   <Check size={12} /> Winner: {match.winner.name}
                 </div>
               )}
-
-              {canClick && match.status !== 'COMPLETED' && (
-                <div className="tourn-match-cta">Click to enter result</div>
-              )}
             </div>
           );
         })}
       </div>
-
-      {/* Match Modal */}
-      {selectedMatch && (
-        <div className="tourn-modal-overlay" onClick={() => setSelectedMatch(null)}>
-          <div className="tourn-modal" style={{ maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="tourn-modal-header">
-              <h2 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '0.95rem' }}>Match Result</h2>
-              <button onClick={() => setSelectedMatch(null)} className="tourn-modal-close"><X size={18} /></button>
-            </div>
-
-            <div style={{ padding: '1.25rem 0' }}>
-              <div className="match-score-grid">
-                <div className="match-score-player">
-                  <div className="match-score-player-name">{selectedMatch.player1?.name ?? 'TBD'}</div>
-                  <input type="number" value={score1} onChange={(e) => setScore1(e.target.value)} min="0" className="tourn-input match-score-input" placeholder="0" />
-                </div>
-                <div className="match-score-vs">VS</div>
-                <div className="match-score-player">
-                  <div className="match-score-player-name">{selectedMatch.player2?.name ?? 'TBD'}</div>
-                  <input type="number" value={score2} onChange={(e) => setScore2(e.target.value)} min="0" className="tourn-input match-score-input" placeholder="0" />
-                </div>
-              </div>
-            </div>
-
-            <div className="tourn-modal-actions" style={{ justifyContent: 'space-between' }}>
-              {selectedMatch.status === 'COMPLETED' && (
-                <button onClick={handleReset} disabled={resetting} className="btn btn-ghost btn-sm" style={{ color: '#ff4040', borderColor: 'rgba(255,64,64,0.3)' }}>
-                  <RotateCcw size={14} /> {resetting ? 'Resetting…' : 'Reset'}
-                </button>
-              )}
-              <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto' }}>
-                <button onClick={() => setSelectedMatch(null)} className="btn btn-ghost btn-sm">Cancel</button>
-                <button
-                  onClick={handleSaveResult}
-                  disabled={saving || score1 === '' || score2 === '' || parseInt(score1) === parseInt(score2)}
-                  className="btn btn-primary btn-sm"
-                >
-                  <Check size={14} /> {saving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

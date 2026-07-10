@@ -209,6 +209,7 @@ model TournamentPlayer {
   tournamentId String
   userId       String?  // linked to an app user if they self-registered
   name         String
+  phone        String?
   seed         Int      @default(0) // display order / seeding
   createdAt    DateTime @default(now())
 

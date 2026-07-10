@@ -2,9 +2,8 @@
 
 import './tournament.css';
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { Trophy, Plus, Users, Calendar, Zap, ChevronRight, Gamepad2, X, ArrowLeft } from 'lucide-react';
+import { Trophy, Users, Calendar, Zap, ChevronRight, Gamepad2, ArrowLeft } from 'lucide-react';
 import Loading from './loading';
 
 interface Tournament {
@@ -28,16 +27,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 };
 
 export default function TournamentsPage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === 'ADMIN';
-
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({
-    name: '', game: 'FC26', date: '', entryFee: 'Free', prizePool: '', maxPlayers: '16',
-  });
 
   useEffect(() => {
     fetchTournaments();
@@ -49,29 +40,6 @@ export default function TournamentsPage() {
     const data = await res.json();
     setTournaments(data.tournaments || []);
     setLoading(false);
-  }
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setCreating(true);
-    const res = await fetch('/api/tournaments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: form.name,
-        game: form.game,
-        date: form.date,
-        entryFee: form.entryFee || 'Free',
-        prizePool: form.prizePool,
-        maxPlayers: parseInt(form.maxPlayers) || 16,
-      }),
-    });
-    if (res.ok) {
-      setShowCreate(false);
-      setForm({ name: '', game: 'FC26', date: '', entryFee: '', prizePool: '', maxPlayers: '16' });
-      fetchTournaments();
-    }
-    setCreating(false);
   }
 
   return (
@@ -99,17 +67,6 @@ export default function TournamentsPage() {
           <p style={{ color: 'var(--color-text-secondary)', maxWidth: '500px', fontSize: '1rem' }}>
             Compete against the best. Climb the bracket. Claim the crown.
           </p>
-
-          {isAdmin && (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="btn btn-primary"
-              style={{ marginTop: '1.5rem', fontFamily: 'Orbitron, sans-serif', fontSize: '0.8rem', letterSpacing: '0.05em' }}
-            >
-              <Plus size={16} />
-              Create Tournament
-            </button>
-          )}
         </div>
       </div>
 
@@ -121,7 +78,7 @@ export default function TournamentsPage() {
             <Gamepad2 size={48} style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }} />
             <h3 style={{ color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>No Tournaments Yet</h3>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-              {isAdmin ? 'Create your first tournament to get started.' : 'Check back soon for upcoming events.'}
+              Check back soon for upcoming events.
             </p>
           </div>
         ) : (
@@ -175,112 +132,6 @@ export default function TournamentsPage() {
           </div>
         )}
       </div>
-
-      {/* Create Tournament Modal */}
-      {showCreate && (
-        <div className="tourn-modal-overlay" onClick={() => setShowCreate(false)}>
-          <div className="tourn-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="tourn-modal-header">
-              <h2 style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '1.1rem' }}>
-                <Trophy size={18} color="#FFD700" style={{ marginRight: '8px' }} />
-                Create Tournament
-              </h2>
-              <button onClick={() => setShowCreate(false)} className="tourn-modal-close">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreate} className="tourn-form">
-              <div className="tourn-form-group">
-                <label>Tournament Name *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="EmiGuild FC26 Championship"
-                  required
-                  className="tourn-input"
-                />
-              </div>
-
-              <div className="tourn-form-row">
-                <div className="tourn-form-group">
-                  <label>Game</label>
-                  <select
-                    value={form.game}
-                    onChange={(e) => setForm({ ...form, game: e.target.value })}
-                    className="tourn-input"
-                  >
-                    <option value="FC26">EA Sports FC 26</option>
-                    <option value="FIFA 24">FIFA 24</option>
-                    <option value="eFootball">eFootball</option>
-                    <option value="Tekken 8">Tekken 8</option>
-                    <option value="Street Fighter 6">Street Fighter 6</option>
-                    <option value="COD">Call of Duty</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div className="tourn-form-group">
-                  <label>Tournament Date *</label>
-                  <input
-                    type="date"
-                    value={form.date}
-                    onChange={(e) => setForm({ ...form, date: e.target.value })}
-                    required
-                    className="tourn-input"
-                  />
-                </div>
-              </div>
-
-              <div className="tourn-form-row">
-                <div className="tourn-form-group">
-                  <label>Entry Fee</label>
-                  <input
-                    type="text"
-                    value={form.entryFee}
-                    onChange={(e) => setForm({ ...form, entryFee: e.target.value })}
-                    placeholder="Free / ₹100 / ₹50"
-                    className="tourn-input"
-                  />
-                </div>
-                <div className="tourn-form-group">
-                  <label>Winner Reward / Prize Pool</label>
-                  <input
-                    type="text"
-                    value={form.prizePool}
-                    onChange={(e) => setForm({ ...form, prizePool: e.target.value })}
-                    placeholder="₹500 cash / Trophy / Gift voucher"
-                    className="tourn-input"
-                  />
-                </div>
-                <div className="tourn-form-group">
-                  <label>Max Players</label>
-                  <select
-                    value={form.maxPlayers}
-                    onChange={(e) => setForm({ ...form, maxPlayers: e.target.value })}
-                    className="tourn-input"
-                  >
-                    <option value="4">4</option>
-                    <option value="8">8</option>
-                    <option value="16">16</option>
-                    <option value="32">32</option>
-                    <option value="64">64</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="tourn-modal-actions">
-                <button type="button" onClick={() => setShowCreate(false)} className="btn btn-ghost">
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={creating}>
-                  {creating ? 'Creating…' : 'Create Tournament'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

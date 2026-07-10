@@ -12,12 +12,13 @@ export async function PATCH(
   }
 
   const { pid } = await params;
-  const { name, seed } = await req.json();
+  const { name, phone, seed } = await req.json();
 
   const player = await prisma.tournamentPlayer.update({
     where: { id: pid },
     data: {
       ...(name !== undefined && { name: name.trim() }),
+      ...(phone !== undefined && { phone: phone?.trim() || null }),
       ...(seed !== undefined && { seed }),
     },
   });

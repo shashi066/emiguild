@@ -18,7 +18,6 @@ const NAV_TABS = [
   { key: 'overview',  label: 'Overview',  icon: LayoutGrid, path: '' },
   { key: 'players',   label: 'Players',   icon: Users,       path: '/players' },
   { key: 'bracket',   label: 'Knockout',  icon: GitBranch,   path: '/bracket' },
-  { key: 'matches',   label: 'Matches',   icon: Swords,      path: '/matches' },
 ];
 
 const STATUS_COLOR: Record<string, string> = {
