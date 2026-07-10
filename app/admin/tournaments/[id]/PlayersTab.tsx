@@ -24,7 +24,7 @@ export default function PlayersTab({ tournament, players, fetchPlayers }: { tour
 
   const [allUsers, setAllUsers] = useState<UserItem[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     fetch('/api/admin/passes/users')
