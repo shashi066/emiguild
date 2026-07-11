@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import {
   Trophy, Calendar, Users, DollarSign, Zap,
   Lock, Unlock, Play, Check,
@@ -121,28 +122,38 @@ export default function TournamentOverviewPage() {
       )}
 
       {/* User Registration Actions */}
-      {session?.user && tournament.status === 'REGISTRATION_OPEN' && (
+      {tournament.status === 'REGISTRATION_OPEN' && (
         <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-          {tournament.players.some((p) => p.userId === session.user.id) ? (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ color: '#00e676', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                <Check size={16} /> You are registered!
+          {session?.user ? (
+            tournament.players.some((p) => p.userId === session.user.id) ? (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#00e676', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                  <Check size={16} /> You are registered!
+                </div>
+                {!tournament.bracketGenerated && (
+                  <button onClick={handleWithdraw} disabled={registering} className="btn btn-ghost btn-sm" style={{ color: '#ff4040', borderColor: 'rgba(255,64,64,0.3)' }}>
+                    {registering ? 'Processing...' : 'Withdraw'}
+                  </button>
+                )}
               </div>
-              {!tournament.bracketGenerated && (
-                <button onClick={handleWithdraw} disabled={registering} className="btn btn-ghost btn-sm" style={{ color: '#ff4040', borderColor: 'rgba(255,64,64,0.3)' }}>
-                  {registering ? 'Processing...' : 'Withdraw'}
-                </button>
-              )}
-            </div>
+            ) : (
+              <button
+                onClick={handleRegister}
+                disabled={registering || tournament._count.players >= tournament.maxPlayers}
+                className="btn btn-primary"
+                style={{ width: '100%', maxWidth: '300px', fontSize: '1rem', padding: '0.75rem', background: 'linear-gradient(135deg, #6c63ff 0%, #4facfe 100%)' }}
+              >
+                {registering ? 'Registering...' : tournament._count.players >= tournament.maxPlayers ? 'Tournament Full' : 'Register Now'}
+              </button>
+            )
           ) : (
-            <button
-              onClick={handleRegister}
-              disabled={registering || tournament._count.players >= tournament.maxPlayers}
+            <Link
+              href={`/login?callbackUrl=/tournaments/${tournament.id}`}
               className="btn btn-primary"
-              style={{ width: '100%', maxWidth: '300px', fontSize: '1rem', padding: '0.75rem', background: 'linear-gradient(135deg, #6c63ff 0%, #4facfe 100%)' }}
+              style={{ width: '100%', maxWidth: '300px', fontSize: '1rem', padding: '0.75rem', background: 'linear-gradient(135deg, #6c63ff 0%, #4facfe 100%)', textAlign: 'center' }}
             >
-              {registering ? 'Registering...' : tournament._count.players >= tournament.maxPlayers ? 'Tournament Full' : 'Register Now'}
-            </button>
+              {tournament._count.players >= tournament.maxPlayers ? 'Tournament Full' : 'Login to Register'}
+            </Link>
           )}
           {regError && (
             <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', borderRadius: '8px', fontSize: '0.85rem', width: '100%', maxWidth: '300px', textAlign: 'center' }}>

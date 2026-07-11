@@ -1,8 +1,18 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Navbar } from '@/components/layout/Navbar';
 import { SessionProvider } from '@/components/providers/SessionProvider';
 import { auth } from '@/auth';
+import { ServiceWorkerRegistrar } from '@/components/pwa/ServiceWorkerRegistrar';
+import { InstallBanner } from '@/components/pwa/InstallBanner';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0B1220',
+};
 
 export const metadata: Metadata = {
   title: {
@@ -27,20 +37,36 @@ export const metadata: Metadata = {
     'gaming cafe near me',
     'gaming cafe in kothapet'
   ],
+  manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/images/logoImage.png',
-    apple: '/images/logoImage.png',
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/icons/apple-touch-icon.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'EmiGuild',
   },
   openGraph: {
     title: 'EmiGuild Cafe — Book PS5 & Racing Simulator Sessions',
     description: 'Premium gaming cafe with PS5, racing simulators, and high-end gaming stations. Reserve your session online for the ultimate experience!',
     type: 'website',
+    siteName: 'EmiGuild Gaming Cafe',
     images: [
       {
         url: '/images/logoImage.png',
         alt: 'EmiGuild Cafe Logo',
       }
     ]
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'EmiGuild Gaming Cafe — PS5 & Racing Simulator Booking',
+    description: 'Premium gaming cafe with PS5, racing simulators, and high-end gaming stations. Reserve your session online!',
+    images: ['/images/logoImage.png'],
   },
 };
 
@@ -57,6 +83,8 @@ export default async function RootLayout({
         <SessionProvider session={session}>
           <Navbar />
           <main>{children}</main>
+          <InstallBanner />
+          <ServiceWorkerRegistrar />
         </SessionProvider>
       </body>
     </html>
