@@ -5,8 +5,8 @@
    ============================================================ */
 :root {
   /* Colors — Premium Gaming Palette */
-  --color-bg-base: #070B14;
-  --color-bg-surface: #0B1220;
+  --color-bg-base: #030509;
+  --color-bg-surface: #0a0d18;
   --color-bg-elevated: #111827;
   --color-bg-card: #141e2e;
   --color-bg-card-hover: #1a2540;
@@ -38,7 +38,7 @@
   /* Gradients */
   --gradient-primary: linear-gradient(135deg, #3B82F6 0%, #0891B2 100%);
   --gradient-card: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(8, 145, 178, 0.04) 100%);
-  --gradient-hero: linear-gradient(135deg, #070B14 0%, #18244A 50%, #0B1220 100%);
+  --gradient-hero: linear-gradient(135deg, #030509 0%, #0f1629 50%, #050810 100%);
   --gradient-danger: linear-gradient(135deg, #ff2d55 0%, #ff4040 100%);
   --gradient-success: linear-gradient(135deg, #00e676 0%, #00c853 100%);
 
@@ -89,10 +89,10 @@ html {
 body {
   font-family: 'Outfit', system-ui, sans-serif;
   background:
-    /* Gaming circuit pattern (subtle) */
-    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><defs><pattern id="circuit" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse"><path d="M 50 50 L 150 50 M 150 50 L 150 150 M 150 150 L 50 150 M 50 150 L 50 50" stroke="%233B82F6" stroke-width="0.5" opacity="0.06" fill="none"/><circle cx="50" cy="50" r="2" fill="%233B82F6" opacity="0.08"/><circle cx="150" cy="50" r="2" fill="%233B82F6" opacity="0.08"/><circle cx="150" cy="150" r="2" fill="%233B82F6" opacity="0.08"/><circle cx="50" cy="150" r="2" fill="%233B82F6" opacity="0.08"/></pattern></defs><rect width="100%" height="100%" fill="url(%23circuit)"/></svg>'),
+    /* Gaming circuit pattern (very subtle) */
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><defs><pattern id="circuit" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse"><path d="M 50 50 L 150 50 M 150 50 L 150 150 M 150 150 L 50 150 M 50 150 L 50 50" stroke="%233B82F6" stroke-width="0.5" opacity="0.03" fill="none"/><circle cx="50" cy="50" r="2" fill="%233B82F6" opacity="0.04"/><circle cx="150" cy="50" r="2" fill="%233B82F6" opacity="0.04"/><circle cx="150" cy="150" r="2" fill="%233B82F6" opacity="0.04"/><circle cx="50" cy="150" r="2" fill="%233B82F6" opacity="0.04"/></pattern></defs><rect width="100%" height="100%" fill="url(%23circuit)"/></svg>'),
     /* Vignette */
-    radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.4) 100%),
+    radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.6) 100%),
     /* Noise texture (created via SVG) */
     url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" seed="2"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.015"/></svg>'),
     /* Bottom cyan glow */
@@ -3549,16 +3549,116 @@ select.form-input option {
   }
 }
 
-@keyframes shimmer {
-  0% {
-    left: -100%;
-  }
+/* ============================================================
+   PREMIUM STATUS CHIPS & ANIMATIONS
+   ============================================================ */
 
-  20% {
-    left: 200%;
-  }
+/* Status Chips */
+.btn-v2-badge {
+  margin-left: auto;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
 
-  100% {
-    left: 200%;
+/* Shine Effect for Primary Buttons */
+@keyframes sweep-shine {
+  0% { transform: translateX(-150%) skewX(-25deg); opacity: 0; }
+  2% { opacity: 0.15; }
+  8% { transform: translateX(250%) skewX(-25deg); opacity: 0; }
+  100% { transform: translateX(250%) skewX(-25deg); opacity: 0; }
+}
+
+.btn-v2-primary-blue::after,
+.btn-v2-primary-red::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  width: 50%;
+  transform: translateX(-150%) skewX(-25deg);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.btn-v2-primary-blue::after {
+  animation: sweep-shine 10s cubic-bezier(0.22, 1, 0.36, 1) infinite 2s;
+}
+
+.btn-v2-primary-red::after {
+  animation: sweep-shine 12s cubic-bezier(0.22, 1, 0.36, 1) infinite 4s;
+}
+
+/* Animated Border for Secondary Buttons */
+@keyframes border-march {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.btn-v2-secondary::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(90deg, 
+    rgba(255,255,255,0) 0%, 
+    rgba(255,255,255,0) 35%, 
+    rgba(255,255,255,1) 50%, 
+    rgba(255,255,255,0) 65%, 
+    rgba(255,255,255,0) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 1;
+  animation: border-march 3s linear infinite;
+  pointer-events: none;
+  z-index: 5;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 1));
+}
+
+.btn-v2-secondary:hover::after {
+  opacity: 0.8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-v2-primary-blue::after,
+  .btn-v2-primary-red::after,
+  .btn-v2-secondary::after {
+    animation: none;
+    display: none;
   }
+}
+
+/* ============================================================
+   IOS LIQUID GLASS LAYER
+   ============================================================ */
+.btn-v2-glass {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 100%);
+  border-radius: 16px 16px 50% 50% / 16px 16px 8px 8px;
+  pointer-events: none;
+  z-index: 1;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3);
+}
+
+.btn-v2-icon, .btn-v2-label, .btn-v2-badge {
+  z-index: 2;
+  position: relative;
 }

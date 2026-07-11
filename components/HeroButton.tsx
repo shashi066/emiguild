@@ -14,6 +14,7 @@ interface HeroButtonProps {
   variant?: ButtonVariant;
   className?: string;
   id?: string;
+  badge?: string;
 }
 
 export default function HeroButton({
@@ -24,6 +25,7 @@ export default function HeroButton({
   variant = 'ghost',
   className = '',
   id,
+  badge,
 }: HeroButtonProps) {
 
   let variantClass = 'btn-v2-ghost';
@@ -36,20 +38,20 @@ export default function HeroButton({
   const combinedClass = ['btn-v2', variantClass, className].filter(Boolean).join(' ');
 
   const iconElement = <Icon size={22} className="btn-v2-icon" />;
-
-  const button = (
-    <button className={combinedClass} id={id}>
+  const buttonContent = (
+    <>
+      <span className="btn-v2-glass"></span>
       {iconElement}
       <span className="btn-v2-label">{label}</span>
-    </button>
+      {badge && <span className="btn-v2-badge">{badge}</span>}
+      {targetId === 'stations' && <ChevronRight size={22} className="btn-v2-icon" />}
+    </>
   );
 
   if (targetId) {
     return (
       <ScrollToSection targetId={targetId} className={combinedClass}>
-        {iconElement}
-        <span className="btn-v2-label">{label}</span>
-        {targetId === 'stations' && <ChevronRight size={22} className="btn-v2-icon" />}
+        {buttonContent}
       </ScrollToSection>
     );
   }
@@ -57,11 +59,14 @@ export default function HeroButton({
   if (href) {
     return (
       <Link href={href} className={combinedClass} id={id}>
-        {iconElement}
-        <span className="btn-v2-label">{label}</span>
+        {buttonContent}
       </Link>
     );
   }
 
-  return button;
+  return (
+    <button className={combinedClass} id={id}>
+      {buttonContent}
+    </button>
+  );
 }
