@@ -3,19 +3,26 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { encryptPhone } from '@/lib/crypto';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const players = await prisma.tournamentPlayer.findMany({
-    where: { tournamentId: id },
-    orderBy: { seed: 'asc' },
-  });
-  
-  const encryptedPlayers = players.map(p => ({
-    ...p,
-    phone: encryptPhone(p.phone)
-  }));
-  
-  return NextResponse.json({ players: encryptedPlayers });
+  try {
+    const { id } = await params;
+    const players = await prisma.tournamentPlayer.findMany({
+      where: { tournamentId: id },
+      orderBy: { seed: 'asc' },
+    });
+    
+    const encryptedPlayers = players.map(p => ({
+      ...p,
+      phone: encryptPhone(p.phone)
+    }));
+    
+    return NextResponse.json({ players: encryptedPlayers });
+  } catch (error: any) {
+    console.error('API Error:', error);
+    return NextResponse.json({ error: String(error), stack: error?.stack }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

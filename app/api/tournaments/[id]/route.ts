@@ -2,29 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const tournament = await prisma.tournament.findUnique({
-    where: { id },
-    include: {
-      players: { orderBy: { seed: 'asc' } },
-      matches: {
-        include: {
-          player1: true,
-          player2: true,
-          winner: true,
+  try {
+    const { id } = await params;
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+      include: {
+        players: { orderBy: { seed: 'asc' } },
+        matches: {
+          include: {
+            player1: true,
+            player2: true,
+            winner: true,
+          },
+          orderBy: [{ round: 'asc' }, { matchIndex: 'asc' }],
         },
-        orderBy: [{ round: 'asc' }, { matchIndex: 'asc' }],
+        _count: { select: { players: true } },
       },
-      _count: { select: { players: true } },
-    },
-  });
+    });
 
-  if (!tournament) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!tournament) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ tournament });
+  } catch (error: any) {
+    console.error('API Error:', error);
+    return NextResponse.json({ error: String(error), stack: error?.stack }, { status: 500 });
   }
-
-  return NextResponse.json({ tournament });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const tournaments = await prisma.tournament.findMany({
     include: {
