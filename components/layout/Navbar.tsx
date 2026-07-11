@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -17,6 +17,56 @@ export function Navbar() {
   const isAdmin = session?.user?.role === 'ADMIN';
   const [mobileOpen, setMobileOpen] = useState(false);
   const [brandColorIndex, setBrandColorIndex] = useState(0);
+  const navRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    if (navRef.current) {
+      const activeElements = navRef.current.querySelectorAll('.active');
+      // Target the active element in the true middle set (index 2 out of 5)
+      const activeElement = (activeElements.length >= 5 ? activeElements[2] : activeElements[0]) as HTMLElement;
+      if (activeElement) {
+        const container = navRef.current;
+        const targetScrollLeft = activeElement.offsetLeft - (container.clientWidth / 2) + (activeElement.clientWidth / 2);
+        // Use instant scroll (auto) on load to prevent conflicting with the infinite scroll boundary logic
+        container.scrollTo({ left: targetScrollLeft, behavior: 'auto' });
+      }
+    }
+  }, [pathname]);
+
+  // Map vertical wheel scroll to horizontal scroll
+  // Map vertical wheel scroll to horizontal scroll + Infinite scroll logic
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        nav.scrollLeft += e.deltaY;
+      }
+    };
+
+    const handleScroll = () => {
+      // The container has 5 identical sets of links.
+      const setWidth = nav.scrollWidth / 5;
+
+      // Keep scroll position safely around the middle set (setWidth * 2)
+      // This ensures we never hit a physical wall, regardless of container width.
+      if (nav.scrollLeft <= setWidth * 1.5) {
+        nav.scrollLeft += setWidth;
+      } else if (nav.scrollLeft >= setWidth * 2.5) {
+        nav.scrollLeft -= setWidth;
+      }
+    };
+
+    nav.addEventListener('wheel', handleWheel, { passive: false });
+    nav.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      nav.removeEventListener('wheel', handleWheel);
+      nav.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   const isActive = (path: string) =>
     path === '/'
@@ -25,6 +75,7 @@ export function Navbar() {
 
   const navLinks = [
     { href: '/', label: 'Home', icon: <Home size={15} /> },
+    { href: '/tournaments', label: 'Tournaments', icon: <Trophy size={15} /> },
     { href: '/book', label: 'Book a Slot', icon: <Calendar size={15} /> },
     { href: '/passes', label: 'Passes', icon: <Award size={15} /> },
     { href: '/daily-spin', label: 'Guild Spin', icon: <RotateCw size={15} /> },
@@ -47,7 +98,7 @@ export function Navbar() {
           <div className="navbar-left">
             {/* Logo */}
             <Link href="/" className="navbar-logo" onClick={closeMobile}>
-              <Image src="/images/logoImage.png" alt="GameZone" height={36} width={36} style={{ objectFit: 'contain' }} />
+              <Image src="/images/logoImage.png" alt="GameZone" height={36} width={36} style={{ objectFit: 'contain', flexShrink: 0, minWidth: 36 }} />
             </Link>
 
             {/* Desktop accent brand text */}
@@ -61,10 +112,10 @@ export function Navbar() {
             </div>
           </div>
 
-          {/* Desktop nav links */}
-          <ul className="navbar-nav">
-            {navLinks.map((link) => (
-              <li key={link.href}>
+          {/* Desktop nav links (Rendered 5x for infinite scroll runway) */}
+          <ul className="navbar-nav" ref={navRef}>
+            {[...navLinks, ...navLinks, ...navLinks, ...navLinks, ...navLinks].map((link, index) => (
+              <li key={`${link.href}-${index}`}>
                 <Link
                   href={link.href}
                   className={`navbar-link ${isActive(link.href) ? 'active' : ''}`}
@@ -118,10 +169,6 @@ export function Navbar() {
             EMIGUILD
           </div>
 
-          {/* Mobile Floating Theme Toggle (outside drawer) */}
-          <div className="mobile-floating-toggle">
-            <ThemeToggle />
-          </div>
 
           {/* Hamburger button (mobile only) */}
           <button
@@ -134,6 +181,12 @@ export function Navbar() {
           </button>
         </div>
       </nav>
+
+      {/* Mobile Floating Theme Toggle (escaped from navbar-inner clipping) */}
+      <div className="mobile-floating-toggle">
+        <ThemeToggle />
+      </div>
+
 
       {/* Mobile drawer */}
       {mobileOpen && (

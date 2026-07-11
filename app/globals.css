@@ -246,6 +246,10 @@ h6 {
     backdrop-filter 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.navbar-inner::-webkit-scrollbar {
+  display: none;
+}
+
 /* Noise texture overlay — felt, not seen */
 .navbar-inner::before {
   content: '';
@@ -284,6 +288,7 @@ h6 {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-shrink: 0;
   font-family: 'Orbitron', sans-serif;
   font-weight: 800;
   font-size: 1.25rem;
@@ -317,6 +322,17 @@ h6 {
   list-style: none;
   position: relative;
   z-index: 2;
+  flex-shrink: 0;
+  max-width: 480px;
+  /* Exactly fits about 4 items on desktop */
+  overflow-x: auto;
+  white-space: nowrap;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.navbar-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .navbar-link {
@@ -335,6 +351,7 @@ h6 {
     box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
   text-decoration: none;
   position: relative;
+  flex-shrink: 0;
 }
 
 .navbar-link:hover {
@@ -366,6 +383,7 @@ h6 {
   z-index: 2;
   flex: 1;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 /* ============================================================
@@ -896,9 +914,12 @@ input.form-input[type="time"]:focus {
   display: flex;
   align-items: center;
   gap: var(--space-2xl);
-  margin-top: var(--space-xl); /* Reduced from 3xl to move it up */
-  padding-top: var(--space-lg); /* Reduced from 2xl */
-  margin-bottom: var(--space-2xl); /* Add space at the bottom so it doesn't touch the line */
+  margin-top: var(--space-xl);
+  /* Reduced from 3xl to move it up */
+  padding-top: var(--space-lg);
+  /* Reduced from 2xl */
+  margin-bottom: var(--space-2xl);
+  /* Add space at the bottom so it doesn't touch the line */
   border-top: 1px solid rgba(59, 130, 246, 0.06);
 }
 
@@ -3938,14 +3959,12 @@ select.form-input option {
   font-weight: 800;
   font-size: 1.15rem;
   letter-spacing: 0.15em;
-  background: linear-gradient(
-    90deg,
-    rgba(96, 165, 250, 0.6) 0%,
-    #ffffff 30%,
-    #ffffff 50%,
-    rgba(96, 165, 250, 0.6) 70%,
-    rgba(96, 165, 250, 0.6) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(96, 165, 250, 0.6) 0%,
+      #ffffff 30%,
+      #ffffff 50%,
+      rgba(96, 165, 250, 0.6) 70%,
+      rgba(96, 165, 250, 0.6) 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -3961,10 +3980,12 @@ select.form-input option {
   background-image: linear-gradient(90deg, rgba(167, 139, 250, 0.6) 0%, #ffffff 30%, #ffffff 50%, rgba(167, 139, 250, 0.6) 70%, rgba(167, 139, 250, 0.6) 100%);
   filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.6));
 }
+
 .navbar-brand-text[data-color-index="2"] {
   background-image: linear-gradient(90deg, rgba(234, 179, 8, 0.6) 0%, #ffffff 30%, #ffffff 50%, rgba(234, 179, 8, 0.6) 70%, rgba(234, 179, 8, 0.6) 100%);
   filter: drop-shadow(0 0 8px rgba(234, 179, 8, 0.6));
 }
+
 .navbar-brand-text[data-color-index="3"] {
   background-image: linear-gradient(90deg, rgba(239, 68, 68, 0.6) 0%, #ffffff 30%, #ffffff 50%, rgba(239, 68, 68, 0.6) 70%, rgba(239, 68, 68, 0.6) 100%);
   filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
@@ -3983,13 +4004,16 @@ select.form-input option {
   display: flex;
   align-items: center;
   flex: 1;
-  gap: var(--space-xs); /* Brings EMIGUILD closer to logo */
+  gap: var(--space-md);
+  /* Increased space between logo and EMIGUILD */
+  flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
   .navbar-desktop-brand {
     display: none;
   }
+
   .navbar-mobile-brand {
     display: flex;
     align-items: center;
@@ -4072,14 +4096,14 @@ select.form-input option {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
   position: relative;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.4);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
   transition: background 0.3s ease;
 }
 
 .theme-toggle.is-light .theme-toggle-track {
   background: #ffffff;
   border-color: #ffffff;
-  box-shadow: 0 0 12px rgba(255,255,255,0.8);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
 }
 
 .theme-toggle-thumb {
@@ -4093,7 +4117,7 @@ select.form-input option {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.2);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.2);
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), background 0.4s ease;
   color: #94a3b8;
 }
@@ -4142,11 +4166,13 @@ select.form-input option {
   .flashbang-text {
     padding: 0 var(--space-xl);
   }
+
   .flashbang-text h2 {
     font-size: 2rem;
     line-height: 1.2;
     margin-bottom: var(--space-md);
   }
+
   .flashbang-text p {
     font-size: 1.1rem;
     line-height: 1.4;
@@ -4154,19 +4180,52 @@ select.form-input option {
 }
 
 @keyframes flashbangWhite {
-  0% { opacity: 0; }
-  1% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { opacity: 0; }
+  0% {
+    opacity: 0;
+  }
+
+  1% {
+    opacity: 1;
+  }
+
+  85% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
 }
 
 @keyframes flashbangTextFade {
-  0% { opacity: 0; transform: scale(0.95); }
-  15% { opacity: 0; transform: scale(0.95); }
-  25% { opacity: 1; transform: scale(1); }
-  75% { opacity: 1; transform: scale(1); }
-  85% { opacity: 0; transform: scale(1.05); }
-  100% { opacity: 0; }
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  15% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  25% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  75% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  85% {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+
+  100% {
+    opacity: 0;
+  }
 }
 
 /* ============================================================
@@ -4231,7 +4290,8 @@ select.form-input option {
 }
 
 [data-theme='light'] .navbar-inner::after {
-  display: none; /* Hide top reflection line on light mode */
+  display: none;
+  /* Hide top reflection line on light mode */
 }
 
 [data-theme='light'] .navbar-logo {
@@ -4262,7 +4322,7 @@ select.form-input option {
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
 }
 
-[data-theme='light'] .hero-stats > div {
+[data-theme='light'] .hero-stats>div {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.5) 100%);
   border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow:
@@ -4296,7 +4356,7 @@ select.form-input option {
 [data-theme='light'] .card {
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border-color: rgba(15, 23, 42, 0.08);
-  box-shadow: 
+  box-shadow:
     0 12px 24px rgba(15, 23, 42, 0.03),
     inset 0 1px 2px rgba(255, 255, 255, 1);
 }
@@ -4304,7 +4364,7 @@ select.form-input option {
 [data-theme='light'] .card-hover:hover {
   background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
   border-color: rgba(59, 130, 246, 0.3);
-  box-shadow: 
+  box-shadow:
     0 20px 40px rgba(59, 130, 246, 0.1),
     0 8px 16px rgba(15, 23, 42, 0.04),
     inset 0 1px 2px rgba(255, 255, 255, 1);
@@ -4313,7 +4373,7 @@ select.form-input option {
 [data-theme='light'] .card-glass {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.8) 100%);
   border-color: rgba(15, 23, 42, 0.08);
-  box-shadow: 
+  box-shadow:
     0 24px 48px rgba(15, 23, 42, 0.05),
     inset 0 1px 2px rgba(255, 255, 255, 1);
 }
@@ -4322,7 +4382,7 @@ select.form-input option {
 [data-theme='light'] .station-card {
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border-color: rgba(15, 23, 42, 0.08);
-  box-shadow: 
+  box-shadow:
     0 12px 24px rgba(15, 23, 42, 0.03),
     inset 0 1px 2px rgba(255, 255, 255, 1);
 }
@@ -4330,7 +4390,7 @@ select.form-input option {
 [data-theme='light'] .station-card:hover {
   background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
   border-color: rgba(59, 130, 246, 0.3);
-  box-shadow: 
+  box-shadow:
     0 20px 40px rgba(59, 130, 246, 0.1),
     inset 0 1px 2px rgba(255, 255, 255, 1);
 }
@@ -4360,7 +4420,7 @@ select.form-input option {
   background: rgba(255, 255, 255, 0.8);
   border-color: rgba(15, 23, 42, 0.1);
   color: #334155;
-  box-shadow: 
+  box-shadow:
     0 4px 12px rgba(15, 23, 42, 0.04),
     inset 0 1px 2px rgba(255, 255, 255, 1);
 }
@@ -4370,7 +4430,7 @@ select.form-input option {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.2);
   color: #0f172a;
-  box-shadow: 
+  box-shadow:
     0 8px 16px rgba(15, 23, 42, 0.06),
     inset 0 1px 2px rgba(255, 255, 255, 1);
 }
@@ -4385,6 +4445,7 @@ select.form-input option {
   border-color: rgba(15, 23, 42, 0.1);
   color: #0f172a;
 }
+
 [data-theme='light'] .btn-secondary:hover {
   background: #f1f5f9;
 }
@@ -4395,6 +4456,7 @@ select.form-input option {
   border-color: rgba(15, 23, 42, 0.15);
   color: #0f172a;
 }
+
 [data-theme='light'] .form-input:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
@@ -4432,7 +4494,7 @@ select.form-input option {
 [data-theme='light'] .mobile-nav-link.active {
   color: #ffffff;
   background: linear-gradient(180deg, #3B82F6 0%, #2563EB 100%);
-  box-shadow: 
+  box-shadow:
     inset 0 1px 1px rgba(255, 255, 255, 0.3),
     0 4px 12px rgba(59, 130, 246, 0.3);
 }
@@ -4459,14 +4521,12 @@ select.form-input option {
 }
 
 [data-theme='light'] .navbar-brand-text {
-  background: linear-gradient(
-    90deg,
-    #1d4ed8 0%,
-    #0284c7 30%,
-    #0284c7 50%,
-    #1d4ed8 70%,
-    #1d4ed8 100%
-  );
+  background: linear-gradient(90deg,
+      #1d4ed8 0%,
+      #0284c7 30%,
+      #0284c7 50%,
+      #1d4ed8 70%,
+      #1d4ed8 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -4477,10 +4537,12 @@ select.form-input option {
   background-image: linear-gradient(90deg, #6d28d9 0%, #a855f7 30%, #a855f7 50%, #6d28d9 70%, #6d28d9 100%);
   filter: drop-shadow(0 0 6px rgba(109, 40, 217, 0.25));
 }
+
 [data-theme='light'] .navbar-brand-text[data-color-index="2"] {
   background-image: linear-gradient(90deg, #b45309 0%, #d97706 30%, #d97706 50%, #b45309 70%, #b45309 100%);
   filter: drop-shadow(0 0 6px rgba(180, 83, 9, 0.25));
 }
+
 [data-theme='light'] .navbar-brand-text[data-color-index="3"] {
   background-image: linear-gradient(90deg, #b91c1c 0%, #ef4444 30%, #ef4444 50%, #b91c1c 70%, #b91c1c 100%);
   filter: drop-shadow(0 0 6px rgba(185, 28, 28, 0.25));
@@ -4490,7 +4552,8 @@ select.form-input option {
    MOBILE FLOATING TOGGLE
    ============================================================ */
 .mobile-floating-toggle {
-  display: none; /* hidden on desktop, handled by .navbar-actions */
+  display: none;
+  /* hidden on desktop, handled by .navbar-actions */
 }
 
 @media (max-width: 768px) {
@@ -4506,4 +4569,3 @@ select.form-input option {
     padding: 2px;
   }
 }
-
