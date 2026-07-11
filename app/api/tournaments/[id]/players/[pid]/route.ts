@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { encryptPhone } from '@/lib/crypto';
 
 export async function PATCH(
   req: NextRequest,
@@ -23,7 +24,7 @@ export async function PATCH(
     },
   });
 
-  return NextResponse.json({ player });
+  return NextResponse.json({ player: { ...player, phone: encryptPhone(player.phone) } });
 }
 
 export async function DELETE(

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { encryptPhone } from '@/lib/crypto';
 
 // GET /api/admin/passes/users — lightweight list of all users for client-side search
 export async function GET() {
@@ -15,7 +16,8 @@ export async function GET() {
       select: { id: true, name: true, email: true, phone: true },
       orderBy: { name: 'asc' },
     });
-    return NextResponse.json({ users });
+    const encryptedUsers = users.map(u => ({ ...u, phone: encryptPhone(u.phone) }));
+    return NextResponse.json({ users: encryptedUsers });
   } catch (err) {
     console.error('[/api/admin/passes/users] DB error:', err);
     return NextResponse.json({ users: [] });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { encryptPhone } from '@/lib/crypto';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -8,7 +9,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: { tournamentId: id },
     orderBy: { seed: 'asc' },
   });
-  return NextResponse.json({ players });
+  
+  const encryptedPlayers = players.map(p => ({
+    ...p,
+    phone: encryptPhone(p.phone)
+  }));
+  
+  return NextResponse.json({ players: encryptedPlayers });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -42,5 +49,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
-  return NextResponse.json({ player }, { status: 201 });
+  return NextResponse.json({ player: { ...player, phone: encryptPhone(player.phone) } }, { status: 201 });
 }

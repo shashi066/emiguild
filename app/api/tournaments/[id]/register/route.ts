@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '../../../../../lib/prisma';
+import { encryptPhone } from '@/lib/crypto';
 
 // POST /api/tournaments/[id]/register  — logged-in user self-registers
 export async function POST(
@@ -58,7 +59,7 @@ export async function POST(
     },
   });
 
-  return NextResponse.json({ player }, { status: 201 });
+  return NextResponse.json({ player: { ...player, phone: encryptPhone(player.phone) } }, { status: 201 });
   } catch (error: any) {
     console.error("REGISTER ERROR:", error);
     return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });

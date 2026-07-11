@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Shuffle, Trash2, Edit3, X, Check, Search, User } from 'lucide-react';
+import { decryptPhone } from '@/lib/crypto';
 
 interface Player {
   id: string;
@@ -29,7 +30,7 @@ export default function PlayersTab({ tournament, players, fetchPlayers }: { tour
   useEffect(() => {
     fetch('/api/admin/passes/users')
       .then((r) => r.json())
-      .then((d) => setAllUsers(d.users ?? []))
+      .then((d) => setAllUsers((d.users ?? []).map((u: any) => ({ ...u, phone: decryptPhone(u.phone) }))))
       .catch(() => setAllUsers([]));
   }, []);
 

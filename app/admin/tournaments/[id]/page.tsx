@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Settings, Users, GitMerge } from 'lucide-react';
 import '@/app/tournaments/tournament.css';
+import { decryptPhone } from '@/lib/crypto';
 
 import OverviewTab from './OverviewTab';
 import PlayersTab from './PlayersTab';
@@ -30,7 +31,7 @@ export default function AdminTournamentDashboard() {
   const fetchPlayers = async () => {
     const res = await fetch(`/api/tournaments/${id}/players`);
     const data = await res.json();
-    setPlayers(data.players || []);
+    setPlayers((data.players || []).map((p: any) => ({ ...p, phone: decryptPhone(p.phone) })));
   };
 
   const fetchMatches = async () => {

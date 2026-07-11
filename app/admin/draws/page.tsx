@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { decryptPhone } from '@/lib/crypto'
 
 type DrawStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED'
 
@@ -67,7 +68,10 @@ export default function AdminDrawsPage() {
       const res = await fetch('/api/admin/draws')
       if (res.ok) {
         const data = await res.json()
-        setDraws(data.draws ?? [])
+        setDraws((data.draws ?? []).map((d: any) => ({
+          ...d,
+          winner: d.winner ? { ...d.winner, phone: decryptPhone(d.winner.phone) } : null
+        })))
       }
     } finally {
       setLoading(false)

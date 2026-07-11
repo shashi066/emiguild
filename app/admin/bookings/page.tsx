@@ -10,6 +10,7 @@ import {
   formatCurrency, formatDate, formatTime,
   getTimeSlotsForDate, CLOSING_HOUR, getTodayString, isSlotAvailable,
 } from '@/lib/utils';
+import { decryptPhone } from '@/lib/crypto';
 
 type Station = { id: string; name: string; hourlyRate: number };
 
@@ -125,7 +126,7 @@ function EditModal({
     setLoading(true);
     try {
       const res = await fetch(`/api/bookings/${booking.id}`, {
-        method:  'PUT',
+        method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           date, stationId, startTime: startTimeValid ? startTime : availableSlots[0],
@@ -134,7 +135,8 @@ function EditModal({
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Failed to update.'); return; }
-      onSaved(data.booking);
+      const updatedBooking = { ...data.booking, customerPhone: decryptPhone(data.booking.customerPhone) };
+      onSaved(updatedBooking);
     } catch {
       setError('Something went wrong.');
     } finally {
@@ -378,7 +380,7 @@ export default function AdminBookingsPage() {
       if (typeFilter)   params.set('bookingType', typeFilter);
       const res = await fetch(`/api/bookings?${params}`);
       const data = await res.json();
-      setBookings(data.bookings ?? []);
+      setBookings((data.bookings ?? []).map((b: any) => ({ ...b, customerPhone: decryptPhone(b.customerPhone) })));
       setTotal(data.total ?? 0);
     } catch {
       setError('Failed to load bookings.');

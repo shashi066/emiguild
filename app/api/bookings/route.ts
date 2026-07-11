@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { bookingSchema } from '@/lib/validations';
 import { addHours } from '@/lib/utils';
 import { notifyAdminNewBooking } from '@/lib/notify';
+import { encryptPhone } from '@/lib/crypto';
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -53,7 +54,12 @@ export async function GET(req: NextRequest) {
     prisma.booking.count({ where }),
   ]);
 
-  return NextResponse.json({ bookings, total, page, limit });
+  const encryptedBookings = bookings.map(b => ({
+    ...b,
+    customerPhone: encryptPhone(b.customerPhone)
+  }));
+
+  return NextResponse.json({ bookings: encryptedBookings, total, page, limit });
 }
 
 export async function POST(req: NextRequest) {
@@ -220,7 +226,7 @@ export async function POST(req: NextRequest) {
       notes:            booking.notes,
     });
 
-    return NextResponse.json({ booking }, { status: 201 });
+    return NextResponse.json({ booking: { ...booking, customerPhone: encryptPhone(booking.customerPhone) } }, { status: 201 });
   } catch (error) {
     console.error('Booking error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
