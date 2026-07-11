@@ -1047,3 +1047,124 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   CHAMPION BANNER TEXT CLASSES
+   ============================================================ */
+.tourn-champion-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  color: #FFD700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.tourn-champion-name {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #FFD700;
+  text-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+}
+
+.tourn-champion-runner-up {
+  color: rgba(255, 215, 0, 0.6);
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+
+/* ============================================================
+   PAGE HEADER TITLES
+   ============================================================ */
+.tourn-layout-title {
+  color: #fff;
+}
+
+.tourn-page-eyebrow {
+  color: #6c63ff;
+}
+
+.tourn-page-title {
+  background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ============================================================
+   LIGHT MODE OVERRIDES
+   ============================================================ */
+[data-theme='light'] .tourn-card-name,
+[data-theme='light'] .tourn-stat-value,
+[data-theme='light'] .tourn-stat-val,
+[data-theme='light'] .tourn-layout-title {
+  color: #0f172a;
+}
+
+[data-theme='light'] .tourn-page-eyebrow {
+  color: #4f46e5;
+}
+
+[data-theme='light'] .tourn-page-title {
+  background: linear-gradient(135deg, #1e293b 0%, #6d28d9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme='light'] .tourn-champion-banner {
+  background: linear-gradient(270deg, rgba(217, 119, 6, 0.1), rgba(245, 158, 11, 0.05), rgba(217, 119, 6, 0.1));
+  border-color: rgba(217, 119, 6, 0.3);
+}
+
+[data-theme='light'] .tourn-champion-glow {
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(217, 119, 6, 0.15), transparent 70%);
+}
+
+[data-theme='light'] .tourn-trophy-icon {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.15), rgba(245, 158, 11, 0.08));
+  border-color: rgba(217, 119, 6, 0.3);
+  box-shadow: 0 0 20px rgba(217, 119, 6, 0.15);
+}
+
+[data-theme='light'] .tourn-champion-title,
+[data-theme='light'] .tourn-champion-name,
+[data-theme='light'] .bracket-champion-name,
+[data-theme='light'] .bracket-champion-label,
+[data-theme='light'] .bracket-final-badge {
+  color: #b45309;
+  text-shadow: none;
+}
+
+[data-theme='light'] .tourn-champion-runner-up,
+[data-theme='light'] .bracket-winner-label {
+  color: #d97706;
+}
+
+[data-theme='light'] .tourn-champion-modal {
+  background: #ffffff;
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  box-shadow: 0 0 40px rgba(217, 119, 6, 0.15);
+}
+
+[data-theme='light'] .bracket-champion-card {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.1), rgba(245, 158, 11, 0.05));
+  border-color: rgba(217, 119, 6, 0.3);
+  box-shadow: 0 0 30px rgba(217, 119, 6, 0.15);
+}
+
+[data-theme='light'] .bracket-match-card.final-match {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.06), #ffffff);
+  border-color: rgba(217, 119, 6, 0.35);
+}
+
+[data-theme='light'] .bracket-final-badge {
+  background: rgba(217, 119, 6, 0.08);
+  border-bottom: 1px solid rgba(217, 119, 6, 0.15);
+}
+
+[data-theme='light'] .tourn-match-score,
+[data-theme='light'] .bracket-score {
+  color: #0f172a;
+}

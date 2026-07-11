@@ -108,13 +108,15 @@ export default function BracketPage() {
               <X size={18} />
             </button>
             <div className="tourn-champion-trophy-anim">🏆</div>
-            <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '0.75rem', color: '#FFD700', letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+            <div className="tourn-champion-title" style={{ letterSpacing: '0.25em', marginBottom: '0.75rem' }}>
               Tournament Champion
             </div>
-            <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#FFD700', textShadow: '0 0 40px rgba(255,215,0,0.6)', marginBottom: '0.5rem' }}>
+            <div className="tourn-champion-name" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>
               {champion.name}
             </div>
-            <div style={{ color: 'rgba(255,215,0,0.6)', fontSize: '0.9rem' }}>🎉 Congratulations!</div>
+            <div className="tourn-champion-runner-up" style={{ fontSize: '0.9rem' }}>
+              🎉 Congratulations!
+            </div>
           </div>
         </div>
       )}
@@ -221,13 +223,13 @@ export default function BracketPage() {
           {/* Champion display at the end */}
           {tournament.status === 'FINISHED' && champion && (
             <div className="bracket-round">
-              <div className="bracket-round-label" style={{ color: '#FFD700' }}>Champion</div>
+              <div className="bracket-round-label bracket-champion-label">Champion</div>
               <div className="bracket-matches" style={{ justifyContent: 'center' }}>
                 <div className="bracket-match-wrapper" style={{ height: 120 }}>
                   <div className="bracket-champion-card">
                     <div style={{ fontSize: '1.5rem' }}>🏆</div>
                     <div className="bracket-champion-name">{champion.name}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,215,0,0.6)', fontFamily: 'Orbitron, sans-serif', letterSpacing: '0.1em' }}>WINNER</div>
+                    <div className="bracket-winner-label">WINNER</div>
                   </div>
                 </div>
               </div>

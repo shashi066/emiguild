@@ -7,14 +7,16 @@ import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import {
   Calendar, BookOpen, User, LogOut,
-  LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw, Gift,
+  LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw, Gift, Home, Trophy
 } from 'lucide-react';
+import ThemeToggle from '../ThemeToggle';
 
 export function Navbar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [brandColorIndex, setBrandColorIndex] = useState(0);
 
   const isActive = (path: string) =>
     path === '/'
@@ -22,25 +24,42 @@ export function Navbar() {
       : pathname === path || pathname.startsWith(path + '/');
 
   const navLinks = [
-    { href: '/',           label: 'Home',        icon: null },
-    { href: '/book',       label: 'Book a Slot', icon: <Calendar size={15} /> },
-    { href: '/passes',     label: 'Passes',      icon: <Award size={15} /> },
-    { href: '/daily-spin', label: 'Guild Spin',   icon: <RotateCw size={15} /> },
-    { href: '/draws',      label: '🎁 Guild Drop', icon: null },
+    { href: '/', label: 'Home', icon: <Home size={15} /> },
+    { href: '/book', label: 'Book a Slot', icon: <Calendar size={15} /> },
+    { href: '/passes', label: 'Passes', icon: <Award size={15} /> },
+    { href: '/daily-spin', label: 'Guild Spin', icon: <RotateCw size={15} /> },
+    { href: '/draws', label: '🎁 Guild Drop', icon: null },
     ...(session ? [{ href: '/my-bookings', label: 'My Bookings', icon: <BookOpen size={15} /> }] : []),
-    ...(isAdmin  ? [{ href: '/admin',      label: 'Admin',       icon: <LayoutDashboard size={15} /> }] : []),
+    ...(isAdmin ? [{ href: '/admin', label: 'Admin', icon: <LayoutDashboard size={15} /> }] : []),
   ];
 
   const closeMobile = () => setMobileOpen(false);
+
+  const handleBrandClick = () => {
+    setBrandColorIndex((prev) => (prev + 1) % 4);
+  };
 
   return (
     <>
       <nav className="navbar">
         <div className="container navbar-inner">
-          {/* Logo */}
-          <Link href="/" className="navbar-logo" onClick={closeMobile}>
-            <Image src="/images/logoImage.png" alt="GameZone" height={60} width={60} style={{ objectFit: 'contain' }} />
-          </Link>
+          {/* Left Group: Logo + Desktop Brand */}
+          <div className="navbar-left">
+            {/* Logo */}
+            <Link href="/" className="navbar-logo" onClick={closeMobile}>
+              <Image src="/images/logoImage.png" alt="GameZone" height={36} width={36} style={{ objectFit: 'contain' }} />
+            </Link>
+
+            {/* Desktop accent brand text */}
+            <div
+              className="navbar-brand-text navbar-desktop-brand"
+              data-color-index={brandColorIndex}
+              onClick={handleBrandClick}
+              aria-hidden="true"
+            >
+              EMIGUILD
+            </div>
+          </div>
 
           {/* Desktop nav links */}
           <ul className="navbar-nav">
@@ -86,6 +105,22 @@ export function Navbar() {
                 </Link>
               </>
             )}
+            <ThemeToggle />
+          </div>
+
+          {/* Mobile accent brand text */}
+          <div
+            className="navbar-brand-text navbar-mobile-brand"
+            data-color-index={brandColorIndex}
+            onClick={handleBrandClick}
+            aria-hidden="true"
+          >
+            EMIGUILD
+          </div>
+
+          {/* Mobile Floating Theme Toggle (outside drawer) */}
+          <div className="mobile-floating-toggle">
+            <ThemeToggle />
           </div>
 
           {/* Hamburger button (mobile only) */}

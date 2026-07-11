@@ -56,10 +56,10 @@ export default function TournamentsPage() {
               <Trophy size={32} color="#FFD700" />
             </div>
             <div>
-              <div style={{ fontSize: '0.8rem', fontFamily: 'Orbitron, sans-serif', color: '#6c63ff', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: '4px' }}>
+              <div className="tourn-page-eyebrow" style={{ fontSize: '0.8rem', fontFamily: 'Orbitron, sans-serif', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: '4px' }}>
                 EmiGuild Esports
               </div>
-              <h1 style={{ fontSize: 'clamp(1.8rem, 4vw, 3rem)', fontWeight: 800, fontFamily: 'Orbitron, sans-serif', background: 'linear-gradient(135deg, #fff 0%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              <h1 className="tourn-page-title" style={{ fontSize: 'clamp(1.8rem, 4vw, 3rem)', fontWeight: 800, fontFamily: 'Orbitron, sans-serif' }}>
                 Tournaments
               </h1>
             </div>

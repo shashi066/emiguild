@@ -103,13 +103,13 @@ export default function TournamentOverviewPage() {
           <div className="tourn-champion-glow" />
           <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
             <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🏆</div>
-            <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '0.75rem', color: '#FFD700', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+            <div className="tourn-champion-title">
               Tournament Champion
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: '#FFD700', textShadow: '0 0 30px rgba(255,215,0,0.5)' }}>
+            <div className="tourn-champion-name">
               {champion.name}
             </div>
-            <div style={{ color: 'rgba(255,215,0,0.6)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+            <div className="tourn-champion-runner-up">
               🥈 Runner-up: {tournament.players.find((p) => {
                 const finalMatch = tournament.matches.find((m) => m.round === Math.max(...tournament.matches.map((x) => x.round)));
                 return finalMatch && p.id !== champion.id && (finalMatch.winnerId === champion.id) &&

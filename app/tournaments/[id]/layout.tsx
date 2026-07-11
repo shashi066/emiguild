@@ -66,7 +66,7 @@ export default function TournamentLayout({ children }: { children: React.ReactNo
                   <Trophy size={22} color="#6c63ff" />
                 </div>
                 <div>
-                  <h1 style={{ fontSize: 'clamp(1.1rem, 3vw, 1.6rem)', fontWeight: 800, fontFamily: 'Orbitron, sans-serif', color: '#fff', lineHeight: 1.2 }}>
+                  <h1 className="tourn-layout-title" style={{ fontSize: 'clamp(1.1rem, 3vw, 1.6rem)', fontWeight: 800, fontFamily: 'Orbitron, sans-serif', lineHeight: 1.2 }}>
                     {tournament.name}
                   </h1>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>

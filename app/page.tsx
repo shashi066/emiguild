@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import ScrollToSection from '@/components/ScrollToSection';
 import HeroActions from '@/components/HeroActions';
+import HeroInteractive from '@/components/HeroInteractive';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { formatCurrency } from '@/lib/utils';
@@ -184,27 +185,31 @@ export default async function HomePage() {
         <div className="hero-orb hero-orb-1" />
         <div className="hero-orb hero-orb-2" />
         <div className="hero-signature" />
+        <HeroInteractive />
 
         <div className="container">
-          <div className="hero-content animate-fade-in-up" style={{ maxWidth: 680 }}>
-            <div className="hero-eyebrow">
+          <div className="hero-content" style={{ maxWidth: 680 }}>
+            <div className="hero-eyebrow hero-stagger" style={{ animationDelay: '100ms' }}>
               <Zap size={14} />
               Premium Gaming Experience
             </div>
 
-            <h1 className="hero-title">
+            <div className="hero-title-glow" />
+            <h1 className="hero-title hero-stagger" style={{ animationDelay: '200ms' }}>
               Level Up Your
               <br />
               <span className="hero-title-gradient">Gaming Sessions</span>
             </h1>
 
-            <p className="hero-subtitle">
+            <p className="hero-subtitle hero-stagger" style={{ animationDelay: '350ms' }}>
               Book your Play Station online in seconds and step in ready for action.
             </p>
 
-            <HeroActions />
+            <div className="hero-stagger" style={{ animationDelay: '480ms' }}>
+              <HeroActions />
+            </div>
 
-            <div className="hero-stats">
+            <div className="hero-stats hero-stagger" style={{ animationDelay: '600ms' }}>
               <div>
                 <div className="hero-stat-value">{stats.totalStations}+</div>
                 <div className="hero-stat-label">Gaming Stations</div>
