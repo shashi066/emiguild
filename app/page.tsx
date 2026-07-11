@@ -183,6 +183,7 @@ export default async function HomePage() {
         <div className="hero-grid" />
         <div className="hero-orb hero-orb-1" />
         <div className="hero-orb hero-orb-2" />
+        <div className="hero-signature" />
 
         <div className="container">
           <div className="hero-content animate-fade-in-up" style={{ maxWidth: 680 }}>
@@ -402,37 +403,37 @@ export default async function HomePage() {
             </div>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 'var(--space-md)', fontSize: '0.9rem' }}>Quick Links</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-  {[
-    ['/', 'Home'],
-    ['/book', 'Book a Slot'],
-    ['/my-bookings', 'My Bookings'],
-    ['https://www.instagram.com/theemiguild', 'Instagram'],
-  ].map(([href, label]) =>
-    href.startsWith('http') ? (
-      // External link: open in new tab
-      <a
-        key={href}
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}
-      >
-        {label}
-      </a>
-    ) : (
-      // Internal link: use Next.js Link
-      <Link
-        key={href}
-        href={href}
-        style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}
-      >
-        {label}
-      </Link>
-    )
-  )}
-</div>
-            </div>  
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {[
+                  ['/', 'Home'],
+                  ['/book', 'Book a Slot'],
+                  ['/my-bookings', 'My Bookings'],
+                  ['https://www.instagram.com/theemiguild', 'Instagram'],
+                ].map(([href, label]) =>
+                  href.startsWith('http') ? (
+                    // External link: open in new tab
+                    <a
+                      key={href}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}
+                    >
+                      {label}
+                    </a>
+                  ) : (
+                    // Internal link: use Next.js Link
+                    <Link
+                      key={href}
+                      href={href}
+                      style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}
+                    >
+                      {label}
+                    </Link>
+                  )
+                )}
+              </div>
+            </div>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 'var(--space-md)', fontSize: '0.9rem' }}>Hours</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
@@ -477,10 +478,10 @@ export default async function HomePage() {
 function UserPlus({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-      <circle cx="9" cy="7" r="4"/>
-      <line x1="19" y1="8" x2="19" y2="14"/>
-      <line x1="22" y1="11" x2="16" y2="11"/>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
     </svg>
   );
 }

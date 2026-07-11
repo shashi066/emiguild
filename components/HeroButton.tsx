@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { LucideIcon, ChevronRight } from 'lucide-react';
 import ScrollToSection from '@/components/ScrollToSection';
 
-type ButtonVariant = 'primary' | 'ghost' | 'gold' | 'green' | 'purple' | 'red';
-type AnimationVariant = 'none' | 'spin' | 'lucky' | 'tournament';
+type ButtonVariant = 'primary-blue' | 'primary-red' | 'secondary-gold' | 'secondary-gray' | 'secondary-green' | 'secondary-orange' | 'secondary-purple' | 'ghost';
 
 interface HeroButtonProps {
   label: string;
@@ -13,49 +12,9 @@ interface HeroButtonProps {
   href?: string;
   targetId?: string;
   variant?: ButtonVariant;
-  animation?: AnimationVariant;
   className?: string;
   id?: string;
 }
-
-const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
-  primary: {},
-  ghost: {},
-  gold: {
-    background: 'linear-gradient(135deg, rgba(255,215,0,0.1), rgba(205,127,50,0.1))',
-    border: '1px solid rgba(255,215,0,0.3)',
-    color: '#FFD700',
-  },
-  green: {
-    background: 'linear-gradient(135deg, rgba(0, 230, 118, 0.12), rgba(0, 150, 80, 0.08))',
-    border: '1px solid rgba(0, 230, 118, 0.35)',
-    color: '#e8ffed',
-  },
-  purple: {
-    background: 'linear-gradient(135deg, rgba(108,99,255,0.15), rgba(168,85,247,0.1))',
-    border: '1px solid rgba(108,99,255,0.4)',
-    color: '#a78bfa',
-  },
-  red: {
-    background: 'linear-gradient(135deg, rgba(255,107,107,0.15), rgba(255,165,0,0.1))',
-    border: '1px solid rgba(255,107,107,0.4)',
-    color: '#ff8a8a',
-  },
-};
-
-const animationClasses: Record<AnimationVariant, string> = {
-  none: '',
-  spin: 'spin-float-btn',
-  lucky: 'guild-drop-btn',
-  tournament: 'tournament-btn',
-};
-
-const animationStyles: Record<AnimationVariant, React.CSSProperties> = {
-  none: {},
-  spin: { animation: 'spin-pulse 2s ease-in-out infinite' },
-  lucky: {},
-  tournament: {},
-};
 
 export default function HeroButton({
   label,
@@ -63,44 +22,46 @@ export default function HeroButton({
   href,
   targetId,
   variant = 'ghost',
-  animation = 'none',
   className = '',
   id,
 }: HeroButtonProps) {
-  const baseClass = variant === 'primary' ? 'btn btn-primary btn-lg' : 'btn btn-ghost btn-lg';
-  const animClass = animationClasses[animation];
-  const combinedClass = [baseClass, animClass, className].filter(Boolean).join(' ');
-  const style = { ...variantStyles[variant], ...animationStyles[animation] };
+
+  let variantClass = 'btn-v2-ghost';
+  if (variant.startsWith('primary')) {
+    variantClass = `btn-v2-primary-${variant.split('-')[1]}`;
+  } else if (variant.startsWith('secondary')) {
+    variantClass = `btn-v2-secondary btn-v2-secondary-${variant.split('-')[1]}`;
+  }
+
+  const combinedClass = ['btn-v2', variantClass, className].filter(Boolean).join(' ');
+
+  const iconElement = <Icon size={22} className="btn-v2-icon" />;
 
   const button = (
-    <button className={combinedClass} style={style} id={id}>
-      <Icon size={18} />
-      {label}
+    <button className={combinedClass} id={id}>
+      {iconElement}
+      <span className="btn-v2-label">{label}</span>
     </button>
   );
 
   if (targetId) {
     return (
-      <ScrollToSection targetId={targetId} className={combinedClass} style={style}>
-        <Icon size={18} />
-        {label}
-        {targetId === 'stations' && <ChevronRightIcon />}
+      <ScrollToSection targetId={targetId} className={combinedClass}>
+        {iconElement}
+        <span className="btn-v2-label">{label}</span>
+        {targetId === 'stations' && <ChevronRight size={22} className="btn-v2-icon" />}
       </ScrollToSection>
     );
   }
 
   if (href) {
     return (
-      <Link href={href} className={combinedClass} style={style}>
-        <Icon size={18} />
-        {label}
+      <Link href={href} className={combinedClass} id={id}>
+        {iconElement}
+        <span className="btn-v2-label">{label}</span>
       </Link>
     );
   }
 
   return button;
-}
-
-function ChevronRightIcon() {
-  return <ChevronRight size={18} />;
 }
