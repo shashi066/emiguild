@@ -77,7 +77,14 @@ export async function POST(req: NextRequest) {
 
     // Check station exists and fetch the booking user's profile in parallel
     const [station, bookingUser] = await Promise.all([
-      prisma.station.findUnique({ where: { id: stationId } }),
+      prisma.station.findUnique({ 
+        where: { id: stationId },
+        select: { 
+          id: true, name: true, hourlyRate: true, isActive: true, hasControllers: true,
+          linkedStationId: true,
+          linkedStation: { select: { id: true, name: true } }
+        }
+      }),
       prisma.user.findUnique({ where: { id: session.user.id! }, select: { name: true, phone: true } }),
     ]);
     if (!station || !station.isActive) {
@@ -104,7 +111,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check for conflicts
+    // Check for conflicts on this specific station
     const conflictingBookings = await prisma.booking.findMany({
       where: { stationId, date, status: { not: 'CANCELLED' } },
     });
@@ -121,6 +128,45 @@ export async function POST(req: NextRequest) {
           { error: 'This time slot is already booked. Please choose a different time.' },
           { status: 409 }
         );
+      }
+    }
+
+    // ── Linked Station Check ──────────────────────────────────────
+    // Check both directions: station linked TO another, or another station linked TO this one
+    const linkedStationIds: string[] = [];
+    
+    // Direction 1: This station is linked to another
+    if (station.linkedStationId) {
+      linkedStationIds.push(station.linkedStationId);
+    }
+    
+    // Direction 2: Check if any station is linked to this one
+    const stationsLinkingToThis = await prisma.station.findMany({
+      where: { linkedStationId: stationId },
+      select: { id: true },
+    });
+    linkedStationIds.push(...stationsLinkingToThis.map(s => s.id));
+
+    // Check all linked stations for conflicts
+    if (linkedStationIds.length > 0) {
+      const linkedBookings = await prisma.booking.findMany({
+        where: { 
+          stationId: { in: linkedStationIds }, 
+          date, 
+          status: { not: 'CANCELLED' } 
+        },
+      });
+
+      for (const existing of linkedBookings) {
+        const exStartMins = toMins(existing.startTime);
+        const exEndMins = toMins(existing.endTime);
+        if (startMins < exEndMins && endMins > exStartMins) {
+          const linkedName = (station.linkedStation as { name: string } | null)?.name || 'A linked station';
+          return NextResponse.json(
+            { error: `This time slot is unavailable. ${linkedName} is already booked at this time.` },
+            { status: 409 }
+          );
+        }
       }
     }
 

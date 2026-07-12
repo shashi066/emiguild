@@ -106,7 +106,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // Recalculate endTime using addHours to correctly handle 30-min durations
   const endTime = addHours(startTime, Number(duration));
 
-  const station = await prisma.station.findUnique({ where: { id: stationId } });
+  const station = await prisma.station.findUnique({ 
+    where: { id: stationId },
+    select: { 
+      id: true, name: true, hourlyRate: true, isActive: true, hasControllers: true,
+      linkedStationId: true,
+      linkedStation: { select: { id: true, name: true } }
+    }
+  });
   if (!station) return NextResponse.json({ error: 'Station not found' }, { status: 404 });
 
   // Recalculate controller charge with current setting price
@@ -120,6 +127,72 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const sessionCost      = station.hourlyRate * Number(duration);
   const controllerCharge = numControllers * controllerUnitPrice * Number(duration);
   const totalPrice       = Math.round((sessionCost + controllerCharge) * (1 - discount / 100));
+
+  // ── Conflict Checks ───────────────────────────────────────────
+  const toMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const startMins = toMins(startTime);
+  const endMins = toMins(endTime);
+
+  // Check for conflicts on the target station (excluding current booking)
+  const conflictingBookings = await prisma.booking.findMany({
+    where: {
+      id: { not: id },
+      stationId,
+      date,
+      status: { not: 'CANCELLED' },
+    },
+  });
+
+  for (const existing of conflictingBookings) {
+    const exStartMins = toMins(existing.startTime);
+    const exEndMins = toMins(existing.endTime);
+    if (startMins < exEndMins && endMins > exStartMins) {
+      return NextResponse.json(
+        { error: 'This time slot conflicts with another booking on this station.' },
+        { status: 409 }
+      );
+    }
+  }
+
+  // ── Linked Station Check ──────────────────────────────────────
+  // Check both directions: station linked TO another, or another station linked TO this one
+  const linkedStationIds: string[] = [];
+  
+  // Direction 1: This station is linked to another
+  if (station.linkedStationId) {
+    linkedStationIds.push(station.linkedStationId);
+  }
+  
+  // Direction 2: Check if any station is linked to this one
+  const stationsLinkingToThis = await prisma.station.findMany({
+    where: { linkedStationId: stationId },
+    select: { id: true },
+  });
+  linkedStationIds.push(...stationsLinkingToThis.map(s => s.id));
+
+  // Check all linked stations for conflicts
+  if (linkedStationIds.length > 0) {
+    const linkedBookings = await prisma.booking.findMany({
+      where: {
+        id: { not: id },
+        stationId: { in: linkedStationIds },
+        date,
+        status: { not: 'CANCELLED' },
+      },
+    });
+
+    for (const existing of linkedBookings) {
+      const exStartMins = toMins(existing.startTime);
+      const exEndMins = toMins(existing.endTime);
+      if (startMins < exEndMins && endMins > exStartMins) {
+        const linkedName = (station.linkedStation as { name: string } | null)?.name || 'A linked station';
+        return NextResponse.json(
+          { error: `This time slot is unavailable. ${linkedName} is already booked at this time.` },
+          { status: 409 }
+        );
+      }
+    }
+  }
 
   const updated = await prisma.booking.update({
     where: { id },
