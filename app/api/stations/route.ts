@@ -5,6 +5,7 @@ import { auth } from '@/auth';
 export async function GET() {
   const stations = await prisma.station.findMany({
     where: { isActive: true },
+    include: { linkedStation: { select: { id: true, name: true } } },
     orderBy: { position: 'asc' },
   });
   return NextResponse.json({ stations });
