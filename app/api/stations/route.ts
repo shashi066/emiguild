@@ -2,10 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await auth();
+  const isAdmin = session?.user?.role === 'ADMIN';
+  
+  // Admin gets all stations, public users only get active ones
   const stations = await prisma.station.findMany({
-    where: { isActive: true },
-    include: { linkedStation: { select: { id: true, name: true } } },
+    where: isAdmin ? {} : { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      specs: true,
+      hourlyRate: true,
+      minDuration: true,
+      hasControllers: true,
+      imageUrl: true,
+      isActive: true,
+      position: true,
+      linkedStationId: true,  // Explicitly include this
+      createdAt: true,
+      updatedAt: true,
+      linkedStation: { select: { id: true, name: true } },
+    },
     orderBy: { position: 'asc' },
   });
   return NextResponse.json({ stations });

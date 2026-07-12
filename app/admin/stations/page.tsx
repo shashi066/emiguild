@@ -384,7 +384,7 @@ export default function AdminStationsPage() {
                   >
                     <option value="">No linked station</option>
                     {stations
-                      .filter((s) => s.id !== editStation.id && s.id !== editStation.linkedStationId)
+                      .filter((s) => s.id !== editStation.id)
                       .map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
