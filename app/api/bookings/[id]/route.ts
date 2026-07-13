@@ -110,8 +110,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     where: { id: stationId },
     select: { 
       id: true, name: true, hourlyRate: true, isActive: true, hasControllers: true,
-      linkedStationId: true,
-      linkedStation: { select: { id: true, name: true } }
     }
   });
   if (!station) return NextResponse.json({ error: 'Station not found' }, { status: 404 });
@@ -154,44 +152,27 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
   }
 
-  // ── Linked Station Check ──────────────────────────────────────
-  // Check both directions: station linked TO another, or another station linked TO this one
-  const linkedStationIds: string[] = [];
-  
-  // Direction 1: This station is linked to another
-  if (station.linkedStationId) {
-    linkedStationIds.push(station.linkedStationId);
-  }
-  
-  // Direction 2: Check if any station is linked to this one
-  const stationsLinkingToThis = await prisma.station.findMany({
-    where: { linkedStationId: stationId },
-    select: { id: true },
+  // ── Venue Capacity Check ──────────────────────────────────────────────
+  // Count all active bookings overlapping this slot across ALL stations (excluding current booking).
+  const capacitySetting = await prisma.setting.findUnique({ where: { key: 'venue_capacity' } });
+  const venueCapacity   = parseInt(capacitySetting?.value ?? '2');
+
+  const allOverlapping = await prisma.booking.findMany({
+    where: { id: { not: id }, date, status: { not: 'CANCELLED' } },
+    select: { startTime: true, endTime: true },
   });
-  linkedStationIds.push(...stationsLinkingToThis.map(s => s.id));
 
-  // Check all linked stations for conflicts
-  if (linkedStationIds.length > 0) {
-    const linkedBookings = await prisma.booking.findMany({
-      where: {
-        id: { not: id },
-        stationId: { in: linkedStationIds },
-        date,
-        status: { not: 'CANCELLED' },
-      },
-    });
+  const overlapCount = allOverlapping.filter(b => {
+    const bStart = toMins(b.startTime);
+    const bEnd   = toMins(b.endTime);
+    return startMins < bEnd && endMins > bStart;
+  }).length;
 
-    for (const existing of linkedBookings) {
-      const exStartMins = toMins(existing.startTime);
-      const exEndMins = toMins(existing.endTime);
-      if (startMins < exEndMins && endMins > exStartMins) {
-        const linkedName = (station.linkedStation as { name: string } | null)?.name || 'A linked station';
-        return NextResponse.json(
-          { error: `This time slot is unavailable. ${linkedName} is already booked at this time.` },
-          { status: 409 }
-        );
-      }
-    }
+  if (overlapCount >= venueCapacity) {
+    return NextResponse.json(
+      { error: 'The venue is fully booked at this time. Please choose a different slot.' },
+      { status: 409 }
+    );
   }
 
   const updated = await prisma.booking.update({

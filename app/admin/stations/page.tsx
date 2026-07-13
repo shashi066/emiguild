@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Monitor, Plus, CheckCircle, XCircle, Edit2, AlertCircle, X, Clock, Link2 } from 'lucide-react';
+import { Monitor, Plus, CheckCircle, XCircle, Edit2, AlertCircle, X, Clock } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 type Station = {
@@ -14,8 +14,6 @@ type Station = {
   hasControllers: boolean;
   position: number;
   isActive: boolean;
-  linkedStationId?: string | null;
-  linkedStation?: { id: string; name: string } | null;
 };
 
 const STATION_ICONS: Record<number, string> = {
@@ -32,10 +30,10 @@ const MIN_DURATION_OPTIONS = [
 
 type FormData = {
   name: string; description: string; specs: string;
-  hourlyRate: string; position: string; minDuration: string; hasControllers: boolean; linkedStationId: string;
+  hourlyRate: string; position: string; minDuration: string; hasControllers: boolean;
 };
 const EMPTY_FORM: FormData = {
-  name: '', description: '', specs: '', hourlyRate: '', position: '', minDuration: '1', hasControllers: true, linkedStationId: '',
+  name: '', description: '', specs: '', hourlyRate: '', position: '', minDuration: '1', hasControllers: true,
 };
 
 export default function AdminStationsPage() {
@@ -77,7 +75,6 @@ export default function AdminStationsPage() {
       position: String(station.position),
       minDuration: String(station.minDuration ?? 1),
       hasControllers: station.hasControllers ?? true,
-      linkedStationId: station.linkedStationId ?? '',
     });
     setError('');
     setShowModal(true);
@@ -94,7 +91,6 @@ export default function AdminStationsPage() {
         minDuration: parseFloat(form.minDuration),
         hasControllers: form.hasControllers,
         position: parseInt(form.position) || 0,
-        linkedStationId: form.linkedStationId || null,
       };
       if (editStation) {
         const res = await fetch(`/api/stations/${editStation.id}`, {
@@ -202,15 +198,6 @@ export default function AdminStationsPage() {
                     background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)',
                   }}>
                     🎮 No Controllers
-                  </div>
-                )}
-                {/* Linked station badge */}
-                {station.linkedStation && (
-                  <div style={{ marginTop: 6, marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '3px 8px', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700,
-                    background: 'rgba(108,99,255,0.08)', color: 'var(--color-accent-primary)', border: '1px solid rgba(108,99,255,0.25)',
-                  }}>
-                    <Link2 size={10} /> Linked to {station.linkedStation.name}
                   </div>
                 )}
                 <div className="station-footer">
@@ -369,41 +356,6 @@ export default function AdminStationsPage() {
                   </button>
                 </div>
               </div>
-
-              {/* Station Linking */}
-              {editStation && (
-                <div className="form-group">
-                  <label className="form-label">
-                    <Link2 size={13} style={{ display: 'inline', marginRight: 5, color: 'var(--color-accent-primary)' }} />
-                    Link Station (Shared Time Slots)
-                  </label>
-                  <select
-                    className="form-input"
-                    value={form.linkedStationId}
-                    onChange={(e) => setForm({ ...form, linkedStationId: e.target.value })}
-                  >
-                    <option value="">No linked station</option>
-                    {stations
-                      .filter((s) => s.id !== editStation.id)
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                  </select>
-                  <div style={{ marginTop: 6, fontSize: '0.73rem', color: 'var(--color-text-muted)' }}>
-                    {form.linkedStationId ? (
-                      <div style={{ color: 'var(--color-accent-warning)' }}>
-                        🔗 When one station is booked, the linked station's same time slot will be blocked automatically.
-                      </div>
-                    ) : (
-                      <div>
-                        Link this station to another if they share resources (e.g., TV, monitor).
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
               <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)' }}>
                 <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowModal(false)}>
