@@ -20,10 +20,8 @@ export async function GET(req: NextRequest) {
       imageUrl: true,
       isActive: true,
       position: true,
-      linkedStationId: true,  // Explicitly include this
       createdAt: true,
       updatedAt: true,
-      linkedStation: { select: { id: true, name: true } },
     },
     orderBy: { position: 'asc' },
   });

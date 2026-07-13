@@ -22,7 +22,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(body.position    != null && { position:    parseInt(String(body.position), 10) }),
         ...(body.hasControllers != null && { hasControllers: Boolean(body.hasControllers) }),
         ...(body.isActive    != null && { isActive: body.isActive }),
-        ...('linkedStationId' in body && { linkedStationId: body.linkedStationId || null }),
       },
     });
     return NextResponse.json({ station });

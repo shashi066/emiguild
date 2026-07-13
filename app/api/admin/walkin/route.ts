@@ -98,8 +98,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Venue Capacity Check ──────────────────────────────────────────────
+    // Count all active bookings across ALL stations that overlap this window.
+    // If count >= venue_capacity, the venue is full.
+    const capacitySetting = await prisma.setting.findUnique({ where: { key: 'venue_capacity' } });
+    const venueCapacity   = parseInt(capacitySetting?.value ?? '2');
+
+    const allOverlapping = await prisma.booking.findMany({
+      where: { date, status: { not: 'CANCELLED' } },
+      select: { startTime: true, endTime: true },
+    });
+
+    const overlapCount = allOverlapping.filter(b => {
+      const bStart = toMins(b.startTime);
+      const bEnd   = toMins(b.endTime);
+      return startMins < bEnd && endMins > bStart;
+    }).length;
+
+    if (overlapCount >= venueCapacity) {
+      return NextResponse.json(
+        { error: 'The venue is fully booked at this time. Please choose a different slot.' },
+        { status: 409 }
+      );
+    }
+
     const { usePass, linkedUserId } = result.data;
-  const discount: number = Math.min(100, Math.max(0, parseInt(String(body.discount ?? 0)) || 0));
+    const discount: number = Math.min(100, Math.max(0, parseInt(String(body.discount ?? 0)) || 0));
 
     // Fetch controller price from settings
     let controllerUnitPrice = 0;

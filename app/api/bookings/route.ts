@@ -81,8 +81,6 @@ export async function POST(req: NextRequest) {
         where: { id: stationId },
         select: { 
           id: true, name: true, hourlyRate: true, isActive: true, hasControllers: true,
-          linkedStationId: true,
-          linkedStation: { select: { id: true, name: true } }
         }
       }),
       prisma.user.findUnique({ where: { id: session.user.id! }, select: { name: true, phone: true } }),
@@ -131,43 +129,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Linked Station Check ──────────────────────────────────────
-    // Check both directions: station linked TO another, or another station linked TO this one
-    const linkedStationIds: string[] = [];
-    
-    // Direction 1: This station is linked to another
-    if (station.linkedStationId) {
-      linkedStationIds.push(station.linkedStationId);
-    }
-    
-    // Direction 2: Check if any station is linked to this one
-    const stationsLinkingToThis = await prisma.station.findMany({
-      where: { linkedStationId: stationId },
-      select: { id: true },
+    // ── Venue Capacity Check ──────────────────────────────────────────────
+    // Count all active bookings overlapping this slot across ALL stations.
+    // If count >= venue_capacity, the venue is full — reject regardless of station.
+    const capacitySetting = await prisma.setting.findUnique({ where: { key: 'venue_capacity' } });
+    const venueCapacity   = parseInt(capacitySetting?.value ?? '2');
+
+    const overlappingAllStations = await prisma.booking.findMany({
+      where: { date, status: { not: 'CANCELLED' } },
+      select: { startTime: true, endTime: true },
     });
-    linkedStationIds.push(...stationsLinkingToThis.map(s => s.id));
 
-    // Check all linked stations for conflicts
-    if (linkedStationIds.length > 0) {
-      const linkedBookings = await prisma.booking.findMany({
-        where: { 
-          stationId: { in: linkedStationIds }, 
-          date, 
-          status: { not: 'CANCELLED' } 
-        },
-      });
+    const overlappingCount = overlappingAllStations.filter(b => {
+      const bStart = toMins(b.startTime);
+      const bEnd   = toMins(b.endTime);
+      return startMins < bEnd && endMins > bStart;
+    }).length;
 
-      for (const existing of linkedBookings) {
-        const exStartMins = toMins(existing.startTime);
-        const exEndMins = toMins(existing.endTime);
-        if (startMins < exEndMins && endMins > exStartMins) {
-          const linkedName = (station.linkedStation as { name: string } | null)?.name || 'A linked station';
-          return NextResponse.json(
-            { error: `This time slot is unavailable. ${linkedName} is already booked at this time.` },
-            { status: 409 }
-          );
-        }
-      }
+    if (overlappingCount >= venueCapacity) {
+      return NextResponse.json(
+        { error: 'The venue is fully booked at this time. Please choose a different slot.' },
+        { status: 409 }
+      );
     }
 
     // Controller price from settings

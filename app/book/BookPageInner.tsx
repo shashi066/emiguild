@@ -68,7 +68,7 @@ export default function BookPageInner() {
   useEffect(() => {
     fetch('/api/stations')
       .then((r) => r.json())
-      .then((d) => setStations(d.stations ?? []));
+      .then((d) => setStations((d.stations ?? []).filter((s: { isActive: boolean }) => s.isActive)));
   }, []);
 
   // Load controller price from settings
