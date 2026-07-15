@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { encryptNumber } from '@/lib/crypto';
 
 // GET /api/admin/daily-spin/items
 export async function GET() {
@@ -13,7 +14,11 @@ export async function GET() {
     const items = await prisma.lootItem.findMany({
       orderBy: { weight: 'desc' },
     });
-    return NextResponse.json({ items });
+    const encryptedItems = items.map((item) => ({
+      ...item,
+      weight: encryptNumber(item.weight),
+    }));
+    return NextResponse.json({ items: encryptedItems });
   } catch (error) {
     console.error('Error fetching loot items:', error);
     return NextResponse.json({ error: 'Failed to fetch items' }, { status: 500 });
@@ -46,7 +51,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ item }, { status: 201 });
+    return NextResponse.json({
+      item: { ...item, weight: encryptNumber(item.weight) },
+    }, { status: 201 });
   } catch (error) {
     console.error('Error creating loot item:', error);
     return NextResponse.json({ error: 'Failed to create item' }, { status: 500 });

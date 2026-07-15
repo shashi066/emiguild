@@ -6,6 +6,7 @@ import {
   Calendar, Clock, Monitor, X, CheckCircle, Phone, User, Search, Award, ChevronDown,
 } from 'lucide-react';
 import { formatDate, formatTime, formatCurrency, getTodayString, isSlotAvailable, getTimeSlotsForDate, getDurationOptions } from '@/lib/utils';
+import { decryptPhone } from '@/lib/crypto';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 type BookedSlot = { startTime: string; endTime: string; status: string };
@@ -83,7 +84,10 @@ export default function WalkinBookingPage() {
     // Load all users once for the search-select
     fetch('/api/admin/passes/users')
       .then((r) => r.json())
-      .then((d) => setAllUsers(d.users ?? []))
+      .then((d) => setAllUsers((d.users ?? []).map((user: FoundUser) => ({
+        ...user,
+        phone: decryptPhone(user.phone),
+      }))))
       .catch(() => {});
   }, []);
 
@@ -106,7 +110,10 @@ export default function WalkinBookingPage() {
       if (filterStation) params.set('stationId', filterStation);
       const res = await fetch(`/api/admin/walkin?${params}`);
       const data = await res.json();
-      setBookings(data.bookings ?? []);
+      setBookings((data.bookings ?? []).map((booking: WalkinBooking) => ({
+        ...booking,
+        customerPhone: decryptPhone(booking.customerPhone),
+      })));
     } finally {
       setLoading(false);
     }

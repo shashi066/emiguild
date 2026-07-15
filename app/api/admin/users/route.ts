@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { encryptPhone } from '@/lib/crypto';
 
 export async function GET() {
   const session = await auth();
@@ -17,5 +18,10 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json({ users });
+  const encryptedUsers = users.map((user) => ({
+    ...user,
+    phone: encryptPhone(user.phone),
+  }));
+
+  return NextResponse.json({ users: encryptedUsers });
 }

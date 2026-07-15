@@ -5,6 +5,7 @@ import {
   Users, Shield, Calendar, KeyRound,
   RefreshCw, X, Eye, EyeOff, CheckCircle, AlertCircle, Copy, Check,
 } from 'lucide-react';
+import { decryptPhone } from '@/lib/crypto';
 
 type User = {
   id: string;
@@ -250,7 +251,10 @@ export default function AdminUsersPage() {
     try {
       const res  = await fetch('/api/admin/users');
       const data = await res.json();
-      setUsers(data.users ?? []);
+      setUsers((data.users ?? []).map((user: User) => ({
+        ...user,
+        phone: decryptPhone(user.phone),
+      })));
     } finally {
       setLoading(false);
     }

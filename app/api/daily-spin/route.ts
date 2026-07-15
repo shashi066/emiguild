@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import crypto from 'crypto';
+import { encryptNumber } from '@/lib/crypto';
 
 // Helper to get the effective "spin date" in YYYY-MM-DD format (IST)
 // If the current IST hour is less than resetHour, it counts as the previous day.
@@ -119,13 +120,25 @@ export async function GET() {
 
     const items = await prisma.lootItem.findMany({ where: { enabled: true } });
 
+    const encryptedItems = items.map((item) => ({
+      ...item,
+      weight: encryptNumber(item.weight),
+    }));
+    const encryptedSpin = spin ? {
+      ...spin,
+      lootItem: spin.lootItem ? {
+        ...spin.lootItem,
+        weight: encryptNumber(spin.lootItem.weight),
+      } : null,
+    } : null;
+
     return NextResponse.json({
       enabled: true,
       canSpin,
-      spin,
+      spin: encryptedSpin,
       remainingRetries,
       nextReset: nextReset.toISOString(),
-      lootItems: items,
+      lootItems: encryptedItems,
     });
 
   } catch (error) {
@@ -219,10 +232,22 @@ export async function POST() {
       }
     });
 
+    const encryptedReward = {
+      ...selectedItem,
+      weight: encryptNumber(selectedItem.weight),
+    };
+    const encryptedSpinRecord = {
+      ...spinRecord,
+      lootItem: spinRecord.lootItem ? {
+        ...spinRecord.lootItem,
+        weight: encryptNumber(spinRecord.lootItem.weight),
+      } : null,
+    };
+
     return NextResponse.json({
       success: true,
-      reward: selectedItem,
-      spinRecord,
+      reward: encryptedReward,
+      spinRecord: encryptedSpinRecord,
       nextReset: nextReset.toISOString(),
     });
 

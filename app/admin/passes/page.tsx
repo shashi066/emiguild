@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Search, Award, CheckCircle, AlertCircle, Calendar, User, X, ChevronDown } from 'lucide-react';
+import { decryptPhone } from '@/lib/crypto';
 
 type PassType = 'BRONZE' | 'SILVER' | 'GOLD';
 
@@ -40,7 +41,10 @@ export default function AdminPassesPage() {
   useEffect(() => {
     fetch('/api/admin/passes/users')
       .then((r) => r.json())
-      .then((d) => setAllUsers(d.users ?? []))
+      .then((d) => setAllUsers((d.users ?? []).map((user: any) => ({
+        ...user,
+        phone: decryptPhone(user.phone),
+      }))))
       .catch(() => setAllUsers([]))
       .finally(() => setLoadingUsers(false));
   }, []);
