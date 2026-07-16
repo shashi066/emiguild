@@ -122,6 +122,13 @@ export default function BookPageInner() {
   const controllerCharge = extraControllers * controllerPrice * selectedDuration;
   const sessionCost = selectedStation ? selectedStation.hourlyRate * selectedDuration : 0;
   const totalPrice = (usePass ? 0 : sessionCost) + controllerCharge;
+  const stationPassAllowed = selectedStation?.hasControllers !== false;
+
+  useEffect(() => {
+    if (!stationPassAllowed && usePass) {
+      setUsePass(false);
+    }
+  }, [stationPassAllowed, usePass]);
 
   const handleSubmit = async () => {
     if (!session) {
@@ -319,6 +326,13 @@ export default function BookPageInner() {
                     <div className="station-name">{station.name}</div>
                     <div className="station-description">{station.description}</div>
                     <div className="station-specs">{station.specs}</div>
+                    {station.hasControllers === false && (
+                      <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '4px 9px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
+                        background: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
+                        🛑 Pass not accepted
+                      </div>
+                    )}
                     <div className="station-footer">
                       <div>
                         <div className="station-price">{formatCurrency(station.hourlyRate)}</div>
@@ -555,7 +569,7 @@ export default function BookPageInner() {
                 {/* Pass payment toggle */}
                 {activePass && (() => {
                   const remaining = activePass.totalHours - activePass.usedHours;
-                  const canUse = remaining >= selectedDuration;
+                  const canUse = remaining >= selectedDuration && stationPassAllowed;
                   const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700' };
                   const color = PASS_COLOR[activePass.passType] ?? '#FFD700';
                   return (
@@ -587,7 +601,9 @@ export default function BookPageInner() {
                               Use {activePass.passType.charAt(0) + activePass.passType.slice(1).toLowerCase()} Pass
                             </div>
                             <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              {canUse
+                              {!stationPassAllowed
+                                ? 'This station does not allow monthly pass bookings.'
+                                : canUse
                                 ? `${remaining} hrs remaining → ${remaining - selectedDuration} after this session`
                                 : `Only ${remaining} hr(s) left — need ${selectedDuration} hr(s)`}
                             </div>

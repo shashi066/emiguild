@@ -145,6 +145,10 @@ export async function POST(req: NextRequest) {
     let sessionPrice = station.hourlyRate * duration;
 
     if (usePass && linkedUserId) {
+      if (!station.hasControllers) {
+        return NextResponse.json({ error: 'Monthly passes cannot be used on this station.' }, { status: 400 });
+      }
+
       const now = new Date();
       const pass = await prisma.userPass.findFirst({
         where: {

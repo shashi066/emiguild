@@ -130,10 +130,17 @@ export default function WalkinBookingPage() {
   }, [form.stationId, form.date]);
 
   const selectedStation = stations.find((s) => s.id === form.stationId);
+  const stationPassAllowed = selectedStation?.hasControllers !== false;
   const controllerCharge = form.extraControllers * controllerPrice * form.duration;
   const sessionCost = selectedStation ? selectedStation.hourlyRate * form.duration : 0;
   const priceBeforeDiscount = (usePass ? 0 : sessionCost) + controllerCharge;
   const estimatedTotal = Math.round(priceBeforeDiscount * (1 - form.discount / 100));
+
+  useEffect(() => {
+    if (!stationPassAllowed && usePass) {
+      setUsePass(false);
+    }
+  }, [stationPassAllowed, usePass]);
 
   // Filtered user list for dropdown
   const filteredUsers = userQuery.trim().length < 1 ? [] : allUsers.filter((u) => {
@@ -643,7 +650,9 @@ export default function WalkinBookingPage() {
                     >
                       <option value="">Select a station...</option>
                       {stations.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name} — {formatCurrency(s.hourlyRate)}/hr</option>
+                        <option key={s.id} value={s.id}>
+                          {s.name} — {formatCurrency(s.hourlyRate)}/hr{s.hasControllers === false ? ' · Pass blocked' : ''}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -782,11 +791,13 @@ export default function WalkinBookingPage() {
                     {/* Toggle */}
                     <button
                       type="button"
-                      onClick={() => setUsePass(!usePass)}
+                      onClick={() => stationPassAllowed && setUsePass(!usePass)}
+                      disabled={!stationPassAllowed}
                       style={{
                         width: 44, height: 24, borderRadius: 12,
                         background: usePass ? PASS_COLOR[activePass.passType] : 'rgba(255,255,255,0.1)',
-                        border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                        border: 'none', cursor: stationPassAllowed ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                        opacity: stationPassAllowed ? 1 : 0.5,
                       }}
                     >
                       <span style={{
@@ -795,6 +806,11 @@ export default function WalkinBookingPage() {
                       }} />
                     </button>
                   </div>
+                  {!stationPassAllowed && (
+                    <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: 10 }}>
+                      This station does not allow monthly pass bookings.
+                    </div>
+                  )}
                   {usePass && (
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', display: 'flex', gap: 16 }}>
                       <span>✅ Session cost: <s style={{ opacity: 0.5 }}>{selectedStation ? `₹${(selectedStation.hourlyRate * form.duration).toLocaleString('en-IN')}` : '—'}</s> <strong style={{ color: 'var(--color-accent-success)' }}>₹0</strong></span>

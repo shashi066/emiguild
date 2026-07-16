@@ -24,6 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(body.isActive    != null && { isActive: body.isActive }),
       },
     });
+
     return NextResponse.json({ station });
   } catch (err) {
     console.error('[PATCH /api/stations/:id]', err);
