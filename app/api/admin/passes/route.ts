@@ -75,3 +75,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to assign pass. Please try again.' }, { status: 500 });
   }
 }
+
+// PATCH /api/admin/passes — revoke an existing pass
+export async function PATCH(req: NextRequest) {
+  const session = await auth();
+  if (session?.user?.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { passId } = await req.json();
+  if (!passId || typeof passId !== 'string') {
+    return NextResponse.json({ error: 'passId is required' }, { status: 400 });
+  }
+
+  try {
+    const pass = await prisma.userPass.update({
+      where: { id: passId },
+      data: { status: 'REVOKED' },
+    });
+
+    return NextResponse.json({ pass });
+  } catch (err) {
+    console.error('[/api/admin/passes PATCH] error:', err);
+    return NextResponse.json({ error: 'Failed to revoke pass. Please try again.' }, { status: 500 });
+  }
+}

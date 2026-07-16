@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Search, Award, CheckCircle, AlertCircle, Calendar, User, X, ChevronDown } from 'lucide-react';
+import { Search, Award, CheckCircle, AlertCircle, Calendar, User, X, ChevronDown, Ban } from 'lucide-react';
 import { decryptPhone } from '@/lib/crypto';
 
 type PassType = 'BRONZE' | 'SILVER' | 'GOLD';
@@ -32,6 +32,7 @@ export default function AdminPassesPage() {
   const [loadingPasses, setLoadingPasses] = useState(false);
   const [selectedPass, setSelectedPass]   = useState<PassType>('SILVER');
   const [assigning, setAssigning]         = useState(false);
+  const [revokingPassId, setRevokingPassId] = useState<string | null>(null);
   const [success, setSuccess]             = useState('');
   const [error, setError]                 = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +121,33 @@ export default function AdminPassesPage() {
       setError('Failed to assign pass. Please try again.');
     } finally {
       setAssigning(false);
+    }
+  };
+
+  const handleRevoke = async (passId: string, passType: string) => {
+    if (!selectedUser) return;
+    if (!confirm(`Revoke this ${passType} pass for ${selectedUser.name}?`)) return;
+
+    setRevokingPassId(passId);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch('/api/admin/passes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? 'Failed to revoke pass.');
+      } else {
+        setSuccess(`${passType} pass revoked for ${selectedUser.name}.`);
+        fetchUserPasses(selectedUser.id);
+      }
+    } catch {
+      setError('Failed to revoke pass. Please try again.');
+    } finally {
+      setRevokingPassId(null);
     }
   };
 
@@ -341,11 +369,22 @@ export default function AdminPassesPage() {
                     const color = PASS_COLOR[p.passType as PassType] ?? '#888';
                     return (
                       <div key={p.id} style={{ padding: '12px 16px', background: 'rgba(255,215,0,0.04)', border: '1px solid rgba(255,215,0,0.15)', borderRadius: 'var(--radius-md)', marginBottom: 8 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <span style={{ fontWeight: 700, color, fontSize: '0.85rem' }}>{p.passType} PASS</span>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Calendar size={11} /> Expires {new Date(p.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                          </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
+                          <div>
+                            <span style={{ fontWeight: 700, color, fontSize: '0.85rem' }}>{p.passType} PASS</span>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                              <Calendar size={11} /> Expires {new Date(p.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                            </div>
+                          </div>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)' }}
+                            onClick={() => handleRevoke(p.id, p.passType)}
+                            disabled={revokingPassId === p.id}
+                          >
+                            <Ban size={13} />
+                            {revokingPassId === p.id ? 'Revoking…' : 'Revoke'}
+                          </button>
                         </div>
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                           <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
