@@ -219,6 +219,7 @@ export function DailySpinWidget() {
   }
 
   const GRID_ROWS = gridItems.length > 0 ? Math.ceil(gridItems.length / GRID_COLS) : 2;
+  const streak = spinStatus?.streak;
 
   return (
     <div style={{
@@ -269,7 +270,7 @@ export function DailySpinWidget() {
             ? 'Test your luck — spin the grid to win a free perk!'
             : 'Come back tomorrow for another drop!'}
         </p>
-        {spinStatus?.streak && (
+        {streak && (
           <div
             style={{
               marginBottom: 'var(--space-lg)',
@@ -295,23 +296,23 @@ export function DailySpinWidget() {
                   Streak To Epic
                 </div>
                 <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc' }}>
-                  Day {Math.min(spinStatus.streak.current, spinStatus.streak.target)} / {spinStatus.streak.target}
+                  Day {Math.min(streak.current, streak.target)} / {streak.target}
                 </div>
               </div>
               <div
                 style={{
                   padding: '6px 10px',
                   borderRadius: 999,
-                  background: spinStatus.streak.guaranteedToday ? 'rgba(168,85,247,0.18)' : 'rgba(255,255,255,0.06)',
-                  border: `1px solid ${spinStatus.streak.guaranteedToday ? 'rgba(168,85,247,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                  color: spinStatus.streak.guaranteedToday ? '#f5d0fe' : 'var(--color-text-secondary)',
+                  background: streak.guaranteedToday ? 'rgba(168,85,247,0.18)' : 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${streak.guaranteedToday ? 'rgba(168,85,247,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                  color: streak.guaranteedToday ? '#f5d0fe' : 'var(--color-text-secondary)',
                   fontSize: '0.75rem',
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   letterSpacing: '0.04em',
                 }}
               >
-                {spinStatus.streak.guaranteedToday ? 'Epic Ready' : `${spinStatus.streak.spinsRemaining} Days Left`}
+                {streak.guaranteedToday ? 'Epic Ready' : `${streak.spinsRemaining} Days Left`}
               </div>
             </div>
 
@@ -328,7 +329,7 @@ export function DailySpinWidget() {
             >
               <div
                 style={{
-                  width: `${Math.max(6, Math.min(100, (spinStatus.streak.current / spinStatus.streak.target) * 100))}%`,
+                  width: `${Math.max(6, Math.min(100, (streak.current / streak.target) * 100))}%`,
                   height: '100%',
                   borderRadius: 999,
                   background: 'linear-gradient(90deg, #7c3aed, #c084fc)',
@@ -340,15 +341,15 @@ export function DailySpinWidget() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(${spinStatus.streak.target}, minmax(0, 1fr))`,
+                gridTemplateColumns: `repeat(${streak.target}, minmax(0, 1fr))`,
                 gap: 6,
                 marginBottom: 12,
               }}
             >
-              {Array.from({ length: spinStatus.streak.target }, (_, index) => {
+              {Array.from({ length: streak.target }, (_, index) => {
                 const day = index + 1;
-                const completed = day <= spinStatus.streak.current;
-                const finalDay = day === spinStatus.streak.target;
+                const completed = day <= streak.current;
+                const finalDay = day === streak.target;
 
                 return (
                   <div
@@ -386,9 +387,9 @@ export function DailySpinWidget() {
             </div>
 
             <div style={{ fontSize: '0.82rem', color: '#e9d5ff' }}>
-              {spinStatus.streak.guaranteedToday
+              {streak.guaranteedToday
                 ? 'Spin today and the reward will be guaranteed from the epic pool.'
-                : `Keep the streak alive for ${spinStatus.streak.spinsRemaining} more day${spinStatus.streak.spinsRemaining === 1 ? '' : 's'} to unlock a guaranteed epic reward.`}
+                : `Keep the streak alive for ${streak.spinsRemaining} more day${streak.spinsRemaining === 1 ? '' : 's'} to unlock a guaranteed epic reward.`}
             </div>
           </div>
         )}
