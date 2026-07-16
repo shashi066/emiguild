@@ -4,6 +4,9 @@ import { auth } from '@/auth';
 import crypto from 'crypto';
 import { encryptNumber } from '@/lib/crypto';
 
+const STREAK_EPIC_TARGET = 10;
+const STREAK_RESET_RARITIES = new Set(['EPIC', 'LEGENDARY']);
+
 // Helper to get the effective "spin date" in YYYY-MM-DD format (IST)
 // If the current IST hour is less than resetHour, it counts as the previous day.
 function getEffectiveSpinDate(resetHour: number = 0): { spinDate: string; nextReset: Date } {
@@ -80,6 +83,89 @@ async function getSettings() {
   };
 }
 
+function parseSpinDate(spinDate: string) {
+  return new Date(`${spinDate}T00:00:00.000Z`);
+}
+
+function formatSpinDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(spinDate: string, days: number) {
+  const date = parseSpinDate(spinDate);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatSpinDate(date);
+}
+
+function isStreakResetReward(spin: { lootItem?: { rarity?: string | null } | null }) {
+  const rarity = spin.lootItem?.rarity?.toUpperCase() ?? 'COMMON';
+  return STREAK_RESET_RARITIES.has(rarity);
+}
+
+function calculateCurrentStreak(
+  spins: Array<{ spinDate: string; lootItem?: { rarity?: string | null } | null }>,
+  effectiveToday: string
+) {
+  const spinByDate = new Map(spins.map((spin) => [spin.spinDate, spin]));
+  const todaySpin = spinByDate.get(effectiveToday);
+
+  let cursor = todaySpin ? effectiveToday : addDays(effectiveToday, -1);
+  let streak = 0;
+
+  while (true) {
+    const spin = spinByDate.get(cursor);
+    if (!spin || isStreakResetReward(spin)) {
+      break;
+    }
+
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+
+  return streak;
+}
+
+function pickWeightedItem<T extends { weight: number }>(items: T[]) {
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+  const randomVal = crypto.randomInt(0, totalWeight);
+
+  let cumulativeWeight = 0;
+  for (const item of items) {
+    cumulativeWeight += item.weight;
+    if (randomVal < cumulativeWeight) {
+      return item;
+    }
+  }
+
+  return items[0];
+}
+
+async function getUserStreakSnapshot(userId: string, effectiveToday: string) {
+  const spins = await prisma.userDailySpin.findMany({
+    where: { userId },
+    select: {
+      spinDate: true,
+      lootItem: {
+        select: {
+          rarity: true,
+        },
+      },
+    },
+    orderBy: {
+      spinDate: 'desc',
+    },
+  });
+
+  const current = calculateCurrentStreak(spins, effectiveToday);
+
+  return {
+    current,
+    target: STREAK_EPIC_TARGET,
+    guaranteedToday: current + 1 >= STREAK_EPIC_TARGET,
+    spinsRemaining: Math.max(0, STREAK_EPIC_TARGET - current),
+  };
+}
+
 export async function GET() {
   const session = await auth();
   if (!session || !session.user) {
@@ -105,6 +191,8 @@ export async function GET() {
         lootItem: true
       }
     });
+
+    const streak = await getUserStreakSnapshot(session.user.id, spinDate);
 
     let canSpin = true;
     let remainingRetries = settings.retriesEnabled ? settings.maxRetries : 0;
@@ -137,6 +225,7 @@ export async function GET() {
       canSpin,
       spin: encryptedSpin,
       remainingRetries,
+      streak,
       nextReset: nextReset.toISOString(),
       lootItems: encryptedItems,
     });
@@ -193,21 +282,19 @@ export async function POST() {
       return NextResponse.json({ error: 'No rewards available' }, { status: 500 });
     }
 
-    const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+    const streakBeforeSpin = await getUserStreakSnapshot(session.user.id, spinDate);
+    const eligibleEpicItems = items.filter((item) => {
+      const rarity = item.rarity?.toUpperCase() ?? 'COMMON';
+      return rarity === 'EPIC';
+    });
 
-    // Crypto secure random integer between 0 (inclusive) and totalWeight (exclusive)
-    const randomVal = crypto.randomInt(0, totalWeight);
+    const isGuaranteedEpicSpin =
+      streakBeforeSpin.guaranteedToday &&
+      eligibleEpicItems.length > 0;
 
-    let selectedItem = items[0];
-    let cumulativeWeight = 0;
-
-    for (const item of items) {
-      cumulativeWeight += item.weight;
-      if (randomVal < cumulativeWeight) {
-        selectedItem = item;
-        break;
-      }
-    }
+    const selectedItem = isGuaranteedEpicSpin
+      ? pickWeightedItem(eligibleEpicItems)
+      : pickWeightedItem(items);
 
     // 3. Record the spin
     const spinRecord = await prisma.userDailySpin.upsert({
@@ -248,6 +335,13 @@ export async function POST() {
       success: true,
       reward: encryptedReward,
       spinRecord: encryptedSpinRecord,
+      streak: {
+        current: 0,
+        target: STREAK_EPIC_TARGET,
+        guaranteedToday: false,
+        spinsRemaining: STREAK_EPIC_TARGET,
+      },
+      streakReward: isGuaranteedEpicSpin,
       nextReset: nextReset.toISOString(),
     });
 
