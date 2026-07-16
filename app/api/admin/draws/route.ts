@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
+import { encryptPhone } from '@/lib/crypto'
 
 async function requireAdmin() {
   const session = await auth()
@@ -22,7 +23,15 @@ export async function GET() {
     orderBy: { createdAt: 'desc' },
   })
 
-  return NextResponse.json({ draws })
+  const encryptedDraws = draws.map((draw) => ({
+    ...draw,
+    winner: draw.winner ? {
+      ...draw.winner,
+      phone: encryptPhone(draw.winner.phone),
+    } : null,
+  }))
+
+  return NextResponse.json({ draws: encryptedDraws })
 }
 
 export async function POST(req: NextRequest) {

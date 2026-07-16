@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { updateBookingSchema } from '@/lib/validations';
 import { addHours } from '@/lib/utils';
+import { encryptPhone } from '@/lib/crypto';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -23,7 +24,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const isAdmin = session.user.role === 'ADMIN';
   if (!isOwner && !isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  return NextResponse.json({ booking });
+  return NextResponse.json({
+    booking: { ...booking, customerPhone: encryptPhone(booking.customerPhone) },
+  });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -79,7 +82,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     },
   });
 
-  return NextResponse.json({ booking: updated });
+  return NextResponse.json({
+    booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
+  });
 }
 
 
@@ -197,7 +202,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     },
   });
 
-  return NextResponse.json({ booking: updated });
+  return NextResponse.json({
+    booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
+  });
 }
 
 

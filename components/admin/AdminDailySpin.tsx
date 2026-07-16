@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Gift, Save, Plus, Trash2, Edit, CheckCircle, AlertCircle, RefreshCw, History } from 'lucide-react';
+import { decryptNumber } from '@/lib/crypto';
 
 type LootItem = {
   id: string;
@@ -77,7 +78,10 @@ export function AdminDailySpin() {
       const itemsData = await itemsRes.json();
       const settingsData = await settingsRes.json();
       
-      setItems(itemsData.items || []);
+      setItems((itemsData.items || []).map((item: any) => ({
+        ...item,
+        weight: decryptNumber(item.weight) ?? 0,
+      })));
       
       const map: Record<string, string> = {};
       (settingsData.settings || []).forEach((s: any) => { map[s.key] = s.value; });

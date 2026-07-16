@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
+import { encryptPhone } from '@/lib/crypto'
 
 export async function POST(
   _req: NextRequest,
@@ -46,7 +47,7 @@ export async function POST(
     winner: {
       id: winner.user.id,
       name: winner.user.name,
-      phone: winner.user.phone,
+      phone: encryptPhone(winner.user.phone),
       email: winner.user.email,
     },
   })
