@@ -67,6 +67,56 @@ const PASSES = [
   },
 ];
 
+const RACING_PASSES = [
+  {
+    id: 'black',
+    name: 'Black Pass',
+    hours: 10,
+    price: 2400,
+    pricePerHr: 240,
+    color: '#d8dee9',
+    glow: 'rgba(124,134,154,0.24)',
+    border: 'rgba(124,134,154,0.42)',
+    bg: 'linear-gradient(135deg, rgba(15,18,28,0.92), rgba(38,43,58,0.72))',
+    icon: '🖤',
+    badge: 'Starter',
+    discount: '20% OFF',
+    savings: 'Save ₹600',
+    line: 'Built for casual racers who want more track time.',
+    perks: [
+      '10 hours of simulator racing',
+      'Valid on weekdays (Mon–Fri)',
+      'Valid for 30 days',
+      'For non-controller simulator stations',
+      'Normal price ₹3,000 · Save ₹600',
+    ],
+  },
+  {
+    id: 'apex',
+    name: 'Apex Pass',
+    hours: 15,
+    price: 3150,
+    pricePerHr: 210,
+    color: '#67e8f9',
+    glow: 'rgba(34,211,238,0.24)',
+    border: 'rgba(34,211,238,0.42)',
+    bg: 'linear-gradient(135deg, rgba(8,34,44,0.92), rgba(0,153,184,0.22))',
+    icon: '⚡',
+    badge: 'Best Value',
+    discount: '30% OFF',
+    savings: 'Save ₹1,350',
+    line: 'For racers who want maximum speed, sessions, and savings.',
+    featured: true,
+    perks: [
+      '15 hours of simulator racing',
+      'Valid on weekdays (Mon–Fri)',
+      'Valid for 30 days',
+      'For non-controller simulator stations',
+      'Normal price ₹4,500 · Save ₹1,350',
+    ],
+  },
+];
+
 export default function MonthlyPasses() {
   const [open, setOpen] = useState(false);
 
@@ -272,6 +322,141 @@ export default function MonthlyPasses() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div style={{ marginTop: 30 }}>
+              <div style={{ textAlign: 'center', marginBottom: 22 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: '0.1em', color: '#38bdf8',
+                  background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.25)',
+                  padding: '4px 12px', borderRadius: '999px', marginBottom: 10,
+                }}>
+                  <Award size={11} /> Racing Simulator Plans
+                </div>
+                <h3 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>
+                  🏎️ Racing Simulator Passes
+                </h3>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginTop: 6 }}>
+                  Own the track. Save big. Race more.
+                </p>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: 20,
+              }}>
+                {RACING_PASSES.map((pass) => (
+                  <div
+                    key={pass.id}
+                    style={{
+                      position: 'relative',
+                      background: `var(--color-bg-card)`,
+                      border: `1px solid ${pass.featured ? pass.border : 'var(--color-border)'}`,
+                      borderRadius: 'var(--radius-xl)',
+                      padding: '28px 24px',
+                      boxShadow: pass.featured ? `0 0 30px ${pass.glow}` : 'none',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      background: pass.bg,
+                      borderRadius: 'inherit',
+                      pointerEvents: 'none',
+                    }} />
+
+                    <div style={{
+                      position: 'absolute', top: 16, right: 16,
+                      background: pass.bg,
+                      border: `1px solid ${pass.border}`,
+                      color: pass.color,
+                      fontSize: '0.68rem', fontWeight: 800,
+                      textTransform: 'uppercase', letterSpacing: '0.08em',
+                      padding: '3px 10px', borderRadius: '999px',
+                    }}>
+                      {pass.badge}
+                    </div>
+
+                    <div style={{ position: 'relative' }}>
+                      <div style={{ fontSize: '2.2rem', marginBottom: 8 }}>{pass.icon}</div>
+                      <div style={{ fontWeight: 800, fontSize: '1.15rem', color: 'var(--color-text-primary)', marginBottom: 4 }}>
+                        {pass.name}
+                      </div>
+                      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginBottom: 14, lineHeight: 1.55 }}>
+                        {pass.line}
+                      </p>
+
+                      <div style={{ marginBottom: 20 }}>
+                        <span style={{ fontSize: '2rem', fontWeight: 900, color: pass.color }}>
+                          ₹{pass.price.toLocaleString('en-IN')}
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: 6 }}>
+                          / 30 days
+                        </span>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                          {pass.hours} Hours  ·  {pass.discount}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: pass.color, marginTop: 4, fontWeight: 700 }}>
+                          {pass.savings}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          fontSize: '0.75rem', fontWeight: 600,
+                          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                          padding: '4px 10px', borderRadius: '999px', color: 'var(--color-text-secondary)',
+                        }}>
+                          <Clock size={11} /> {pass.hours} hrs
+                        </span>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          fontSize: '0.75rem', fontWeight: 700,
+                          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                          padding: '4px 10px', borderRadius: '999px', color: pass.color,
+                        }}>
+                          {pass.discount}
+                        </span>
+                      </div>
+
+                      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {pass.perks.map((perk) => (
+                          <li key={perk} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
+                            <CheckCircle size={13} style={{ color: pass.color, flexShrink: 0 }} />
+                            {perk}
+                          </li>
+                        ))}
+                      </ul>
+
+                      <a
+                        href="tel:+919989562474"
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                          width: '100%', padding: '11px 16px',
+                          borderRadius: 'var(--radius-md)',
+                          background: pass.featured
+                            ? `linear-gradient(135deg, ${pass.color}, ${pass.color}cc)`
+                            : pass.bg,
+                          border: `1px solid ${pass.border}`,
+                          color: pass.featured ? '#08111f' : pass.color,
+                          fontWeight: 700, fontSize: '0.875rem',
+                          textDecoration: 'none',
+                          cursor: 'pointer',
+                          transition: 'opacity 0.15s',
+                        }}
+                      >
+                        <Phone size={14} />
+                        Call to Purchase
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Footer note */}

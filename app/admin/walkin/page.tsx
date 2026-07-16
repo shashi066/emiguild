@@ -28,7 +28,7 @@ type WalkinBooking = {
 };
 type FoundUser = { id: string; name: string; email: string; phone: string | null };
 type ActivePass = { id: string; passType: string; totalHours: number; usedHours: number; expiresAt: string };
-const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700' };
+const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700', BLACK: '#d8dee9', APEX: '#67e8f9' };
 
 // DURATION_OPTIONS is now generated dynamically via getDurationOptions()
 
@@ -67,7 +67,7 @@ export default function WalkinBookingPage() {
   const [userQuery, setUserQuery]       = useState('');
   const [showUserDrop, setShowUserDrop] = useState(false);
   const [selectedUser, setSelectedUser] = useState<FoundUser | null>(null);
-  const [activePass, setActivePass]     = useState<ActivePass | null>(null);
+  const [activePasses, setActivePasses] = useState<ActivePass[]>([]);
   const [usePass, setUsePass]           = useState(false);
   const [loadingPass, setLoadingPass]   = useState(false);
   const userWrapRef = useRef<HTMLDivElement>(null);
@@ -130,17 +130,24 @@ export default function WalkinBookingPage() {
   }, [form.stationId, form.date]);
 
   const selectedStation = stations.find((s) => s.id === form.stationId);
-  const stationPassAllowed = selectedStation?.hasControllers !== false;
+  const activePass = selectedStation
+    ? activePasses.find((pass) =>
+        selectedStation.hasControllers
+          ? ['BRONZE', 'SILVER', 'GOLD'].includes(pass.passType)
+          : ['BLACK', 'APEX'].includes(pass.passType)
+      ) ?? null
+    : null;
+  const stationPassAllowed = selectedStation != null;
   const controllerCharge = form.extraControllers * controllerPrice * form.duration;
   const sessionCost = selectedStation ? selectedStation.hourlyRate * form.duration : 0;
   const priceBeforeDiscount = (usePass ? 0 : sessionCost) + controllerCharge;
   const estimatedTotal = Math.round(priceBeforeDiscount * (1 - form.discount / 100));
 
   useEffect(() => {
-    if (!stationPassAllowed && usePass) {
+    if (!activePass && usePass) {
       setUsePass(false);
     }
-  }, [stationPassAllowed, usePass]);
+  }, [activePass, usePass]);
 
   // Filtered user list for dropdown
   const filteredUsers = userQuery.trim().length < 1 ? [] : allUsers.filter((u) => {
@@ -150,13 +157,13 @@ export default function WalkinBookingPage() {
 
   const fetchPassForUser = async (userId: string) => {
     setLoadingPass(true);
-    setActivePass(null);
+    setActivePasses([]);
     setUsePass(false);
     try {
       const res = await fetch(`/api/admin/passes?userId=${userId}`);
       if (res.ok) {
         const data = await res.json();
-        setActivePass((data.passes ?? [])[0] ?? null);
+        setActivePasses(data.passes ?? []);
       }
     } finally {
       setLoadingPass(false);
@@ -177,7 +184,7 @@ export default function WalkinBookingPage() {
 
   const handleClearUser = () => {
     setSelectedUser(null);
-    setActivePass(null);
+    setActivePasses([]);
     setUsePass(false);
     setUserQuery('');
     setForm((f) => ({ ...f, customerName: '', customerPhone: '' }));
@@ -187,7 +194,7 @@ export default function WalkinBookingPage() {
   const resetForm = () => {
     setForm({ customerName: '', customerPhone: '', stationId: '', date: getTodayString(), startTime: '10:00', duration: 2, extraControllers: 0, discount: 0, notes: '' });
     setSelectedUser(null);
-    setActivePass(null);
+    setActivePasses([]);
     setUsePass(false);
     setUserQuery('');
   };
@@ -214,6 +221,7 @@ export default function WalkinBookingPage() {
           ...form,
           duration: Number(form.duration),
           usePass,
+          passId: usePass ? activePass?.id ?? null : null,
           linkedUserId: selectedUser?.id ?? null,
         }),
       });
@@ -651,7 +659,7 @@ export default function WalkinBookingPage() {
                       <option value="">Select a station...</option>
                       {stations.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name} — {formatCurrency(s.hourlyRate)}/hr{s.hasControllers === false ? ' · Pass blocked' : ''}
+                          {s.name} — {formatCurrency(s.hourlyRate)}/hr{s.hasControllers === false ? ' · Racing pass eligible' : ''}
                         </option>
                       ))}
                     </select>
@@ -806,11 +814,6 @@ export default function WalkinBookingPage() {
                       }} />
                     </button>
                   </div>
-                  {!stationPassAllowed && (
-                    <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: 10 }}>
-                      This station does not allow monthly pass bookings.
-                    </div>
-                  )}
                   {usePass && (
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', display: 'flex', gap: 16 }}>
                       <span>✅ Session cost: <s style={{ opacity: 0.5 }}>{selectedStation ? `₹${(selectedStation.hourlyRate * form.duration).toLocaleString('en-IN')}` : '—'}</s> <strong style={{ color: 'var(--color-accent-success)' }}>₹0</strong></span>
@@ -821,10 +824,10 @@ export default function WalkinBookingPage() {
               )}
 
               {/* No pass found for registered user */}
-              {selectedUser && !activePass && !loadingPass && (
+              {selectedUser && selectedStation && !activePass && !loadingPass && (
                 <div style={{ padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', fontSize: '0.8rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Award size={13} />
-                  {selectedUser.name} has no active pass — booking will be charged normally.
+                  {selectedUser.name} has no compatible pass for this station — booking will be charged normally.
                 </div>
               )}
 

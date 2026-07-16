@@ -59,9 +59,9 @@ export default function BookPageInner() {
   const [controllerPrice, setControllerPrice]   = useState(0);
   const [notes, setNotes]                       = useState('');
   const [usePass, setUsePass]                   = useState(false);
-  const [activePass, setActivePass]             = useState<{
+  const [activePasses, setActivePasses]         = useState<Array<{
     id: string; passType: string; totalHours: number; usedHours: number; expiresAt: string;
-  } | null>(null);
+  }>>([]);
 
   const controllerSectionRef = useRef<HTMLDivElement>(null);
   // Load stations
@@ -82,9 +82,9 @@ export default function BookPageInner() {
   useEffect(() => {
     if (session?.user) {
       fetch('/api/user/pass')
-        .then((r) => (r.ok ? r.json() : { pass: null }))
-        .then((d) => setActivePass(d.pass ?? null))
-        .catch(() => setActivePass(null));
+        .then((r) => (r.ok ? r.json() : { passes: [] }))
+        .then((d) => setActivePasses(d.passes ?? []))
+        .catch(() => setActivePasses([]));
     }
   }, [session]);
 
@@ -122,13 +122,20 @@ export default function BookPageInner() {
   const controllerCharge = extraControllers * controllerPrice * selectedDuration;
   const sessionCost = selectedStation ? selectedStation.hourlyRate * selectedDuration : 0;
   const totalPrice = (usePass ? 0 : sessionCost) + controllerCharge;
-  const stationPassAllowed = selectedStation?.hasControllers !== false;
+  const stationPassAllowed = selectedStation != null;
+  const compatiblePass = selectedStation
+    ? activePasses.find((pass) =>
+        selectedStation.hasControllers
+          ? ['BRONZE', 'SILVER', 'GOLD'].includes(pass.passType)
+          : ['BLACK', 'APEX'].includes(pass.passType)
+      ) ?? null
+    : null;
 
   useEffect(() => {
-    if (!stationPassAllowed && usePass) {
+    if (!compatiblePass && usePass) {
       setUsePass(false);
     }
-  }, [stationPassAllowed, usePass]);
+  }, [compatiblePass, usePass]);
 
   const handleSubmit = async () => {
     if (!session) {
@@ -149,6 +156,7 @@ export default function BookPageInner() {
           extraControllers,
           notes,
           usePass,
+          passId: compatiblePass?.id ?? null,
         }),
       });
       const data = await res.json();
@@ -330,7 +338,7 @@ export default function BookPageInner() {
                       <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
                         padding: '4px 9px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
                         background: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
-                        🛑 Pass not accepted
+                        🏎️ Racing Passes
                       </div>
                     )}
                     <div className="station-footer">
@@ -566,12 +574,34 @@ export default function BookPageInner() {
 
             {selectedTime && (
               <>
+                {activePasses.length > 0 && !compatiblePass && (
+                  <div className="alert alert-info" style={{ marginTop: 'var(--space-lg)' }}>
+                    <Award size={16} />
+                    {selectedStation?.hasControllers
+                      ? 'This station uses Bronze, Silver, or Gold passes.'
+                      : 'This station uses Black or Apex simulator passes.'}
+                  </div>
+                )}
+
                 {/* Pass payment toggle */}
-                {activePass && (() => {
-                  const remaining = activePass.totalHours - activePass.usedHours;
+                {compatiblePass && (() => {
+                  const remaining = compatiblePass.totalHours - compatiblePass.usedHours;
                   const canUse = remaining >= selectedDuration && stationPassAllowed;
-                  const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700' };
-                  const color = PASS_COLOR[activePass.passType] ?? '#FFD700';
+                  const PASS_COLOR: Record<string, string> = {
+                    BRONZE: '#cd7f32',
+                    SILVER: '#c0c0c0',
+                    GOLD: '#FFD700',
+                    BLACK: '#d8dee9',
+                    APEX: '#67e8f9',
+                  };
+                  const PASS_BG: Record<string, string> = {
+                    BRONZE: '205,127,50',
+                    SILVER: '192,192,192',
+                    GOLD: '255,215,0',
+                    BLACK: '216,222,233',
+                    APEX: '103,232,249',
+                  };
+                  const color = PASS_COLOR[compatiblePass.passType] ?? '#FFD700';
                   return (
                     <div style={{ marginTop: 'var(--space-lg)' }}>
                       <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
@@ -586,7 +616,7 @@ export default function BookPageInner() {
                             display: 'flex', alignItems: 'center', gap: 12,
                             padding: '14px 16px', borderRadius: 'var(--radius-md)', textAlign: 'left',
                             border: `2px solid ${usePass ? color : canUse ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
-                            background: usePass ? `rgba(${activePass.passType === 'BRONZE' ? '205,127,50' : activePass.passType === 'SILVER' ? '192,192,192' : '255,215,0'},0.08)` : 'var(--color-bg-card)',
+                            background: usePass ? `rgba(${PASS_BG[compatiblePass.passType] ?? '255,215,0'},0.08)` : 'var(--color-bg-card)',
                             cursor: canUse ? 'pointer' : 'not-allowed',
                             opacity: canUse ? 1 : 0.5,
                             transition: 'all 0.15s',
@@ -598,12 +628,10 @@ export default function BookPageInner() {
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 700, fontSize: '0.875rem', color: usePass ? color : 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                               <Award size={14} />
-                              Use {activePass.passType.charAt(0) + activePass.passType.slice(1).toLowerCase()} Pass
+                              Use {compatiblePass.passType.charAt(0) + compatiblePass.passType.slice(1).toLowerCase()} Pass
                             </div>
                             <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              {!stationPassAllowed
-                                ? 'This station does not allow monthly pass bookings.'
-                                : canUse
+                              {canUse
                                 ? `${remaining} hrs remaining → ${remaining - selectedDuration} after this session`
                                 : `Only ${remaining} hr(s) left — need ${selectedDuration} hr(s)`}
                             </div>

@@ -4,16 +4,19 @@ import { useEffect, useRef, useState } from 'react';
 import { Search, Award, CheckCircle, AlertCircle, Calendar, User, X, ChevronDown, Ban } from 'lucide-react';
 import { decryptPhone } from '@/lib/crypto';
 
-type PassType = 'BRONZE' | 'SILVER' | 'GOLD';
+type PassType = 'BRONZE' | 'SILVER' | 'GOLD' | 'BLACK' | 'APEX';
 
 const PASS_OPTIONS: { type: PassType; icon: string; hours: number; price: number; label: string }[] = [
   { type: 'BRONZE', icon: '🥉', label: 'Bronze Pass', hours: 10, price: 1300 },
   { type: 'SILVER', icon: '🥈', label: 'Silver Pass', hours: 20, price: 2300 },
   { type: 'GOLD',   icon: '🥇', label: 'Gold Pass',   hours: 30, price: 3000 },
+  { type: 'BLACK',  icon: '🖤', label: 'Black Pass',  hours: 10, price: 2400 },
+  { type: 'APEX',   icon: '⚡', label: 'Apex Pass',   hours: 15, price: 3150 },
 ];
 
 const PASS_COLOR: Record<PassType, string> = {
   BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700',
+  BLACK: '#d8dee9', APEX: '#67e8f9',
 };
 
 type UserItem = { id: string; name: string; email: string; phone: string | null };
@@ -277,6 +280,8 @@ export default function AdminPassesPage() {
         .pass-type-btn.active-bronze { border-color: #cd7f32; background: rgba(205,127,50,0.08); box-shadow: 0 0 16px rgba(205,127,50,0.2); }
         .pass-type-btn.active-silver { border-color: #c0c0c0; background: rgba(192,192,192,0.08); box-shadow: 0 0 16px rgba(192,192,192,0.2); }
         .pass-type-btn.active-gold   { border-color: #FFD700; background: rgba(255,215,0,0.08);  box-shadow: 0 0 16px rgba(255,215,0,0.2); }
+        .pass-type-btn.active-black  { border-color: #d8dee9; background: linear-gradient(135deg, rgba(15,18,28,0.9), rgba(38,43,58,0.68)); box-shadow: 0 0 18px rgba(124,134,154,0.24); }
+        .pass-type-btn.active-apex   { border-color: #67e8f9; background: linear-gradient(135deg, rgba(8,34,44,0.9), rgba(0,153,184,0.2)); box-shadow: 0 0 18px rgba(34,211,238,0.24); }
       `}</style>
 
       <div className="page-wrapper">
@@ -406,7 +411,7 @@ export default function AdminPassesPage() {
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
                   Select Pass to Assign
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
                   {PASS_OPTIONS.map((opt) => {
                     const color = PASS_COLOR[opt.type];
                     const active = selectedPass === opt.type;

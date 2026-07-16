@@ -19,6 +19,12 @@ type SpinStatus = {
   remainingRetries: number;
   nextReset: string;
   lootItems?: LootItem[];
+  streak?: {
+    current: number;
+    target: number;
+    guaranteedToday: boolean;
+    spinsRemaining: number;
+  };
 };
 
 const RARITY_COLORS: Record<string, string> = {
@@ -58,6 +64,7 @@ export function DailySpinWidget() {
   const [error, setError]           = useState('');
   const [timeLeft, setTimeLeft]     = useState('');
   const [highlighted, setHighlighted] = useState<number | null>(null);
+  const [streakReward, setStreakReward] = useState(false);
 
   const spinIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -68,6 +75,7 @@ export function DailySpinWidget() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSpinStatus(data);
+      setStreakReward(false);
       if (data.spin) setReward(data.spin.lootItem);
     } catch (err: any) {
       setError(err.message || 'Failed to load status');
@@ -154,6 +162,10 @@ export function DailySpinWidget() {
       .then(data => {
         if (!data.reward) throw new Error(data.error || 'No reward data');
         wonItem = data.reward as LootItem;
+        setStreakReward(Boolean(data.streakReward));
+        if (data.streak) {
+          setSpinStatus((prev) => prev ? { ...prev, streak: data.streak } : prev);
+        }
         // Find first cell index that matches the winner
         const winnerCellIndex = gridItems.findIndex((item) => item.id === wonItem!.id);
         landIndex = winnerCellIndex >= 0 ? winnerCellIndex : 0;
@@ -257,8 +269,131 @@ export function DailySpinWidget() {
             ? 'Test your luck — spin the grid to win a free perk!'
             : 'Come back tomorrow for another drop!'}
         </p>
+        {spinStatus?.streak && (
+          <div
+            style={{
+              marginBottom: 'var(--space-lg)',
+              padding: '16px',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid rgba(168,85,247,0.18)',
+              background: 'linear-gradient(180deg, rgba(168,85,247,0.10), rgba(15,23,42,0.16))',
+              textAlign: 'left',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 12,
+                marginBottom: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#d8b4fe' }}>
+                  Streak To Epic
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc' }}>
+                  Day {Math.min(spinStatus.streak.current, spinStatus.streak.target)} / {spinStatus.streak.target}
+                </div>
+              </div>
+              <div
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  background: spinStatus.streak.guaranteedToday ? 'rgba(168,85,247,0.18)' : 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${spinStatus.streak.guaranteedToday ? 'rgba(168,85,247,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                  color: spinStatus.streak.guaranteedToday ? '#f5d0fe' : 'var(--color-text-secondary)',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {spinStatus.streak.guaranteedToday ? 'Epic Ready' : `${spinStatus.streak.spinsRemaining} Days Left`}
+              </div>
+            </div>
+
+            <div
+              style={{
+                position: 'relative',
+                height: 10,
+                borderRadius: 999,
+                overflow: 'hidden',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                marginBottom: 14,
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.max(6, Math.min(100, (spinStatus.streak.current / spinStatus.streak.target) * 100))}%`,
+                  height: '100%',
+                  borderRadius: 999,
+                  background: 'linear-gradient(90deg, #7c3aed, #c084fc)',
+                  transition: 'width 220ms ease',
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${spinStatus.streak.target}, minmax(0, 1fr))`,
+                gap: 6,
+                marginBottom: 12,
+              }}
+            >
+              {Array.from({ length: spinStatus.streak.target }, (_, index) => {
+                const day = index + 1;
+                const completed = day <= spinStatus.streak.current;
+                const finalDay = day === spinStatus.streak.target;
+
+                return (
+                  <div
+                    key={day}
+                    title={`Day ${day}`}
+                    style={{
+                      height: 24,
+                      borderRadius: 999,
+                      border: `1px solid ${
+                        finalDay
+                          ? 'rgba(168,85,247,0.5)'
+                          : completed
+                          ? 'rgba(192,132,252,0.35)'
+                          : 'rgba(255,255,255,0.08)'
+                      }`,
+                      background: finalDay
+                        ? completed
+                          ? 'linear-gradient(180deg, rgba(168,85,247,0.95), rgba(126,34,206,0.9))'
+                          : 'rgba(168,85,247,0.10)'
+                        : completed
+                        ? 'rgba(192,132,252,0.24)'
+                        : 'rgba(255,255,255,0.03)',
+                      color: finalDay ? '#fdf4ff' : completed ? '#f5d0fe' : 'var(--color-text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {finalDay ? 'EPIC' : day}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ fontSize: '0.82rem', color: '#e9d5ff' }}>
+              {spinStatus.streak.guaranteedToday
+                ? 'Spin today and the reward will be guaranteed from the epic pool.'
+                : `Keep the streak alive for ${spinStatus.streak.spinsRemaining} more day${spinStatus.streak.spinsRemaining === 1 ? '' : 's'} to unlock a guaranteed epic reward.`}
+            </div>
+          </div>
+        )}
         <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', textAlign: 'left', fontSize: '0.86rem' }}>
-          Daily spin gifts are redeemable only with a booking made on the same day.
+          Daily spin gifts are redeemable only with a booking made on the same day. Missing a day breaks the streak, and epic-tier drops reset it.
         </div>
 
         {error && <div className="alert alert-error" style={{ marginBottom: 'var(--space-lg)' }}>{error}</div>}
@@ -374,6 +509,27 @@ export function DailySpinWidget() {
             <h3 style={{ fontSize: '1.4rem', color: rarityColor(reward), marginBottom: 'var(--space-xs)' }}>
               🎉 {reward.name}
             </h3>
+            {streakReward && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  borderRadius: 999,
+                  background: 'rgba(168,85,247,0.14)',
+                  border: '1px solid rgba(168,85,247,0.35)',
+                  color: '#f5d0fe',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  marginBottom: 'var(--space-sm)',
+                }}
+              >
+                Guaranteed streak epic unlocked
+              </div>
+            )}
             {reward.description && (
               <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-md)', fontSize: '0.9rem' }}>
                 {reward.description}

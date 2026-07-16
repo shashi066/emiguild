@@ -6,6 +6,8 @@ const PASS_CONFIG = {
   BRONZE: { totalHours: 10, price: 1300 },
   SILVER: { totalHours: 20, price: 2300 },
   GOLD:   { totalHours: 30, price: 3000 },
+  BLACK:  { totalHours: 10, price: 2400 },
+  APEX:   { totalHours: 15, price: 3150 },
 } as const;
 
 // GET /api/admin/passes?userId=xxx — get a specific user's active passes
