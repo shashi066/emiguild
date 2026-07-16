@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { encryptNumber } from '@/lib/crypto';
 
 // PATCH /api/admin/daily-spin/items/[id]
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -27,7 +28,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
 
-    return NextResponse.json({ item });
+    return NextResponse.json({
+      item: { ...item, weight: encryptNumber(item.weight) },
+    });
   } catch (error) {
     console.error('Error updating loot item:', error);
     return NextResponse.json({ error: 'Failed to update item' }, { status: 500 });

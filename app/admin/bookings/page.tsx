@@ -10,6 +10,7 @@ import {
   formatCurrency, formatDate, formatTime,
   getTimeSlotsForDate, CLOSING_HOUR, getTodayString, isSlotAvailable,
 } from '@/lib/utils';
+import { decryptPhone } from '@/lib/crypto';
 
 type Station = { id: string; name: string; hourlyRate: number };
 
@@ -134,7 +135,10 @@ function EditModal({
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Failed to update.'); return; }
-      onSaved(data.booking);
+      onSaved({
+        ...data.booking,
+        customerPhone: decryptPhone(data.booking.customerPhone),
+      });
     } catch {
       setError('Something went wrong.');
     } finally {
@@ -378,7 +382,10 @@ export default function AdminBookingsPage() {
       if (typeFilter)   params.set('bookingType', typeFilter);
       const res = await fetch(`/api/bookings?${params}`);
       const data = await res.json();
-      setBookings(data.bookings ?? []);
+      setBookings((data.bookings ?? []).map((booking: Booking) => ({
+        ...booking,
+        customerPhone: decryptPhone(booking.customerPhone),
+      })));
       setTotal(data.total ?? 0);
     } catch {
       setError('Failed to load bookings.');

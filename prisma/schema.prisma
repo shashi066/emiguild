@@ -20,11 +20,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bookings      Booking[]
-  passes        UserPass[]
-  dailySpins    UserDailySpin[]
-  drawEntries   DrawEntry[]
-  wonDraws      LuckyDraw[] @relation("DrawWinner")
+  bookings          Booking[]
+  passes            UserPass[]
+  dailySpins        UserDailySpin[]
+  drawEntries       DrawEntry[]
+  wonDraws          LuckyDraw[] @relation("DrawWinner")
+  tournamentPlayers TournamentPlayer[]
 
   @@map("users")
 }
@@ -183,3 +184,65 @@ model Game {
 
   @@map("games")
 }
+
+model Tournament {
+  id           String   @id @default(cuid())
+  name         String
+  game         String   @default("FC26")
+  date         String   // YYYY-MM-DD
+  entryFee     String   @default("Free")
+  prizePool    String   @default("")
+  maxPlayers   Int      @default(16)
+  status       String   @default("REGISTRATION_OPEN") // REGISTRATION_OPEN | REGISTRATION_CLOSED | ONGOING | FINISHED
+  bracketGenerated Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  players TournamentPlayer[]
+  matches TournamentMatch[]
+
+  @@map("tournaments")
+}
+
+model TournamentPlayer {
+  id           String   @id @default(cuid())
+  tournamentId String
+  userId       String?  // linked to an app user if they self-registered
+  name         String
+  phone        String?
+  seed         Int      @default(0) // display order / seeding
+  createdAt    DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  matchesAsP1 TournamentMatch[] @relation("MatchPlayer1")
+  matchesAsP2 TournamentMatch[] @relation("MatchPlayer2")
+  matchesWon  TournamentMatch[] @relation("MatchWinner")
+
+  @@map("tournament_players")
+}
+
+model TournamentMatch {
+  id           String   @id @default(cuid())
+  tournamentId String
+  round        Int      // 1 = first round, 2 = second, etc.
+  matchIndex   Int      // position within the round (0-indexed)
+  player1Id    String?
+  player2Id    String?
+  score1       Int      @default(0)
+  score2       Int      @default(0)
+  winnerId     String?
+  status       String   @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED
+  isBye        Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament        @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player1    TournamentPlayer? @relation("MatchPlayer1", fields: [player1Id], references: [id], onDelete: SetNull)
+  player2    TournamentPlayer? @relation("MatchPlayer2", fields: [player2Id], references: [id], onDelete: SetNull)
+  winner     TournamentPlayer? @relation("MatchWinner",  fields: [winnerId],  references: [id], onDelete: SetNull)
+
+  @@map("tournament_matches")
+}
+

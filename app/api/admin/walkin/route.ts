@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { addHours } from '@/lib/utils';
 import { notifyAdminNewBooking } from '@/lib/notify';
 import { z } from 'zod';
+import { encryptPhone } from '@/lib/crypto';
 
 const walkinSchema = z.object({
   customerName:     z.string().min(1, 'Customer name is required'),
@@ -47,7 +48,12 @@ export async function GET(req: NextRequest) {
     prisma.booking.count({ where }),
   ]);
 
-  return NextResponse.json({ bookings, total });
+  const encryptedBookings = bookings.map((booking) => ({
+    ...booking,
+    customerPhone: encryptPhone(booking.customerPhone),
+  }));
+
+  return NextResponse.json({ bookings: encryptedBookings, total });
 }
 
 // POST — create a walk-in booking (admin only)
@@ -217,7 +223,9 @@ export async function POST(req: NextRequest) {
       notes:            booking.notes,
     });
 
-    return NextResponse.json({ booking }, { status: 201 });
+    return NextResponse.json({
+      booking: { ...booking, customerPhone: encryptPhone(booking.customerPhone) },
+    }, { status: 201 });
   } catch (error) {
     console.error('Walk-in booking error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

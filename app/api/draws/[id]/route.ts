@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
+import { encryptPhone } from '@/lib/crypto'
 
 export async function GET(
   _req: NextRequest,
@@ -27,7 +28,7 @@ export async function GET(
         ? {
             id: draw.winner.id,
             name: draw.winner.name,
-            phone: isAdmin ? draw.winner.phone : maskPhone(draw.winner.phone),
+            phone: isAdmin ? encryptPhone(draw.winner.phone) : maskPhone(draw.winner.phone),
           }
         : null,
     },
