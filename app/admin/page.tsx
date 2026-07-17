@@ -6,15 +6,17 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatTime, getTodayString } from '@/lib/utils';
+import { AdminRevenueRange } from '@/components/admin/AdminRevenueRange';
 
 async function getDashboardData() {
   const today = getTodayString();
+  const monthStart = `${today.slice(0, 8)}01`;
 
   const [
     totalBookings, todayBookings, pendingBookings,
     confirmedBookings, cancelledBookings, completedBookings,
     totalUsers, activeStations, recentBookings,
-    totalRevenue, todayRevenue,
+    totalRevenue, todayRevenue, monthRevenue, monthBookingCount,
   ] = await Promise.all([
     prisma.booking.count(),
     prisma.booking.count({ where: { date: today } }),
@@ -40,6 +42,19 @@ async function getDashboardData() {
       where: { date: today, status: { not: 'CANCELLED' } },
       _sum: { totalPrice: true },
     }),
+    prisma.booking.aggregate({
+      where: {
+        date: { gte: monthStart, lte: today },
+        status: { not: 'CANCELLED' },
+      },
+      _sum: { totalPrice: true },
+    }),
+    prisma.booking.count({
+      where: {
+        date: { gte: monthStart, lte: today },
+        status: { not: 'CANCELLED' },
+      },
+    }),
   ]);
 
   return {
@@ -48,6 +63,10 @@ async function getDashboardData() {
     totalUsers, activeStations, recentBookings,
     totalRevenue: totalRevenue._sum.totalPrice ?? 0,
     todayRevenue: todayRevenue._sum.totalPrice ?? 0,
+    monthRevenue: monthRevenue._sum.totalPrice ?? 0,
+    monthBookingCount,
+    monthStart,
+    today,
   };
 }
 
@@ -193,7 +212,6 @@ export default async function AdminDashboard() {
             {[
               { label: "Today's Revenue", value: data.todayRevenue, color: '#00e676' },
               { label: 'Total Revenue', value: data.totalRevenue, color: '#6c63ff' },
-              { label: 'Avg per Booking', value: data.totalBookings > 0 ? data.totalRevenue / data.totalBookings : 0, color: '#00d4ff' },
             ].map((item) => (
               <div key={item.label} className="booking-detail-item">
                 <div className="booking-detail-label">{item.label}</div>
@@ -202,6 +220,12 @@ export default async function AdminDashboard() {
                 </div>
               </div>
             ))}
+            <AdminRevenueRange
+              initialFrom={data.monthStart}
+              initialTo={data.today}
+              initialRevenue={data.monthRevenue}
+              initialBookingCount={data.monthBookingCount}
+            />
           </div>
         </div>
       </div>
