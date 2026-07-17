@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   Award, Clock, Calendar, Phone, CheckCircle,
-  Star, Zap, ArrowRight,
+  Star, Zap, ArrowRight, ArrowLeft,
 } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -103,6 +103,12 @@ const PERKS = [
 export default function PassesPage() {
   return (
     <div style={{ minHeight: '100vh', paddingTop: 80 }}>
+      <div className="container" style={{ marginBottom: 'var(--space-lg)' }}>
+        <Link href="/" className="btn btn-ghost btn-sm">
+          <ArrowLeft size={16} />
+          Back to Home
+        </Link>
+      </div>
 
       {/* ── Hero ── */}
       <section

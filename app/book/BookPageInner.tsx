@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   Calendar, Monitor, Clock, CheckCircle, ChevronRight,
-  ChevronLeft, AlertCircle, Zap, Snowflake, Gamepad2, Plus, Minus, Award,
+  ChevronLeft, AlertCircle, Zap, Snowflake, Gamepad2, Plus, Minus, Award, ArrowLeft,
 } from 'lucide-react';
 import {
   TIME_SLOTS, DURATION_OPTIONS, CLOSING_HOUR, formatTime, formatDate,
@@ -187,6 +187,11 @@ export default function BookPageInner() {
   return (
     <div className="page-wrapper">
       <div className="container-sm">
+        <Link href="/" className="btn btn-ghost btn-sm" style={{ marginBottom: 'var(--space-lg)' }}>
+          <ArrowLeft size={16} />
+          Back to Home
+        </Link>
+
         {/* Header */}
         <div style={{ marginBottom: 'var(--space-2xl)' }}>
           <h1 className="page-title">
