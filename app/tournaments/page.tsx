@@ -102,9 +102,11 @@ export default function TournamentsPage() {
                   </div>
 
                   <div className="tourn-card-stats">
-                    <div className="tourn-stat">
-                      <div className="tourn-stat-val">{t.prizePool || '—'}</div>
-                      <div className="tourn-stat-lbl">Winner Reward</div>
+                    <div className="tourn-stat tourn-stat--reward">
+                      <div className="tourn-stat-pill">Winner Reward</div>
+                      <div className="tourn-stat-val tourn-stat-val--reward">
+                        {t.prizePool || 'Reward TBA'}
+                      </div>
                     </div>
                     <div className="tourn-stat">
                       <div className="tourn-stat-val">{t.entryFee || 'Free'}</div>

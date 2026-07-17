@@ -1,19 +1,22 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Search, Award, CheckCircle, AlertCircle, Calendar, User, X, ChevronDown } from 'lucide-react';
+import { Search, Award, CheckCircle, AlertCircle, Calendar, User, X, ChevronDown, Ban } from 'lucide-react';
 import { decryptPhone } from '@/lib/crypto';
 
-type PassType = 'BRONZE' | 'SILVER' | 'GOLD';
+type PassType = 'BRONZE' | 'SILVER' | 'GOLD' | 'BLACK' | 'APEX';
 
 const PASS_OPTIONS: { type: PassType; icon: string; hours: number; price: number; label: string }[] = [
   { type: 'BRONZE', icon: '🥉', label: 'Bronze Pass', hours: 10, price: 1300 },
   { type: 'SILVER', icon: '🥈', label: 'Silver Pass', hours: 20, price: 2300 },
   { type: 'GOLD',   icon: '🥇', label: 'Gold Pass',   hours: 30, price: 3000 },
+  { type: 'BLACK',  icon: '🖤', label: 'Black Pass',  hours: 10, price: 2400 },
+  { type: 'APEX',   icon: '⚡', label: 'Apex Pass',   hours: 15, price: 3150 },
 ];
 
 const PASS_COLOR: Record<PassType, string> = {
   BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700',
+  BLACK: '#d8dee9', APEX: '#67e8f9',
 };
 
 type UserItem = { id: string; name: string; email: string; phone: string | null };
@@ -32,6 +35,7 @@ export default function AdminPassesPage() {
   const [loadingPasses, setLoadingPasses] = useState(false);
   const [selectedPass, setSelectedPass]   = useState<PassType>('SILVER');
   const [assigning, setAssigning]         = useState(false);
+  const [revokingPassId, setRevokingPassId] = useState<string | null>(null);
   const [success, setSuccess]             = useState('');
   const [error, setError]                 = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +124,33 @@ export default function AdminPassesPage() {
       setError('Failed to assign pass. Please try again.');
     } finally {
       setAssigning(false);
+    }
+  };
+
+  const handleRevoke = async (passId: string, passType: string) => {
+    if (!selectedUser) return;
+    if (!confirm(`Revoke this ${passType} pass for ${selectedUser.name}?`)) return;
+
+    setRevokingPassId(passId);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch('/api/admin/passes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? 'Failed to revoke pass.');
+      } else {
+        setSuccess(`${passType} pass revoked for ${selectedUser.name}.`);
+        fetchUserPasses(selectedUser.id);
+      }
+    } catch {
+      setError('Failed to revoke pass. Please try again.');
+    } finally {
+      setRevokingPassId(null);
     }
   };
 
@@ -249,6 +280,8 @@ export default function AdminPassesPage() {
         .pass-type-btn.active-bronze { border-color: #cd7f32; background: rgba(205,127,50,0.08); box-shadow: 0 0 16px rgba(205,127,50,0.2); }
         .pass-type-btn.active-silver { border-color: #c0c0c0; background: rgba(192,192,192,0.08); box-shadow: 0 0 16px rgba(192,192,192,0.2); }
         .pass-type-btn.active-gold   { border-color: #FFD700; background: rgba(255,215,0,0.08);  box-shadow: 0 0 16px rgba(255,215,0,0.2); }
+        .pass-type-btn.active-black  { border-color: #d8dee9; background: linear-gradient(135deg, rgba(15,18,28,0.9), rgba(38,43,58,0.68)); box-shadow: 0 0 18px rgba(124,134,154,0.24); }
+        .pass-type-btn.active-apex   { border-color: #67e8f9; background: linear-gradient(135deg, rgba(8,34,44,0.9), rgba(0,153,184,0.2)); box-shadow: 0 0 18px rgba(34,211,238,0.24); }
       `}</style>
 
       <div className="page-wrapper">
@@ -341,11 +374,22 @@ export default function AdminPassesPage() {
                     const color = PASS_COLOR[p.passType as PassType] ?? '#888';
                     return (
                       <div key={p.id} style={{ padding: '12px 16px', background: 'rgba(255,215,0,0.04)', border: '1px solid rgba(255,215,0,0.15)', borderRadius: 'var(--radius-md)', marginBottom: 8 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <span style={{ fontWeight: 700, color, fontSize: '0.85rem' }}>{p.passType} PASS</span>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Calendar size={11} /> Expires {new Date(p.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                          </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
+                          <div>
+                            <span style={{ fontWeight: 700, color, fontSize: '0.85rem' }}>{p.passType} PASS</span>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                              <Calendar size={11} /> Expires {new Date(p.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                            </div>
+                          </div>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)' }}
+                            onClick={() => handleRevoke(p.id, p.passType)}
+                            disabled={revokingPassId === p.id}
+                          >
+                            <Ban size={13} />
+                            {revokingPassId === p.id ? 'Revoking…' : 'Revoke'}
+                          </button>
                         </div>
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                           <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
@@ -367,7 +411,7 @@ export default function AdminPassesPage() {
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
                   Select Pass to Assign
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
                   {PASS_OPTIONS.map((opt) => {
                     const color = PASS_COLOR[opt.type];
                     const active = selectedPass === opt.type;

@@ -6,7 +6,7 @@ import { auth } from '@/auth';
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ pass: null });
+    return NextResponse.json({ pass: null, passes: [] });
   }
 
   try {
@@ -22,7 +22,7 @@ export async function GET() {
       data: { status: 'EXPIRED' },
     });
 
-    const pass = await prisma.userPass.findFirst({
+    const activePasses = await prisma.userPass.findMany({
       where: {
         userId: session.user.id,
         status: 'ACTIVE',
@@ -42,9 +42,12 @@ export async function GET() {
       orderBy: { purchasedAt: 'desc' },
     });
 
-    return NextResponse.json({ pass });
+    const firstPass = activePasses[0];
+    const pass = firstPass ?? null;
+
+    return NextResponse.json({ pass, passes: activePasses });
   } catch (err) {
     console.error('[/api/user/pass] DB error:', err);
-    return NextResponse.json({ pass: null });
+    return NextResponse.json({ pass: null, passes: [] });
   }
 }

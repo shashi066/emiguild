@@ -6,6 +6,15 @@ import { notifyAdminNewBooking } from '@/lib/notify';
 import { z } from 'zod';
 import { encryptPhone } from '@/lib/crypto';
 
+const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
+const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
+
+function isPassTypeAllowedForStation(passType: string, hasControllers: boolean) {
+  return hasControllers
+    ? CONTROLLER_PASS_TYPES.has(passType)
+    : SIMULATOR_PASS_TYPES.has(passType);
+}
+
 const walkinSchema = z.object({
   customerName:     z.string().min(1, 'Customer name is required'),
   customerPhone:    z.string().optional(),
@@ -73,6 +82,7 @@ export async function POST(req: NextRequest) {
     const { customerName, customerPhone, stationId, date, startTime, duration, notes, status, extraControllers: rawExtra } = result.data;
     const endTime = addHours(startTime, duration);
     const extraControllers = Math.min(3, Math.max(0, rawExtra ?? 0));
+    const passId: string | null = typeof body.passId === 'string' ? body.passId : null;
 
     // Check station exists and is active
     const station = await prisma.station.findUnique({ where: { id: stationId } });
@@ -146,17 +156,29 @@ export async function POST(req: NextRequest) {
 
     if (usePass && linkedUserId) {
       const now = new Date();
-      const pass = await prisma.userPass.findFirst({
-        where: {
-          userId: linkedUserId,
-          status: 'ACTIVE',
-          expiresAt: { gte: now },
-        },
-        orderBy: { purchasedAt: 'desc' },
-      });
+      const pass = passId
+        ? await prisma.userPass.findFirst({
+            where: {
+              id: passId,
+              userId: linkedUserId,
+              status: 'ACTIVE',
+              expiresAt: { gte: now },
+            },
+          })
+        : (await prisma.userPass.findMany({
+            where: {
+              userId: linkedUserId,
+              status: 'ACTIVE',
+              expiresAt: { gte: now },
+            },
+            orderBy: { purchasedAt: 'desc' },
+          })).find((candidate) => isPassTypeAllowedForStation(candidate.passType, station.hasControllers)) ?? null;
 
       if (!pass) {
         return NextResponse.json({ error: 'No active pass found for this user.' }, { status: 400 });
+      }
+      if (!isPassTypeAllowedForStation(pass.passType, station.hasControllers)) {
+        return NextResponse.json({ error: 'This pass cannot be used on the selected station.' }, { status: 400 });
       }
       const remaining = pass.totalHours - pass.usedHours;
       if (remaining < duration) {

@@ -24,7 +24,7 @@ type Booking = {
 
 type ActivePass = {
   id: string;
-  passType: 'BRONZE' | 'SILVER' | 'GOLD';
+  passType: 'BRONZE' | 'SILVER' | 'GOLD' | 'BLACK' | 'APEX';
   totalHours: number;
   usedHours: number;
   price: number;
@@ -50,12 +50,14 @@ const PASS_COLOR: Record<string, string> = {
   BRONZE: '#cd7f32',
   SILVER: '#c0c0c0',
   GOLD:   '#FFD700',
+  BLACK:  '#d8dee9',
+  APEX:   '#67e8f9',
 };
-const PASS_ICON: Record<string, string> = { BRONZE: '🥉', SILVER: '🥈', GOLD: '🥇' };
+const PASS_ICON: Record<string, string> = { BRONZE: '🥉', SILVER: '🥈', GOLD: '🥇', BLACK: '🖤', APEX: '⚡' };
 
 export default function MyBookingsPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
-  const [activePass, setActivePass]   = useState<ActivePass | null>(null);
+  const [activePasses, setActivePasses] = useState<ActivePass[]>([]);
   const [loading, setLoading]         = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [error, setError]             = useState('');
@@ -69,9 +71,9 @@ export default function MyBookingsPage() {
         fetch('/api/user/pass'),
       ]);
       const bData = await bRes.json();
-      const pData = pRes.ok ? await pRes.json() : { pass: null };
+      const pData = pRes.ok ? await pRes.json() : { passes: [] };
       setBookings(bData.bookings ?? []);
-      setActivePass(pData.pass ?? null);
+      setActivePasses(pData.passes ?? []);
     } catch {
       setError('Failed to load data.');
     } finally {
@@ -95,7 +97,7 @@ export default function MyBookingsPage() {
         // Refresh pass in case hours were restored
         const pRes = await fetch('/api/user/pass');
         const pData = await pRes.json();
-        setActivePass(pData.pass ?? null);
+        setActivePasses(pData.passes ?? []);
       }
     } finally {
       setCancellingId(null);
@@ -247,7 +249,7 @@ export default function MyBookingsPage() {
         {activeTab === 'pass' && (
           loading ? (
             <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-text-muted)' }}>Loading...</div>
-          ) : !activePass ? (
+          ) : activePasses.length === 0 ? (
             <div className="card">
               <div className="empty-state">
                 <div className="empty-state-icon"><Award size={32} style={{ color: '#FFD700' }} /></div>
@@ -258,91 +260,93 @@ export default function MyBookingsPage() {
                 </Link>
               </div>
             </div>
-          ) : (() => {
-            const color   = PASS_COLOR[activePass.passType];
-            const icon    = PASS_ICON[activePass.passType];
-            const remaining = activePass.totalHours - activePass.usedHours;
-            const pct     = Math.min(100, (activePass.usedHours / activePass.totalHours) * 100);
-            const expires = new Date(activePass.expiresAt);
-            const daysLeft = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / 86400000));
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {/* Pass card */}
-                <div className="card" style={{ border: `1px solid ${color}44`, boxShadow: `0 0 30px ${color}22`, position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at top right, ${color}0d, transparent 60%)`, pointerEvents: 'none' }} />
-                  <div style={{ position: 'relative' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: '2.5rem', marginBottom: 6 }}>{icon}</div>
-                        <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>{activePass.passType.charAt(0) + activePass.passType.slice(1).toLowerCase()} Pass</div>
-                        <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                          Purchased {new Date(activePass.purchasedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} · ₹{activePass.price.toLocaleString('en-IN')}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: '999px', background: activePass.status === 'ACTIVE' ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${activePass.status === 'ACTIVE' ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: '0.78rem', fontWeight: 700, color: activePass.status === 'ACTIVE' ? '#4ade80' : '#ef4444' }}>
-                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
-                          {activePass.status}
-                        </div>
-                        <div style={{ marginTop: 6, fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                          Expires {expires.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                          {daysLeft <= 7 && <span style={{ color: '#f59e0b', marginLeft: 4 }}>({daysLeft} days left)</span>}
-                        </div>
-                      </div>
-                    </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {activePasses.map((activePass) => {
+                const color   = PASS_COLOR[activePass.passType];
+                const icon    = PASS_ICON[activePass.passType];
+                const remaining = activePass.totalHours - activePass.usedHours;
+                const pct     = Math.min(100, (activePass.usedHours / activePass.totalHours) * 100);
+                const expires = new Date(activePass.expiresAt);
+                const daysLeft = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / 86400000));
 
-                    {/* Hours */}
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>Hours used</span>
-                        <span style={{ fontSize: '0.875rem', fontWeight: 700, color }}>
-                          {activePass.usedHours} / {activePass.totalHours} hrs
-                        </span>
-                      </div>
-                      <div style={{ height: 10, background: 'rgba(255,255,255,0.08)', borderRadius: 5, overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${color}99, ${color})`, borderRadius: 5, transition: 'width 0.5s' }} />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{activePass.usedHours} hrs used</span>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color }}>{remaining} hrs remaining</span>
-                      </div>
-                    </div>
-
-                    <Link href="/book" className="btn btn-primary" style={{ display: 'inline-flex' }}>
-                      <Calendar size={16} /> Book a Session with Pass
-                    </Link>
-                  </div>
-                </div>
-
-                {/* Sessions using pass */}
-                {activePass.bookings.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
-                      Sessions Used with This Pass
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {activePass.bookings.map((b) => (
-                        <div key={b.id} className="card" style={{ padding: '12px 16px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{b.station.name}</div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                                {formatDate(b.date)} · {formatTime(b.startTime)} — {formatTime(b.endTime)}
-                              </div>
+                return (
+                  <div key={activePass.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div className="card" style={{ border: `1px solid ${color}44`, boxShadow: `0 0 30px ${color}22`, position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at top right, ${color}0d, transparent 60%)`, pointerEvents: 'none' }} />
+                      <div style={{ position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+                          <div>
+                            <div style={{ fontSize: '2.5rem', marginBottom: 6 }}>{icon}</div>
+                            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>{activePass.passType.charAt(0) + activePass.passType.slice(1).toLowerCase()} Pass</div>
+                            <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                              Purchased {new Date(activePass.purchasedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} · ₹{activePass.price.toLocaleString('en-IN')}
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontWeight: 700, fontSize: '0.875rem', color }}>−{b.passHoursDeducted} hr{b.passHoursDeducted > 1 ? 's' : ''}</div>
-                              <div style={{ fontSize: '0.72rem', color: b.status === 'CANCELLED' ? '#ef4444' : 'var(--color-text-muted)', marginTop: 2, textTransform: 'uppercase', fontWeight: 600 }}>{b.status}</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: '999px', background: activePass.status === 'ACTIVE' ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${activePass.status === 'ACTIVE' ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: '0.78rem', fontWeight: 700, color: activePass.status === 'ACTIVE' ? '#4ade80' : '#ef4444' }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
+                              {activePass.status}
+                            </div>
+                            <div style={{ marginTop: 6, fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                              Expires {expires.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                              {daysLeft <= 7 && <span style={{ color: '#f59e0b', marginLeft: 4 }}>({daysLeft} days left)</span>}
                             </div>
                           </div>
                         </div>
-                      ))}
+
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>Hours used</span>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 700, color }}>
+                              {activePass.usedHours} / {activePass.totalHours} hrs
+                            </span>
+                          </div>
+                          <div style={{ height: 10, background: 'rgba(255,255,255,0.08)', borderRadius: 5, overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${color}99, ${color})`, borderRadius: 5, transition: 'width 0.5s' }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{activePass.usedHours} hrs used</span>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color }}>{remaining} hrs remaining</span>
+                          </div>
+                        </div>
+
+                        <Link href="/book" className="btn btn-primary" style={{ display: 'inline-flex' }}>
+                          <Calendar size={16} /> Book a Session with Pass
+                        </Link>
+                      </div>
                     </div>
+
+                    {activePass.bookings.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+                          Sessions Used with This Pass
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {activePass.bookings.map((b) => (
+                            <div key={b.id} className="card" style={{ padding: '12px 16px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                                <div>
+                                  <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{b.station.name}</div>
+                                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                                    {formatDate(b.date)} · {formatTime(b.startTime)} — {formatTime(b.endTime)}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.875rem', color }}>−{b.passHoursDeducted} hr{b.passHoursDeducted > 1 ? 's' : ''}</div>
+                                  <div style={{ fontSize: '0.72rem', color: b.status === 'CANCELLED' ? '#ef4444' : 'var(--color-text-muted)', marginTop: 2, textTransform: 'uppercase', fontWeight: 600 }}>{b.status}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })()
+                );
+              })}
+            </div>
+          )
         )}
       </div>
     </div>
