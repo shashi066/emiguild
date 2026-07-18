@@ -26,6 +26,10 @@ model User {
   drawEntries       DrawEntry[]
   wonDraws          LuckyDraw[] @relation("DrawWinner")
   tournamentPlayers TournamentPlayer[]
+  armoryInventory   ArmoryInventory[]
+  armoryLoadout     ArmoryLoadout?
+  armoryDailyClaims ArmoryDailyClaim[]
+  armoryTickets     ArmoryTicket[]
 
   @@map("users")
 }
@@ -246,3 +250,133 @@ model TournamentMatch {
   @@map("tournament_matches")
 }
 
+model ArmorySet {
+  id             String   @id
+  name           String
+  shortLabel     String
+  rarity         String
+  dropPercentage Int      @default(0)
+  active         Boolean  @default(true)
+  displayOrder   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  artifacts ArmoryArtifact[]
+  rewards   ArmorySetReward[]
+  tickets   ArmoryTicket[]
+
+  @@map("armory_sets")
+}
+
+model ArmoryArtifact {
+  id                 String   @id
+  setId              String
+  slotType           String
+  name               String
+  active             Boolean  @default(true)
+  slotDropPercentage Int      @default(25)
+  displayOrder       Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  set             ArmorySet          @relation(fields: [setId], references: [id], onDelete: Cascade)
+  inventory       ArmoryInventory[]
+  dailyClaims     ArmoryDailyClaim[]
+  headgearLoadout ArmoryLoadout[]    @relation("ArmoryHeadgear")
+  armorLoadout    ArmoryLoadout[]    @relation("ArmoryArmor")
+  glovesLoadout   ArmoryLoadout[]    @relation("ArmoryGloves")
+  bootsLoadout    ArmoryLoadout[]    @relation("ArmoryBoots")
+
+  @@unique([setId, slotType])
+  @@map("armory_artifacts")
+}
+
+model ArmoryInventory {
+  id         String   @id @default(cuid())
+  userId     String
+  artifactId String
+  quantity   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artifact ArmoryArtifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, artifactId])
+  @@map("armory_inventory")
+}
+
+model ArmoryLoadout {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  headgearArtifactId String?
+  armorArtifactId    String?
+  glovesArtifactId   String?
+  bootsArtifactId    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headgear ArmoryArtifact?  @relation("ArmoryHeadgear", fields: [headgearArtifactId], references: [id], onDelete: SetNull)
+  armor    ArmoryArtifact?  @relation("ArmoryArmor", fields: [armorArtifactId], references: [id], onDelete: SetNull)
+  gloves   ArmoryArtifact?  @relation("ArmoryGloves", fields: [glovesArtifactId], references: [id], onDelete: SetNull)
+  boots    ArmoryArtifact?  @relation("ArmoryBoots", fields: [bootsArtifactId], references: [id], onDelete: SetNull)
+
+  @@map("armory_loadouts")
+}
+
+model ArmoryDailyClaim {
+  id         String   @id @default(cuid())
+  userId     String
+  claimDate  String
+  artifactId String
+  createdAt  DateTime @default(now())
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artifact ArmoryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, claimDate])
+  @@map("armory_daily_claims")
+}
+
+model ArmorySetReward {
+  id                  String   @id @default(cuid())
+  setId               String   @unique
+  rewardType          String
+  discountPercentage  Int?
+  discountAmount      Int?
+  gamingMinutes       Int?
+  racingMinutes       Int?
+  validityDays        Int      @default(7)
+  minimumBookingValue Int?
+  eligibleStations    String?
+  weekdayOnly         Boolean  @default(false)
+  maximumDiscount     Int?
+  active              Boolean  @default(true)
+  description         String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  set ArmorySet @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  @@map("armory_set_rewards")
+}
+
+model ArmoryTicket {
+  id             String    @id @default(cuid())
+  userId         String
+  setId          String
+  rewardSnapshot String
+  code           String    @unique
+  status         String    @default("UNUSED")
+  claimedAt      DateTime  @default(now())
+  expiresAt      DateTime
+  redeemedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  set  ArmorySet @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  @@map("armory_tickets")
+}

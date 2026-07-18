@@ -17,6 +17,7 @@ type ButtonVariant =
   | 'spin'
   | 'drop'
   | 'tournament'
+  | 'armory'
   | 'dungeon';
 type AnimationVariant = 'none' | 'spin' | 'lucky' | 'tournament';
 
@@ -84,6 +85,11 @@ const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
     background: 'rgba(255, 72, 72, 0.12)',
     border: '1px solid rgba(255, 72, 72, 0.36)',
     color: '#ffd6d6',
+  },
+  armory: {
+    background: 'rgba(241, 245, 249, 0.12)',
+    border: '1px solid rgba(255, 255, 255, 0.55)',
+    color: '#f8fafc',
   },
   dungeon: {
     background: '#02040a',
