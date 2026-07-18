@@ -27,6 +27,9 @@ const SLOTS = ['HEADGEAR', 'ARMOR', 'GLOVES', 'BOOTS'] as const;
 const RARITIES = ['ALL', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM'] as const;
 const RARITY_DISPLAY_ORDER = ['PLATINUM', 'GOLD', 'SILVER', 'BRONZE'] as const;
 const FORGE_ANIMATION_MS = 3000;
+const EQUIP_ANIMATION_MS = 900;
+
+type ArmoryActionOverlayType = 'equip' | 'unequip';
 
 const SLOT_META: Record<string, any> = {
   HEADGEAR: { label: 'Headgear', Icon: Crown },
@@ -200,6 +203,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   const [error, setError] = useState(initialError);
   const [forgeResult, setForgeResult] = useState<any>(null);
   const [forgeCharging, setForgeCharging] = useState(false);
+  const [actionOverlay, setActionOverlay] = useState<ArmoryActionOverlayType | null>(null);
   const [rarityFilter, setRarityFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
   const [nextForgeTimer, setNextForgeTimer] = useState(getNextForgeTimer);
@@ -252,15 +256,17 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
     : null;
   const setProgress = buildSetProgress(state);
 
-  const act = async (url: string, body?: any) => {
+  const act = async (url: string, body?: any, overlayType?: ArmoryActionOverlayType) => {
     const isForge = url.endsWith('/forge');
     const forgeStartedAt = Date.now();
+    const actionStartedAt = Date.now();
     setSaving(true);
     if (isForge) {
       setForging(true);
       setForgeCharging(true);
       setForgeResult(null);
     }
+    if (overlayType) setActionOverlay(overlayType);
     setError('');
     try {
       const res = await fetch(url, {
@@ -344,16 +350,21 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
       setError(err.message || 'Artifacts action failed.');
       return false;
     } finally {
+      if (overlayType) {
+        const remainingAnimationMs = Math.max(0, EQUIP_ANIMATION_MS - (Date.now() - actionStartedAt));
+        if (remainingAnimationMs > 0) await wait(remainingAnimationMs);
+      }
       setSaving(false);
       if (isForge) {
         setForging(false);
         setForgeCharging(false);
       }
+      if (overlayType) setActionOverlay(null);
     }
   };
 
-  const equipArtifact = (artifact: any) => act('/api/armory/equip', { slotType: artifact.slotType, artifactId: artifact.id });
-  const unequipSlot = (slot: string) => act('/api/armory/equip', { slotType: slot, artifactId: null });
+  const equipArtifact = (artifact: any) => act('/api/armory/equip', { slotType: artifact.slotType, artifactId: artifact.id }, 'equip');
+  const unequipSlot = (slot: string) => act('/api/armory/equip', { slotType: slot, artifactId: null }, 'unequip');
   const craftArtifact = (artifact: any) => act('/api/armory/craft', { artifactId: artifact.id });
 
   if (loading || status === 'loading') {
@@ -444,8 +455,24 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
           onKeep={() => setForgeResult(null)}
         />
       )}
+      {actionOverlay && <ArmoryActionOverlay type={actionOverlay} />}
       <ArmoryStyles />
     </main>
+  );
+}
+
+function ArmoryActionOverlay({ type }: { type: ArmoryActionOverlayType }) {
+  const isEquip = type === 'equip';
+  const Icon = isEquip ? Shield : Package;
+
+  return (
+    <div className={isEquip ? 'armory-action-layer equip-action' : 'armory-action-layer unequip-action'} role="status" aria-live="polite">
+      <div className="armory-action-orb">
+        <Icon size={34} strokeWidth={1.8} />
+      </div>
+      <strong>{isEquip ? 'Equipping Artifact' : 'Returning Artifact'}</strong>
+      <span>{isEquip ? 'Locking it into your loadout' : 'Moving it back to the vault'}</span>
+    </div>
   );
 }
 
@@ -865,7 +892,7 @@ function ArmoryStyles() {
       .forge-action { display: grid; gap: 8px; justify-items: stretch; min-width: 180px; }
       .forge-locked { background: rgba(255,255,255,0.04); color: var(--color-text-secondary); border-color: rgba(255,255,255,0.14); }
       .forge-locked svg { color: var(--color-accent-warning); }
-      .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; padding: 18px; background: radial-gradient(circle at center, var(--reveal-soft), transparent 42%), rgba(2,5,12,0.9); animation: revealFade 150ms ease; }
+      .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }
       .forge-reveal-scene { width: min(440px, 100%); min-height: min(640px, calc(100vh - 36px)); display: grid; grid-template-rows: auto 1fr auto auto; align-items: center; justify-items: center; gap: 14px; text-align: center; color: var(--color-text-primary); }
       .forge-reveal-layer:not(.reveal-ready) .forge-reveal-scene { grid-template-rows: 1fr; }
       .forge-charge { align-self: center; min-height: 150px; display: inline-grid; justify-items: center; align-content: center; gap: 14px; color: #dff8ff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.88rem; animation: revealFade 120ms ease both; }
@@ -873,14 +900,22 @@ function ArmoryStyles() {
       .forge-spinner::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); border-top-color: #61e8ff; animation: forgeSpin 850ms linear infinite; }
       .forge-spinner svg { position: relative; z-index: 1; }
       .reveal-ready .forge-charge { display: none; }
+      .armory-action-layer { position: fixed; inset: 0; z-index: 1001; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 18px; text-align: center; background: rgba(2,5,12,0.84); animation: revealFade 120ms ease; }
+      .armory-action-layer strong { color: #f8fbff; font-family: var(--font-orbitron); font-size: clamp(1.25rem, 5vw, 1.8rem); line-height: 1.1; }
+      .armory-action-layer span { color: var(--color-text-secondary); font-size: 0.86rem; }
+      .armory-action-orb { width: 96px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.18); }
+      .armory-action-orb::before { content: ""; position: absolute; inset: 9px; border-radius: inherit; border: 2px solid currentColor; border-right-color: transparent; animation: forgeSpin 760ms linear infinite; opacity: 0.9; }
+      .armory-action-orb svg { position: relative; z-index: 1; }
+      .equip-action .armory-action-orb { color: #61e8ff; background: rgba(97,232,255,0.1); }
+      .unequip-action .armory-action-orb { color: #ffd66e; background: rgba(255,214,110,0.1); }
       .reveal-rarity { min-height: 38px; display: none; align-items: center; border-top: 1px solid var(--reveal-color); border-bottom: 1px solid var(--reveal-color); padding: 0 18px; color: var(--reveal-color); font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.76rem; animation: revealFade 180ms ease both; }
       .reveal-ready .reveal-rarity { display: inline-flex; }
       .reveal-art-wrap { width: min(300px, 78vw); aspect-ratio: 1; display: grid; place-items: center; position: relative; animation: revealPop 280ms ease both; }
       .reveal-art-wrap::before, .reveal-art-wrap::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
-      .reveal-art-wrap::before { inset: 12%; background: radial-gradient(circle, var(--reveal-soft) 0 32%, transparent 68%); }
+      .reveal-art-wrap::before { inset: 12%; border: 1px solid var(--reveal-color); opacity: 0.28; }
       .reveal-art-wrap::after { inset: 5%; border: 1px solid rgba(255,255,255,0.18); }
       .reveal-lines { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.18) 50%, transparent 50.5%), linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.12) 50%, transparent 50.5%); opacity: 0.65; }
-      .reveal-art { position: relative; z-index: 1; width: 82%; aspect-ratio: 1; display: grid; place-items: center; filter: drop-shadow(0 10px 18px rgba(0,0,0,0.42)); }
+      .reveal-art { position: relative; z-index: 1; width: 82%; aspect-ratio: 1; display: grid; place-items: center; }
       .reveal-art img { width: 100%; height: 100%; object-fit: contain; }
       .reveal-art .artifact-sigil-lg { width: min(176px, 62vw); }
       .reveal-copy { display: grid; gap: 3px; animation: revealFade 180ms ease 430ms both; }
@@ -960,7 +995,7 @@ function ArmoryStyles() {
       @media (max-width: 980px) { .artifact-grid, .reward-preview-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
       @media (max-width: 720px) { .armory-rpg { padding-left: 10px; padding-right: 10px; } .armory-topbar { align-items: flex-start; } .topbar-stats { flex-wrap: wrap; justify-content: flex-end; } .forge-panel { grid-template-columns: 1fr; } .forge-action { min-width: 0; } .artifact-grid, .reward-preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .reveal-actions { grid-template-columns: 1fr; } .forge-reveal-scene { min-height: calc(100vh - 36px); } }
       @media (max-width: 380px) { .artifact-grid, .reward-preview-grid { grid-template-columns: 1fr; } .loadout-stage { grid-template-columns: 1fr; } .topbar-stats { display: grid; grid-template-columns: 1fr 1fr; } }
-      @media (prefers-reduced-motion: reduce) { .forge-reveal-layer, .forge-charge, .reveal-rarity, .reveal-art-wrap, .reveal-copy, .reveal-actions, .forge-panel.forging .forge-ring { animation: none; } }
+      @media (prefers-reduced-motion: reduce) { .forge-reveal-layer, .forge-charge, .reveal-rarity, .reveal-art-wrap, .reveal-copy, .reveal-actions, .forge-panel.forging .forge-ring, .armory-action-layer, .armory-action-orb::before { animation: none; } }
     `}</style>
   );
 }
