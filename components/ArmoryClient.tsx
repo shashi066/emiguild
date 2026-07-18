@@ -280,6 +280,8 @@ export function ArmoryClient() {
         <DailyForgePanel state={state} saving={saving} forging={forging} nextForgeTimer={nextForgeTimer} onForge={() => act('/api/armory/forge')} />
         {error && <div className="armory-error">{error}</div>}
 
+        <RewardPreviewPanel sets={state?.sets ?? []} />
+
         <div className="armory-main-grid">
           <section className="armory-center">
             <LoadoutGrid loadout={state?.loadout ?? {}} saving={saving} onUnequip={unequipSlot} />
@@ -340,6 +342,50 @@ export function ArmoryClient() {
       )}
       <ArmoryStyles />
     </main>
+  );
+}
+
+function RewardPreviewPanel({ sets }: { sets: any[] }) {
+  const rewardSets = sets
+    .slice()
+    .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+
+  if (!rewardSets.length) return null;
+
+  return (
+    <section className="armory-panel reward-preview-panel">
+      <div className="section-heading">
+        <div>
+          <span>Reward Preview</span>
+          <h2 className="font-orbitron">Set Completion Rewards</h2>
+        </div>
+        <Ticket size={22} />
+      </div>
+      <div className="reward-preview-grid">
+        {rewardSets.map((set: any) => {
+          const reward = set.rewards?.[0];
+          const theme = rarityTheme(set.rarity);
+          const meta = reward ? ticketMeta(reward) : null;
+          const Icon = meta?.Icon ?? Ticket;
+
+          return (
+            <article key={set.id} className="reward-preview-card" style={{ ['--preview-accent' as any]: theme.color, ['--preview-soft' as any]: theme.soft }}>
+              <div className="preview-set-line">
+                <span>{theme.label}</span>
+                <strong>{set.name}</strong>
+              </div>
+              <div className="preview-reward-line">
+                <Icon size={18} />
+                <div>
+                  <strong>{reward?.active === false ? 'Reward Paused' : meta?.value ?? 'Reward'}</strong>
+                  <span>{reward?.description ?? 'Complete all four matching artifacts to unlock this reward.'}</span>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -740,7 +786,16 @@ function ArmoryStyles() {
       .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .section-heading h2 { margin-top: 2px; font-size: 1.15rem; }
       .section-heading small { color: var(--color-text-muted); }
-      .loadout-panel, .progress-panel, .inventory-panel, .tickets-panel { padding: var(--space-md); display: grid; gap: var(--space-md); }
+      .loadout-panel, .progress-panel, .inventory-panel, .tickets-panel, .reward-preview-panel { padding: var(--space-md); display: grid; gap: var(--space-md); }
+      .reward-preview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+      .reward-preview-card { min-height: 148px; border: 1px solid color-mix(in srgb, var(--preview-accent) 42%, transparent); border-radius: 8px; padding: 12px; display: grid; gap: 14px; align-content: start; background: linear-gradient(180deg, var(--preview-soft), rgba(7,10,20,0.96)); }
+      .preview-set-line { display: grid; gap: 3px; }
+      .preview-set-line span { color: var(--preview-accent); font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+      .preview-set-line strong { font-size: 0.98rem; line-height: 1.18; }
+      .preview-reward-line { display: grid; grid-template-columns: auto 1fr; gap: 9px; align-items: start; color: var(--preview-accent); }
+      .preview-reward-line div { display: grid; gap: 4px; }
+      .preview-reward-line strong { font-family: var(--font-orbitron); font-size: 1rem; line-height: 1.1; }
+      .preview-reward-line span { color: var(--color-text-secondary); font-size: 0.78rem; line-height: 1.35; }
       .loadout-stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
       .equip-slot { min-height: 136px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 12px; background: rgba(255,255,255,0.035); display: grid; gap: 8px; align-content: start; }
       .slot-icon { color: var(--color-text-muted); }
@@ -794,9 +849,9 @@ function ArmoryStyles() {
       @keyframes revealPop { from { opacity: 0; transform: scale(0.92); } 45% { opacity: 1; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
       @keyframes forgeSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       @keyframes forgePulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.72; } }
-      @media (max-width: 980px) { .artifact-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-      @media (max-width: 720px) { .armory-rpg { padding-left: 10px; padding-right: 10px; } .armory-topbar { align-items: flex-start; } .topbar-stats { flex-wrap: wrap; justify-content: flex-end; } .forge-panel { grid-template-columns: 1fr; } .forge-action { min-width: 0; } .artifact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .reveal-actions { grid-template-columns: 1fr; } .forge-reveal-scene { min-height: calc(100vh - 36px); } }
-      @media (max-width: 380px) { .artifact-grid { grid-template-columns: 1fr; } .loadout-stage { grid-template-columns: 1fr; } .topbar-stats { display: grid; grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 980px) { .artifact-grid, .reward-preview-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+      @media (max-width: 720px) { .armory-rpg { padding-left: 10px; padding-right: 10px; } .armory-topbar { align-items: flex-start; } .topbar-stats { flex-wrap: wrap; justify-content: flex-end; } .forge-panel { grid-template-columns: 1fr; } .forge-action { min-width: 0; } .artifact-grid, .reward-preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .reveal-actions { grid-template-columns: 1fr; } .forge-reveal-scene { min-height: calc(100vh - 36px); } }
+      @media (max-width: 380px) { .artifact-grid, .reward-preview-grid { grid-template-columns: 1fr; } .loadout-stage { grid-template-columns: 1fr; } .topbar-stats { display: grid; grid-template-columns: 1fr 1fr; } }
       @media (prefers-reduced-motion: reduce) { .forge-reveal-layer, .forge-charge, .reveal-rarity, .reveal-art-wrap, .reveal-copy, .reveal-actions, .forge-panel.forging .forge-ring { animation: none; } }
     `}</style>
   );
