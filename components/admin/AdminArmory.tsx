@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CheckCircle, Shield, Save, AlertCircle, RefreshCw, History } from 'lucide-react';
+import { decryptNumber } from '@/lib/crypto';
 
 const REWARD_TYPES = ['PERCENT_DISCOUNT', 'FIXED_DISCOUNT', 'GAMING_MINUTES', 'RACING_MINUTES', 'SQUAD_NIGHT', 'BRONZE_PASS'];
 function rewardTypeLabel(type: string) {
@@ -84,11 +85,41 @@ async function readJson(res: Response) {
   }
 }
 
+function decryptArmoryAdminConfig(config: any) {
+  return {
+    ...config,
+    sets: (config?.sets ?? []).map((set: any) => ({
+      ...set,
+      dropPercentage: decryptNumber(set.dropPercentage) ?? Number(set.dropPercentage ?? 0),
+    })),
+    artifacts: (config?.artifacts ?? []).map((artifact: any) => ({
+      ...artifact,
+      slotDropPercentage: decryptNumber(artifact.slotDropPercentage) ?? Number(artifact.slotDropPercentage ?? 0),
+      set: artifact.set
+        ? {
+          ...artifact.set,
+          dropPercentage: decryptNumber(artifact.set.dropPercentage) ?? Number(artifact.set.dropPercentage ?? 0),
+        }
+        : artifact.set,
+    })),
+    rewards: (config?.rewards ?? []).map((reward: any) => ({
+      ...reward,
+      set: reward.set
+        ? {
+          ...reward.set,
+          dropPercentage: decryptNumber(reward.set.dropPercentage) ?? Number(reward.set.dropPercentage ?? 0),
+        }
+        : reward.set,
+    })),
+  };
+}
+
 export function AdminArmory({ initialConfig, initialError = '' }: { initialConfig?: any; initialError?: string }) {
-  const [settings, setSettings] = useState<any>(initialConfig?.settings ?? {});
-  const [sets, setSets] = useState<any[]>(initialConfig?.sets ?? []);
-  const [artifacts, setArtifacts] = useState<any[]>(initialConfig?.artifacts ?? []);
-  const [rewards, setRewards] = useState<any[]>(initialConfig?.rewards ?? []);
+  const decryptedInitialConfig = initialConfig ? decryptArmoryAdminConfig(initialConfig) : null;
+  const [settings, setSettings] = useState<any>(decryptedInitialConfig?.settings ?? {});
+  const [sets, setSets] = useState<any[]>(decryptedInitialConfig?.sets ?? []);
+  const [artifacts, setArtifacts] = useState<any[]>(decryptedInitialConfig?.artifacts ?? []);
+  const [rewards, setRewards] = useState<any[]>(decryptedInitialConfig?.rewards ?? []);
   const [loading, setLoading] = useState(!initialConfig && !initialError);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -104,10 +135,11 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
       const res = await fetch('/api/admin/armory/config');
       const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Failed to load Artifacts config.');
-      setSettings(data.settings ?? {});
-      setSets(data.sets ?? []);
-      setArtifacts(data.artifacts ?? []);
-      setRewards(data.rewards ?? []);
+      const config = decryptArmoryAdminConfig(data);
+      setSettings(config.settings ?? {});
+      setSets(config.sets ?? []);
+      setArtifacts(config.artifacts ?? []);
+      setRewards(config.rewards ?? []);
     } catch (err: any) {
       setError(err.message || 'Failed to load Artifacts config.');
     } finally {
@@ -154,10 +186,11 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
       });
       const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Failed to save Artifacts.');
-      setSettings(data.settings ?? {});
-      setSets(data.sets ?? []);
-      setArtifacts(data.artifacts ?? []);
-      setRewards(data.rewards ?? []);
+      const config = decryptArmoryAdminConfig(data);
+      setSettings(config.settings ?? {});
+      setSets(config.sets ?? []);
+      setArtifacts(config.artifacts ?? []);
+      setRewards(config.rewards ?? []);
       setMessage('Artifacts settings saved.');
     } catch (err: any) {
       setError(err.message || 'Failed to save Artifacts.');

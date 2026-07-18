@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { encryptNumber } from '@/lib/crypto';
 
 export const ARMORY_SLOTS = ['HEADGEAR', 'ARMOR', 'GLOVES', 'BOOTS'] as const;
 export type ArmorySlot = typeof ARMORY_SLOTS[number];
@@ -346,6 +347,88 @@ function assertArmoryClientReady() {
   if (!prisma.armorySet || !prisma.armoryArtifact || !prisma.armorySetReward) {
     throw new Error('ARMORY_PRISMA_CLIENT_STALE');
   }
+}
+
+function serializeArmorySet<T extends { dropPercentage?: number | null }>(set: T) {
+  return {
+    ...set,
+    dropPercentage: encryptNumber(set.dropPercentage),
+  };
+}
+
+function serializeArmoryArtifact<T extends { slotDropPercentage?: number | null; set?: any }>(artifact: T) {
+  return {
+    ...artifact,
+    slotDropPercentage: encryptNumber(artifact.slotDropPercentage),
+    ...(artifact.set ? { set: serializeArmorySet(artifact.set) } : {}),
+  };
+}
+
+function serializeInventoryRow<T extends { artifact?: any }>(row: T) {
+  return {
+    ...row,
+    ...(row.artifact ? { artifact: serializeArmoryArtifact(row.artifact) } : {}),
+  };
+}
+
+function serializeLoadout(loadout: Record<string, any | null>) {
+  return ARMORY_SLOTS.reduce((next, slot) => ({
+    ...next,
+    [slot]: loadout?.[slot] ? serializeArmoryArtifact(loadout[slot]) : null,
+  }), {} as Record<ArmorySlot, any | null>);
+}
+
+export function serializeArmoryState(state: any) {
+  return {
+    ...state,
+    sets: (state.sets ?? []).map((set: any) => ({
+      ...serializeArmorySet(set),
+      rewards: set.rewards ?? [],
+    })),
+    artifacts: (state.artifacts ?? []).map(serializeArmoryArtifact),
+    inventory: (state.inventory ?? []).map(serializeInventoryRow),
+    loadout: serializeLoadout(state.loadout ?? {}),
+    forge: {
+      ...state.forge,
+      todayClaim: state.forge?.todayClaim
+        ? {
+          ...state.forge.todayClaim,
+          artifact: state.forge.todayClaim.artifact
+            ? serializeArmoryArtifact(state.forge.todayClaim.artifact)
+            : state.forge.todayClaim.artifact,
+        }
+        : state.forge?.todayClaim,
+    },
+    progress: {
+      ...state.progress,
+      completeSet: state.progress?.completeSet ? serializeArmorySet(state.progress.completeSet) : state.progress?.completeSet,
+    },
+  };
+}
+
+export function serializeArmoryAdminConfig(config: any) {
+  return {
+    ...config,
+    sets: (config.sets ?? []).map(serializeArmorySet),
+    artifacts: (config.artifacts ?? []).map(serializeArmoryArtifact),
+    rewards: (config.rewards ?? []).map((reward: any) => ({
+      ...reward,
+      set: reward.set ? serializeArmorySet(reward.set) : reward.set,
+    })),
+  };
+}
+
+export function serializeArmoryActionResult(result: any) {
+  if (!result) return result;
+  return {
+    ...result,
+    ...(result.selected ? { selected: serializeArmoryArtifact(result.selected) } : {}),
+    ...(result.crafted ? { crafted: serializeArmoryArtifact(result.crafted) } : {}),
+    ...(result.todayClaim?.artifact
+      ? { todayClaim: { ...result.todayClaim, artifact: serializeArmoryArtifact(result.todayClaim.artifact) } }
+      : {}),
+    ...(result.ticket?.set ? { ticket: { ...result.ticket, set: serializeArmorySet(result.ticket.set) } } : {}),
+  };
 }
 
 export async function getArmoryState(userId: string) {

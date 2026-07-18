@@ -1,6 +1,6 @@
 import { ArmoryClient } from '@/components/ArmoryClient';
 import { auth } from '@/auth';
-import { getArmoryState } from '@/lib/armory';
+import { getArmoryState, serializeArmoryState } from '@/lib/armory';
 
 export const metadata = {
   title: 'Artifacts',
@@ -18,7 +18,7 @@ export default async function ArmoryPage() {
 
   try {
     const initialState = await getArmoryState(session.user.id);
-    return <ArmoryClient initialState={JSON.parse(JSON.stringify(initialState))} />;
+    return <ArmoryClient initialState={JSON.parse(JSON.stringify(serializeArmoryState(initialState)))} />;
   } catch (error) {
     console.error('Artifacts server state failed:', error);
     return <ArmoryClient initialError="Artifacts are taking longer than expected. Please refresh once." />;
