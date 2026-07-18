@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { friendlyArmoryError, getArmoryAdminConfig, updateArmoryAdminConfig } from '@/lib/armory';
+import { friendlyArmoryError, getArmoryAdminConfig, serializeArmoryAdminConfig, updateArmoryAdminConfig } from '@/lib/armory';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +12,7 @@ export async function GET() {
 
   try {
     const config = await getArmoryAdminConfig();
-    return NextResponse.json(config, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(serializeArmoryAdminConfig(config), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Artifacts config load failed:', error);
     return NextResponse.json({ error: 'Failed to load Artifacts config.' }, { status: 500 });
@@ -28,7 +28,7 @@ export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     const config = await updateArmoryAdminConfig(body);
-    return NextResponse.json(config, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(serializeArmoryAdminConfig(config), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const friendly = friendlyArmoryError(error);
     return NextResponse.json({ error: friendly.error }, { status: friendly.status });

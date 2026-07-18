@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { encryptNumber } from '@/lib/crypto';
 
 export const ARMORY_SLOTS = ['HEADGEAR', 'ARMOR', 'GLOVES', 'BOOTS'] as const;
 export type ArmorySlot = typeof ARMORY_SLOTS[number];
@@ -24,6 +25,33 @@ const DEFAULT_SLOT_WEIGHTS: Record<ArmorySlot, number> = {
 
 const ARMORY_DEFAULTS_VERSION_KEY = 'armory_defaults_version';
 const ARMORY_DEFAULTS_VERSION = 'launch_rewards_v2';
+let armoryDefaultsReady = false;
+let armoryForgeConfigCache: {
+  expiresAt: number;
+  enabled: boolean;
+  sets: Array<{
+    id: string;
+    dropPercentage: number;
+    artifacts: Array<{
+      id: string;
+      setId: string;
+      slotType: string;
+      name: string;
+      active: boolean;
+      slotDropPercentage: number;
+      displayOrder: number;
+      set: {
+        id: string;
+        name: string;
+        shortLabel: string;
+        rarity: string;
+        dropPercentage: number;
+        active: boolean;
+        displayOrder: number;
+      };
+    }>;
+  }>;
+} | null = null;
 
 const ARTIFACT_NAMES: Record<string, Record<ArmorySlot, string>> = {
   iron_vanguard: {
@@ -173,18 +201,78 @@ async function getSettingsMap() {
   return settings.reduce((map, setting) => ({ ...map, [setting.key]: setting.value }), {} as Record<string, string>);
 }
 
-export async function ensureArmoryDefaults() {
-  assertArmoryClientReady();
+async function getArmoryForgeConfig() {
+  const now = Date.now();
+  if (armoryForgeConfigCache && armoryForgeConfigCache.expiresAt > now) {
+    return armoryForgeConfigCache;
+  }
 
-  await Promise.all([
-    prisma.setting.upsert({
-      where: { key: 'armory_enabled' },
-      update: {},
-      create: { key: 'armory_enabled', value: 'true', label: 'Enable Artifacts' },
+  await ensureArmoryDefaults();
+  const [settings, sets] = await Promise.all([
+    getSettingsMap(),
+    prisma.armorySet.findMany({
+      where: { active: true, dropPercentage: { gt: 0 }, artifacts: { some: { active: true, slotDropPercentage: { gt: 0 } } } },
+      select: {
+        id: true,
+        dropPercentage: true,
+        artifacts: {
+          where: { active: true, slotDropPercentage: { gt: 0 } },
+          select: {
+            id: true,
+            setId: true,
+            slotType: true,
+            name: true,
+            active: true,
+            slotDropPercentage: true,
+            displayOrder: true,
+            set: {
+              select: {
+                id: true,
+                name: true,
+                shortLabel: true,
+                rarity: true,
+                dropPercentage: true,
+                active: true,
+                displayOrder: true,
+              },
+            },
+          },
+          orderBy: { displayOrder: 'asc' },
+        },
+      },
+      orderBy: { displayOrder: 'asc' },
     }),
   ]);
 
-  const defaultsVersion = await prisma.setting.findUnique({ where: { key: ARMORY_DEFAULTS_VERSION_KEY } });
+  const config = {
+    expiresAt: now + 30_000,
+    enabled: settings.armory_enabled !== 'false',
+    sets,
+  };
+  armoryForgeConfigCache = config;
+  return config;
+}
+
+export async function ensureArmoryDefaults() {
+  assertArmoryClientReady();
+  if (armoryDefaultsReady) return;
+
+  const [defaultsVersion, enabledSetting] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: ARMORY_DEFAULTS_VERSION_KEY } }),
+    prisma.setting.findUnique({ where: { key: 'armory_enabled' } }),
+  ]);
+
+  if (defaultsVersion?.value === ARMORY_DEFAULTS_VERSION && enabledSetting) {
+    armoryDefaultsReady = true;
+    return;
+  }
+
+  await prisma.setting.upsert({
+    where: { key: 'armory_enabled' },
+    update: {},
+    create: { key: 'armory_enabled', value: 'true', label: 'Enable Artifacts' },
+  });
+
   const shouldApplyLaunchDefaults = defaultsVersion?.value !== ARMORY_DEFAULTS_VERSION;
 
   for (const set of DEFAULT_ARMORY_SETS) {
@@ -251,6 +339,8 @@ export async function ensureArmoryDefaults() {
       create: { key: ARMORY_DEFAULTS_VERSION_KEY, value: ARMORY_DEFAULTS_VERSION, label: 'Artifacts defaults version' },
     });
   }
+
+  armoryDefaultsReady = true;
 }
 
 function assertArmoryClientReady() {
@@ -259,9 +349,90 @@ function assertArmoryClientReady() {
   }
 }
 
+function serializeArmorySet<T extends { dropPercentage?: number | null }>(set: T) {
+  return {
+    ...set,
+    dropPercentage: encryptNumber(set.dropPercentage),
+  };
+}
+
+function serializeArmoryArtifact<T extends { slotDropPercentage?: number | null; set?: any }>(artifact: T) {
+  return {
+    ...artifact,
+    slotDropPercentage: encryptNumber(artifact.slotDropPercentage),
+    ...(artifact.set ? { set: serializeArmorySet(artifact.set) } : {}),
+  };
+}
+
+function serializeInventoryRow<T extends { artifact?: any }>(row: T) {
+  return {
+    ...row,
+    ...(row.artifact ? { artifact: serializeArmoryArtifact(row.artifact) } : {}),
+  };
+}
+
+function serializeLoadout(loadout: Record<string, any | null>) {
+  return ARMORY_SLOTS.reduce((next, slot) => ({
+    ...next,
+    [slot]: loadout?.[slot] ? serializeArmoryArtifact(loadout[slot]) : null,
+  }), {} as Record<ArmorySlot, any | null>);
+}
+
+export function serializeArmoryState(state: any) {
+  return {
+    ...state,
+    sets: (state.sets ?? []).map((set: any) => ({
+      ...serializeArmorySet(set),
+      rewards: set.rewards ?? [],
+    })),
+    artifacts: (state.artifacts ?? []).map(serializeArmoryArtifact),
+    inventory: (state.inventory ?? []).map(serializeInventoryRow),
+    loadout: serializeLoadout(state.loadout ?? {}),
+    forge: {
+      ...state.forge,
+      todayClaim: state.forge?.todayClaim
+        ? {
+          ...state.forge.todayClaim,
+          artifact: state.forge.todayClaim.artifact
+            ? serializeArmoryArtifact(state.forge.todayClaim.artifact)
+            : state.forge.todayClaim.artifact,
+        }
+        : state.forge?.todayClaim,
+    },
+    progress: {
+      ...state.progress,
+      completeSet: state.progress?.completeSet ? serializeArmorySet(state.progress.completeSet) : state.progress?.completeSet,
+    },
+  };
+}
+
+export function serializeArmoryAdminConfig(config: any) {
+  return {
+    ...config,
+    sets: (config.sets ?? []).map(serializeArmorySet),
+    artifacts: (config.artifacts ?? []).map(serializeArmoryArtifact),
+    rewards: (config.rewards ?? []).map((reward: any) => ({
+      ...reward,
+      set: reward.set ? serializeArmorySet(reward.set) : reward.set,
+    })),
+  };
+}
+
+export function serializeArmoryActionResult(result: any) {
+  if (!result) return result;
+  return {
+    ...result,
+    ...(result.selected ? { selected: serializeArmoryArtifact(result.selected) } : {}),
+    ...(result.crafted ? { crafted: serializeArmoryArtifact(result.crafted) } : {}),
+    ...(result.todayClaim?.artifact
+      ? { todayClaim: { ...result.todayClaim, artifact: serializeArmoryArtifact(result.todayClaim.artifact) } }
+      : {}),
+    ...(result.ticket?.set ? { ticket: { ...result.ticket, set: serializeArmorySet(result.ticket.set) } } : {}),
+  };
+}
+
 export async function getArmoryState(userId: string) {
   await ensureArmoryDefaults();
-  await purgeExpiredArmoryTickets();
   const today = getArmoryToday();
   const [settings, sets, artifacts, inventory, loadout, todayClaim, tickets] = await Promise.all([
     getSettingsMap(),
@@ -286,9 +457,15 @@ export async function getArmoryState(userId: string) {
       include: { artifact: { include: { set: true } } },
     }),
     prisma.armoryTicket.findMany({
-      where: { userId, expiresAt: { gt: new Date() } },
-      include: { set: true },
-      orderBy: { claimedAt: 'desc' },
+      where: { userId, claimDate: today },
+      select: {
+        id: true,
+        setId: true,
+        rewardSnapshot: true,
+        code: true,
+        set: { select: { id: true, name: true, rarity: true } },
+      },
+      orderBy: { id: 'desc' },
       take: 20,
     }),
   ]);
@@ -325,48 +502,41 @@ export async function getArmoryState(userId: string) {
 }
 
 export async function forgeArtifact(userId: string) {
-  await ensureArmoryDefaults();
   const today = getArmoryToday();
-  const settings = await getSettingsMap();
-  if (settings.armory_enabled === 'false') throw new Error('ARMORY_DISABLED');
+  const config = await getArmoryForgeConfig();
+  if (!config.enabled) throw new Error('ARMORY_DISABLED');
+  if (!config.sets.length) throw new Error('NO_ARTIFACTS');
+  if (!validateDropPercentages(config.sets)) throw new Error('BAD_DROP_TOTAL');
+  if (!validateSlotWeights(config.sets.flatMap((set) => set.artifacts))) throw new Error('BAD_SLOT_TOTAL');
 
-  const selected = await prisma.$transaction(async (tx) => {
+  const set = pickWeightedSet(config.sets);
+  const selected = pickWeightedArtifact(set.artifacts);
+
+  await prisma.$transaction(async (tx) => {
     const existing = await tx.armoryDailyClaim.findUnique({
       where: { userId_claimDate: { userId, claimDate: today } },
     });
     if (existing) throw new Error('ALREADY_FORGED');
 
-    const sets = await tx.armorySet.findMany({
-      where: { active: true, dropPercentage: { gt: 0 }, artifacts: { some: { active: true, slotDropPercentage: { gt: 0 } } } },
-      include: { artifacts: { where: { active: true, slotDropPercentage: { gt: 0 } } } },
-    });
-    if (!validateDropPercentages(sets)) throw new Error('BAD_DROP_TOTAL');
-    if (!validateSlotWeights(sets.flatMap((set) => set.artifacts))) throw new Error('BAD_SLOT_TOTAL');
-    if (!sets.length) throw new Error('NO_ARTIFACTS');
-
-    const set = pickWeightedSet(sets);
-    const artifact = pickWeightedArtifact(set.artifacts);
-
     await tx.armoryInventory.upsert({
-      where: { userId_artifactId: { userId, artifactId: artifact.id } },
+      where: { userId_artifactId: { userId, artifactId: selected.id } },
       update: { quantity: { increment: 1 } },
-      create: { userId, artifactId: artifact.id, quantity: 1 },
+      create: { userId, artifactId: selected.id, quantity: 1 },
     });
-    if (existing) {
-      await tx.armoryDailyClaim.update({
-        where: { userId_claimDate: { userId, claimDate: today } },
-        data: { artifactId: artifact.id },
-      });
-    } else {
-      await tx.armoryDailyClaim.create({
-        data: { userId, claimDate: today, artifactId: artifact.id },
-      });
-    }
-
-    return artifact;
+    await tx.armoryDailyClaim.create({
+      data: { userId, claimDate: today, artifactId: selected.id },
+    });
   });
 
-  return { selected, state: await getArmoryState(userId) };
+  return {
+    selected,
+    todayClaim: {
+      userId,
+      claimDate: today,
+      artifactId: selected.id,
+      artifact: selected,
+    },
+  };
 }
 
 export async function equipArtifact(userId: string, slotType: string, artifactIdValue?: string | null) {
@@ -374,109 +544,118 @@ export async function equipArtifact(userId: string, slotType: string, artifactId
   const slot = slotType as ArmorySlot;
   const field = SLOT_FIELD[slot];
 
-  await ensureArmoryDefaults();
-  await prisma.$transaction(async (tx) => {
-    const loadout = await tx.armoryLoadout.upsert({
-      where: { userId },
-      update: {},
-      create: { userId },
-    });
+  if (!artifactIdValue) {
+    await prisma.armoryLoadout.updateMany({ where: { userId }, data: { [field]: null } });
+    return { slotType: slot, artifactId: null };
+  }
 
-    if (!artifactIdValue) {
-      await tx.armoryLoadout.update({ where: { userId }, data: { [field]: null } });
-      return;
-    }
-
-    const artifact = await tx.armoryArtifact.findUnique({ where: { id: artifactIdValue } });
-    if (!artifact || artifact.slotType !== slot) throw new Error('BAD_ARTIFACT');
-
-    const inventory = await tx.armoryInventory.findUnique({
+  const [inventory, loadout] = await Promise.all([
+    prisma.armoryInventory.findUnique({
       where: { userId_artifactId: { userId, artifactId: artifactIdValue } },
-    });
-    if (!inventory || inventory.quantity <= 0) throw new Error('NOT_OWNED');
+      select: {
+        quantity: true,
+        artifact: { select: { slotType: true } },
+      },
+    }),
+    prisma.armoryLoadout.findUnique({
+      where: { userId },
+      select: {
+        headgearArtifactId: true,
+        armorArtifactId: true,
+        glovesArtifactId: true,
+        bootsArtifactId: true,
+      },
+    }),
+  ]);
 
-    const equippedIds = [
-      loadout.headgearArtifactId,
-      loadout.armorArtifactId,
-      loadout.glovesArtifactId,
-      loadout.bootsArtifactId,
-    ].filter(Boolean);
-    const alreadyEquippedCopies = equippedIds.filter((id) => id === artifactIdValue).length;
-    if (inventory.quantity <= alreadyEquippedCopies && loadout[field] !== artifactIdValue) {
-      throw new Error('NO_FREE_COPY');
-    }
+  if (!inventory || inventory.quantity <= 0) throw new Error('NOT_OWNED');
+  if (inventory.artifact.slotType !== slot) throw new Error('BAD_ARTIFACT');
 
-    await tx.armoryLoadout.update({ where: { userId }, data: { [field]: artifactIdValue } });
+  const equippedIds = [
+    loadout?.headgearArtifactId,
+    loadout?.armorArtifactId,
+    loadout?.glovesArtifactId,
+    loadout?.bootsArtifactId,
+  ].filter(Boolean);
+  const alreadyEquippedCopies = equippedIds.filter((id) => id === artifactIdValue).length;
+  if (inventory.quantity <= alreadyEquippedCopies && loadout?.[field] !== artifactIdValue) {
+    throw new Error('NO_FREE_COPY');
+  }
+
+  await prisma.armoryLoadout.upsert({
+    where: { userId },
+    update: { [field]: artifactIdValue },
+    create: { userId, [field]: artifactIdValue },
   });
 
-  return getArmoryState(userId);
+  return { slotType: slot, artifactId: artifactIdValue ?? null };
 }
 
 export async function craftArmoryArtifact(userId: string, artifactIdValue: string) {
-  await ensureArmoryDefaults();
-  const crafted = await prisma.$transaction(async (tx) => {
-    const artifact = await tx.armoryArtifact.findUnique({
-      where: { id: artifactIdValue },
-      include: { set: true },
-    });
-    if (!artifact || !artifact.active) throw new Error('BAD_ARTIFACT');
+  const config = await getArmoryForgeConfig();
+  const artifacts = config.sets.flatMap((set) => set.artifacts);
+  const artifact = artifacts.find((item) => item.id === artifactIdValue);
+  if (!artifact || !artifact.active) throw new Error('BAD_ARTIFACT');
 
-    const nextRarity = ARMORY_RARITY_UPGRADE[artifact.set.rarity];
-    if (!nextRarity) throw new Error('NO_CRAFT_UPGRADE');
+  const nextRarity = ARMORY_RARITY_UPGRADE[artifact.set.rarity];
+  if (!nextRarity) throw new Error('NO_CRAFT_UPGRADE');
 
-    const nextArtifact = await tx.armoryArtifact.findFirst({
-      where: {
-        slotType: artifact.slotType,
-        active: true,
-        set: { rarity: nextRarity, active: true },
+  const nextArtifact = artifacts.find((item) => item.slotType === artifact.slotType && item.set.rarity === nextRarity);
+  if (!nextArtifact) throw new Error('NO_CRAFT_TARGET');
+
+  const [inventory, loadout] = await Promise.all([
+    prisma.armoryInventory.findUnique({
+      where: { userId_artifactId: { userId, artifactId: artifact.id } },
+      select: { quantity: true },
+    }),
+    prisma.armoryLoadout.findUnique({
+      where: { userId },
+      select: {
+        headgearArtifactId: true,
+        armorArtifactId: true,
+        glovesArtifactId: true,
+        bootsArtifactId: true,
       },
-      include: { set: true },
-      orderBy: { displayOrder: 'asc' },
-    });
-    if (!nextArtifact) throw new Error('NO_CRAFT_TARGET');
+    }),
+  ]);
+  if (!inventory || inventory.quantity < 3) throw new Error('NOT_ENOUGH_DUPLICATES');
 
-    const inventory = await tx.armoryInventory.findUnique({
-      where: { userId_artifactId: { userId, artifactId: artifact.id } },
-    });
-    if (!inventory || inventory.quantity < 3) throw new Error('NOT_ENOUGH_DUPLICATES');
+  const equippedIds = [
+    loadout?.headgearArtifactId,
+    loadout?.armorArtifactId,
+    loadout?.glovesArtifactId,
+    loadout?.bootsArtifactId,
+  ].filter(Boolean);
+  const equippedCopies = equippedIds.filter((id) => id === artifact.id).length;
+  if (inventory.quantity - equippedCopies < 3) throw new Error('NO_FREE_CRAFT_COPIES');
 
-    const loadout = await tx.armoryLoadout.findUnique({ where: { userId } });
-    const equippedIds = [
-      loadout?.headgearArtifactId,
-      loadout?.armorArtifactId,
-      loadout?.glovesArtifactId,
-      loadout?.bootsArtifactId,
-    ].filter(Boolean);
-    const equippedCopies = equippedIds.filter((id) => id === artifact.id).length;
-    if (inventory.quantity - equippedCopies < 3) throw new Error('NO_FREE_CRAFT_COPIES');
-
-    await tx.armoryInventory.update({
-      where: { userId_artifactId: { userId, artifactId: artifact.id } },
+  const requiredQuantity = 3 + equippedCopies;
+  await prisma.$transaction(async (tx) => {
+    const consumed = await tx.armoryInventory.updateMany({
+      where: { userId, artifactId: artifact.id, quantity: { gte: requiredQuantity } },
       data: { quantity: { decrement: 3 } },
     });
-
+    if (consumed.count !== 1) throw new Error('NO_FREE_CRAFT_COPIES');
     await tx.armoryInventory.upsert({
       where: { userId_artifactId: { userId, artifactId: nextArtifact.id } },
       update: { quantity: { increment: 1 } },
       create: { userId, artifactId: nextArtifact.id, quantity: 1 },
     });
-
-    return nextArtifact;
   });
 
-  return { crafted, state: await getArmoryState(userId) };
+  return { crafted: nextArtifact, consumedArtifactId: artifactIdValue, consumedQuantity: 3 };
 }
 
 export async function claimArmorySet(userId: string) {
-  await ensureArmoryDefaults();
-  const ticketId = await prisma.$transaction(async (tx) => {
+  const claimDate = getArmoryToday();
+  const ticket = await prisma.$transaction(async (tx) => {
     const loadout = await tx.armoryLoadout.findUnique({
       where: { userId },
       include: {
-        headgear: { include: { set: true } },
-        armor: { include: { set: true } },
-        gloves: { include: { set: true } },
-        boots: { include: { set: true } },
+        headgear: { select: { id: true, setId: true } },
+        armor: { select: { id: true, setId: true } },
+        gloves: { select: { id: true, setId: true } },
+        boots: { select: { id: true, setId: true } },
       },
     });
     if (!loadout?.headgear || !loadout.armor || !loadout.gloves || !loadout.boots) throw new Error('NO_FULL_SET');
@@ -495,14 +674,11 @@ export async function claimArmorySet(userId: string) {
 
     const artifactIds = [loadout.headgear.id, loadout.armor.id, loadout.gloves.id, loadout.boots.id];
     for (const id of artifactIds) {
-      const inventory = await tx.armoryInventory.findUnique({
-        where: { userId_artifactId: { userId, artifactId: id } },
-      });
-      if (!inventory || inventory.quantity <= 0) throw new Error('MISSING_EQUIPPED_ITEM');
-      await tx.armoryInventory.update({
-        where: { userId_artifactId: { userId, artifactId: id } },
+      const consumed = await tx.armoryInventory.updateMany({
+        where: { userId, artifactId: id, quantity: { gt: 0 } },
         data: { quantity: { decrement: 1 } },
       });
+      if (consumed.count !== 1) throw new Error('MISSING_EQUIPPED_ITEM');
     }
 
     await tx.armoryLoadout.update({
@@ -521,6 +697,7 @@ export async function claimArmorySet(userId: string) {
         userId,
         setId,
         code: makeTicketCode(),
+        claimDate,
         rewardSnapshot: JSON.stringify({
           setName: reward.set.name,
           setRarity: reward.set.rarity,
@@ -538,12 +715,13 @@ export async function claimArmorySet(userId: string) {
         }),
         expiresAt,
       },
+      include: { set: true },
     });
 
-    return ticket.id;
+    return { ticket, consumedArtifactIds: artifactIds };
   });
 
-  return { ticketId, state: await getArmoryState(userId) };
+  return ticket;
 }
 
 export async function getArmoryAdminConfig() {
@@ -617,17 +795,23 @@ export async function updateArmoryAdminConfig(body: any) {
     }
   });
 
+  armoryForgeConfigCache = null;
   return getArmoryAdminConfig();
 }
 
 export async function getArmoryConsumedSets(date?: string) {
-  await purgeExpiredArmoryTickets();
+  const claimDate = date || getArmoryToday();
   return prisma.armoryTicket.findMany({
     where: {
-      expiresAt: { gt: new Date() },
-      ...(date ? { claimedAt: { gte: istDayStart(date), lt: istDayStart(addIsoDays(date, 1)) } } : {}),
+      claimDate,
     },
-    include: { user: { select: { name: true, email: true, phone: true } }, set: true },
+    select: {
+      id: true,
+      rewardSnapshot: true,
+      claimedAt: true,
+      user: { select: { name: true, email: true, phone: true } },
+      set: { select: { name: true } },
+    },
     orderBy: { claimedAt: 'desc' },
     take: 200,
   });
@@ -640,29 +824,46 @@ function nullableInt(value: unknown) {
 }
 
 export async function lookupArmoryTicket(code: string) {
-  await purgeExpiredArmoryTickets();
   return prisma.armoryTicket.findUnique({
     where: { code: code.trim().toUpperCase() },
-    include: { user: { select: { name: true, email: true, phone: true } }, set: true },
+    select: {
+      id: true,
+      rewardSnapshot: true,
+      code: true,
+      status: true,
+      claimDate: true,
+      claimedAt: true,
+      expiresAt: true,
+      redeemedAt: true,
+      user: { select: { name: true, email: true, phone: true } },
+      set: { select: { id: true, name: true, rarity: true } },
+    },
   });
 }
 
 export async function redeemArmoryTicket(ticketId: string) {
-  await purgeExpiredArmoryTickets();
-  const ticket = await prisma.armoryTicket.findUnique({ where: { id: ticketId } });
+  const ticket = await prisma.armoryTicket.findUnique({
+    where: { id: ticketId },
+    select: { id: true, status: true, claimDate: true, expiresAt: true },
+  });
   if (!ticket) throw new Error('TICKET_NOT_FOUND');
   if (ticket.status === 'REDEEMED') throw new Error('TICKET_REDEEMED');
-  if (ticket.expiresAt < new Date()) throw new Error('TICKET_EXPIRED');
+  if (ticket.claimDate !== getArmoryToday()) throw new Error('TICKET_EXPIRED');
   return prisma.armoryTicket.update({
     where: { id: ticketId },
     data: { status: 'REDEEMED', redeemedAt: new Date() },
-    include: { user: { select: { name: true, email: true, phone: true } }, set: true },
-  });
-}
-
-async function purgeExpiredArmoryTickets() {
-  await prisma.armoryTicket.deleteMany({
-    where: { expiresAt: { lte: new Date() } },
+    select: {
+      id: true,
+      rewardSnapshot: true,
+      code: true,
+      status: true,
+      claimDate: true,
+      claimedAt: true,
+      expiresAt: true,
+      redeemedAt: true,
+      user: { select: { name: true, email: true, phone: true } },
+      set: { select: { id: true, name: true, rarity: true } },
+    },
   });
 }
 

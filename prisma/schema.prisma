@@ -369,6 +369,7 @@ model ArmoryTicket {
   rewardSnapshot String
   code           String    @unique
   status         String    @default("UNUSED")
+  claimDate      String    @default("") // YYYY-MM-DD in IST
   claimedAt      DateTime  @default(now())
   expiresAt      DateTime
   redeemedAt     DateTime?
@@ -378,5 +379,7 @@ model ArmoryTicket {
   user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   set  ArmorySet @relation(fields: [setId], references: [id], onDelete: Cascade)
 
+  @@index([userId, claimDate])
+  @@index([claimDate])
   @@map("armory_tickets")
 }

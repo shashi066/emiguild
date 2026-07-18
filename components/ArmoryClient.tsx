@@ -144,6 +144,34 @@ function buildSetProgress(state: any) {
   };
 }
 
+function progressSnapshot(loadout: any, sets: any[]) {
+  const equipped = SLOTS.map((slot) => loadout?.[slot]).filter(Boolean);
+  if (equipped.length !== SLOTS.length) return { completeSet: null, reward: null };
+
+  const setId = equipped[0]?.setId;
+  const completeSet = equipped.every((artifact: any) => artifact.setId === setId)
+    ? sets.find((set: any) => set.id === setId) ?? null
+    : null;
+
+  return {
+    completeSet,
+    reward: completeSet?.rewards?.[0] ?? null,
+  };
+}
+
+function updateInventory(inventory: any[], artifact: any, delta: number) {
+  const existing = inventory.find((row) => row.artifactId === artifact.id || row.artifact?.id === artifact.id);
+  if (!existing && delta <= 0) return inventory;
+
+  if (!existing) {
+    return [{ id: `local-${artifact.id}`, artifactId: artifact.id, quantity: delta, artifact }, ...inventory];
+  }
+
+  const nextQuantity = (existing.quantity ?? 0) + delta;
+  if (nextQuantity <= 0) return inventory.filter((row) => row !== existing);
+  return inventory.map((row) => row === existing ? { ...row, quantity: nextQuantity } : row);
+}
+
 function ArtifactSigil({ artifact, size = 'md' }: { artifact: any; size?: 'sm' | 'md' | 'lg' }) {
   const set = artifact?.set ?? artifact;
   const theme = rarityTheme(set?.rarity);
@@ -158,19 +186,20 @@ function ArtifactSigil({ artifact, size = 'md' }: { artifact: any; size?: 'sm' |
   );
 }
 
-export function ArmoryClient() {
+export function ArmoryClient({ initialState, initialError = '' }: { initialState?: any; initialError?: string }) {
   const { status } = useSession();
-  const [state, setState] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<any>(initialState ?? null);
+  const [loading, setLoading] = useState(!initialState && !initialError);
   const [saving, setSaving] = useState(false);
   const [forging, setForging] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initialError);
   const [forgeResult, setForgeResult] = useState<any>(null);
   const [rarityFilter, setRarityFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
   const [nextForgeTimer, setNextForgeTimer] = useState(getNextForgeTimer);
 
   const load = async () => {
+    if (initialState && state) return;
     if (status !== 'authenticated') {
       setLoading(false);
       return;
@@ -230,8 +259,67 @@ export function ArmoryClient() {
       });
       const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Artifacts action failed.');
-      const nextState = data.state ?? data;
-      setState(nextState);
+      if (data.state) {
+        setState(data.state);
+      } else {
+        setState((current: any) => {
+          if (!current) return current;
+          const artifacts = current.artifacts ?? [];
+
+          if (data.selected) {
+            const artifact = artifacts.find((item: any) => item.id === data.selected.id) ?? data.selected;
+            return {
+              ...current,
+              forge: {
+                ...current.forge,
+                canForge: false,
+                claimedToday: true,
+                todayClaim: { ...(data.todayClaim ?? {}), artifact },
+                reason: 'claimed',
+              },
+              inventory: updateInventory(current.inventory ?? [], artifact, 1),
+            };
+          }
+
+          if (data.slotType) {
+            const artifact = data.artifactId
+              ? artifacts.find((item: any) => item.id === data.artifactId) ?? null
+              : null;
+            const loadout = { ...(current.loadout ?? {}), [data.slotType]: artifact };
+            return {
+              ...current,
+              loadout,
+              progress: progressSnapshot(loadout, current.sets ?? []),
+            };
+          }
+
+          if (data.crafted) {
+            const crafted = artifacts.find((item: any) => item.id === data.crafted.id) ?? data.crafted;
+            const afterConsumed = updateInventory(current.inventory ?? [], { id: data.consumedArtifactId }, -(data.consumedQuantity ?? 3));
+            return {
+              ...current,
+              inventory: updateInventory(afterConsumed, crafted, 1),
+            };
+          }
+
+          if (data.ticket) {
+            const inventory = (data.consumedArtifactIds ?? []).reduce(
+              (rows: any[], artifactId: string) => updateInventory(rows, { id: artifactId }, -1),
+              current.inventory ?? [],
+            );
+            const loadout = SLOTS.reduce((next, slot) => ({ ...next, [slot]: null }), {} as Record<string, null>);
+            return {
+              ...current,
+              inventory,
+              loadout,
+              progress: { completeSet: null, reward: null },
+              tickets: [data.ticket, ...(current.tickets ?? [])],
+            };
+          }
+
+          return current;
+        });
+      }
       if (data.selected) {
         setForgeResult(data.selected);
       }

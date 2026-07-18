@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { claimArmorySet, friendlyArmoryError } from '@/lib/armory';
+import { claimArmorySet, friendlyArmoryError, serializeArmoryActionResult } from '@/lib/armory';
 
 export async function POST() {
   const session = await auth();
@@ -10,7 +10,7 @@ export async function POST() {
 
   try {
     const result = await claimArmorySet(session.user.id);
-    return NextResponse.json(result);
+    return NextResponse.json(serializeArmoryActionResult(result));
   } catch (error) {
     const friendly = friendlyArmoryError(error);
     return NextResponse.json({ error: friendly.error }, { status: friendly.status });
