@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { encryptNumber } from '@/lib/crypto';
 
 const STREAK_EPIC_TARGET = 10;
+const STREAK_LOOKBACK_LIMIT = STREAK_EPIC_TARGET + 2;
 const STREAK_RESET_RARITIES = new Set(['EPIC', 'LEGENDARY']);
 
 // Helper to get the effective "spin date" in YYYY-MM-DD format (IST)
@@ -142,7 +143,10 @@ function pickWeightedItem<T extends { weight: number }>(items: T[]) {
 
 async function getUserStreakSnapshot(userId: string, effectiveToday: string) {
   const spins = await prisma.userDailySpin.findMany({
-    where: { userId },
+    where: {
+      userId,
+      spinDate: { lte: effectiveToday },
+    },
     select: {
       spinDate: true,
       lootItem: {
@@ -154,6 +158,7 @@ async function getUserStreakSnapshot(userId: string, effectiveToday: string) {
     orderBy: {
       spinDate: 'desc',
     },
+    take: STREAK_LOOKBACK_LIMIT,
   });
 
   const current = calculateCurrentStreak(spins, effectiveToday);
