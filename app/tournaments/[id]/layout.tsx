@@ -38,6 +38,10 @@ export default function TournamentLayout({ children }: { children: React.ReactNo
       .then((d) => setTournament(d.tournament));
   }, [id]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [pathname]);
+
   const activeTab = NAV_TABS.find((t) => {
     const fullPath = `/tournaments/${id}${t.path}`;
     return t.path === '' ? pathname === fullPath : pathname.startsWith(fullPath);
