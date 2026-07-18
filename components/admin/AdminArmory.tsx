@@ -131,7 +131,6 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
 
   useEffect(() => {
     if (!initialConfig) load();
-    loadHistory(getTodayIST());
   }, []);
 
   const totalDrop = sets.filter((set) => set.active).reduce((sum, set) => sum + Number(set.dropPercentage || 0), 0);
