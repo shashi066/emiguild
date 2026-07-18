@@ -26,6 +26,7 @@ import {
 const SLOTS = ['HEADGEAR', 'ARMOR', 'GLOVES', 'BOOTS'] as const;
 const RARITIES = ['ALL', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM'] as const;
 const RARITY_DISPLAY_ORDER = ['PLATINUM', 'GOLD', 'SILVER', 'BRONZE'] as const;
+const FORGE_ANIMATION_MS = 3000;
 
 const SLOT_META: Record<string, any> = {
   HEADGEAR: { label: 'Headgear', Icon: Crown },
@@ -55,6 +56,10 @@ async function readJson(res: Response) {
   } catch {
     return {};
   }
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function parseReward(snapshot: string) {
@@ -194,6 +199,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   const [forging, setForging] = useState(false);
   const [error, setError] = useState(initialError);
   const [forgeResult, setForgeResult] = useState<any>(null);
+  const [forgeCharging, setForgeCharging] = useState(false);
   const [rarityFilter, setRarityFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
   const [nextForgeTimer, setNextForgeTimer] = useState(getNextForgeTimer);
@@ -248,8 +254,13 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
 
   const act = async (url: string, body?: any) => {
     const isForge = url.endsWith('/forge');
+    const forgeStartedAt = Date.now();
     setSaving(true);
-    if (isForge) setForging(true);
+    if (isForge) {
+      setForging(true);
+      setForgeCharging(true);
+      setForgeResult(null);
+    }
     setError('');
     try {
       const res = await fetch(url, {
@@ -320,7 +331,9 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
           return current;
         });
       }
-      if (data.selected) {
+      if (data.selected && isForge) {
+        const remainingAnimationMs = Math.max(0, FORGE_ANIMATION_MS - (Date.now() - forgeStartedAt));
+        if (remainingAnimationMs > 0) await wait(remainingAnimationMs);
         setForgeResult(data.selected);
       }
       if (data.crafted) {
@@ -332,7 +345,10 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
       return false;
     } finally {
       setSaving(false);
-      if (isForge) setForging(false);
+      if (isForge) {
+        setForging(false);
+        setForgeCharging(false);
+      }
     }
   };
 
@@ -417,7 +433,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
           )}
         </section>
       </div>
-      {revealArtifact && (
+      {(forgeCharging || revealArtifact) && (
         <ForgeReveal
           artifact={revealArtifact}
           saving={saving}
@@ -537,12 +553,16 @@ function ForgeReveal({ artifact, saving, onEquip, onKeep }: { artifact: any; sav
   const [revealReady, setRevealReady] = useState(false);
 
   useEffect(() => {
+    if (!artifact) {
+      setRevealReady(false);
+      return;
+    }
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion) {
       setRevealReady(true);
       return;
     }
-    const id = window.setTimeout(() => setRevealReady(true), 850);
+    const id = window.setTimeout(() => setRevealReady(true), 120);
     return () => window.clearTimeout(id);
   }, [artifact?.id]);
 
@@ -553,14 +573,14 @@ function ForgeReveal({ artifact, saving, onEquip, onKeep }: { artifact: any; sav
           <span className="forge-spinner"><Sparkles size={30} /></span>
           <span>Forging</span>
         </div>
-        <div className="reveal-rarity"><span>{theme.label} Artifact</span></div>
-        {revealReady && (
+        {artifact && <div className="reveal-rarity"><span>{theme.label} Artifact</span></div>}
+        {revealReady && artifact && (
           <div className="reveal-art-wrap">
             <div className="reveal-lines" />
             <ArtifactArtwork artifact={artifact} />
           </div>
         )}
-        {revealReady && (
+        {revealReady && artifact && (
           <>
             <div className="reveal-copy">
               <h2 className="font-orbitron">{artifact.name}</h2>
@@ -850,7 +870,7 @@ function ArmoryStyles() {
       .forge-reveal-layer:not(.reveal-ready) .forge-reveal-scene { grid-template-rows: 1fr; }
       .forge-charge { align-self: center; min-height: 150px; display: inline-grid; justify-items: center; align-content: center; gap: 14px; color: #dff8ff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.88rem; animation: revealFade 120ms ease both; }
       .forge-spinner { width: 88px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; color: #61e8ff; }
-      .forge-spinner::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); border-top-color: #61e8ff; animation: forgeSpin 850ms linear both; }
+      .forge-spinner::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); border-top-color: #61e8ff; animation: forgeSpin 850ms linear infinite; }
       .forge-spinner svg { position: relative; z-index: 1; }
       .reveal-ready .forge-charge { display: none; }
       .reveal-rarity { min-height: 38px; display: none; align-items: center; border-top: 1px solid var(--reveal-color); border-bottom: 1px solid var(--reveal-color); padding: 0 18px; color: var(--reveal-color); font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.76rem; animation: revealFade 180ms ease both; }
