@@ -1,0 +1,710 @@
+import crypto from 'crypto';
+import { prisma } from '@/lib/prisma';
+
+export const ARMORY_SLOTS = ['HEADGEAR', 'ARMOR', 'GLOVES', 'BOOTS'] as const;
+export type ArmorySlot = typeof ARMORY_SLOTS[number];
+
+export const ARMORY_SETTING_KEYS = [
+  'armory_enabled',
+] as const;
+
+export const DEFAULT_ARMORY_SETS = [
+  { id: 'iron_vanguard', name: 'Iron Vanguard', shortLabel: 'Vanguard', rarity: 'BRONZE', dropPercentage: 40, displayOrder: 1 },
+  { id: 'silver_phantom', name: 'Silver Phantom', shortLabel: 'Phantom', rarity: 'SILVER', dropPercentage: 30, displayOrder: 2 },
+  { id: 'golden_titan', name: 'Golden Titan', shortLabel: 'Titan', rarity: 'GOLD', dropPercentage: 20, displayOrder: 3 },
+  { id: 'platinum_sovereign', name: 'Platinum Sovereign', shortLabel: 'Sovereign', rarity: 'PLATINUM', dropPercentage: 10, displayOrder: 4 },
+] as const;
+
+const DEFAULT_SLOT_WEIGHTS: Record<ArmorySlot, number> = {
+  HEADGEAR: 10,
+  ARMOR: 20,
+  GLOVES: 30,
+  BOOTS: 40,
+};
+
+const ARMORY_DEFAULTS_VERSION_KEY = 'armory_defaults_version';
+const ARMORY_DEFAULTS_VERSION = 'launch_rewards_v2';
+
+const ARTIFACT_NAMES: Record<string, Record<ArmorySlot, string>> = {
+  iron_vanguard: {
+    HEADGEAR: 'Vanguard Helm',
+    ARMOR: 'Vanguard Armor',
+    GLOVES: 'Vanguard Gloves',
+    BOOTS: 'Vanguard Boots',
+  },
+  silver_phantom: {
+    HEADGEAR: 'Phantom Visor',
+    ARMOR: 'Phantom Armor',
+    GLOVES: 'Phantom Gloves',
+    BOOTS: 'Phantom Boots',
+  },
+  golden_titan: {
+    HEADGEAR: 'Titan Crown',
+    ARMOR: 'Titan Armor',
+    GLOVES: 'Titan Gauntlets',
+    BOOTS: 'Titan Boots',
+  },
+  platinum_sovereign: {
+    HEADGEAR: 'Sovereign Headgear',
+    ARMOR: 'Sovereign Armor',
+    GLOVES: 'Sovereign Gloves',
+    BOOTS: 'Sovereign Boots',
+  },
+};
+
+const DEFAULT_REWARDS: Record<string, any> = {
+  iron_vanguard: {
+    rewardType: 'GAMING_MINUTES',
+    gamingMinutes: 30,
+    validityDays: 7,
+    eligibleStations: 'Standard gaming stations only',
+    description: '30 Minutes Gaming',
+  },
+  silver_phantom: {
+    rewardType: 'RACING_MINUTES',
+    racingMinutes: 30,
+    validityDays: 7,
+    eligibleStations: 'Racing wheel stations only',
+    description: '30 Minutes Racing Wheel',
+  },
+  golden_titan: {
+    rewardType: 'SQUAD_NIGHT',
+    gamingMinutes: 60,
+    validityDays: 10,
+    eligibleStations: 'Standard gaming stations only',
+    description: 'Squad Night: 1 Hour Gaming for You + 3 Friends',
+  },
+  platinum_sovereign: {
+    rewardType: 'BRONZE_PASS',
+    gamingMinutes: 600,
+    validityDays: 14,
+    eligibleStations: 'Standard gaming stations only',
+    description: 'Bronze Pass (10 Hours)',
+  },
+};
+
+const SLOT_FIELD: Record<ArmorySlot, 'headgearArtifactId' | 'armorArtifactId' | 'glovesArtifactId' | 'bootsArtifactId'> = {
+  HEADGEAR: 'headgearArtifactId',
+  ARMOR: 'armorArtifactId',
+  GLOVES: 'glovesArtifactId',
+  BOOTS: 'bootsArtifactId',
+};
+
+const ARMORY_RARITY_UPGRADE: Record<string, string> = {
+  BRONZE: 'SILVER',
+  SILVER: 'GOLD',
+  GOLD: 'PLATINUM',
+};
+
+export function getArmoryToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((part) => part.type === type)!.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+export function validateDropPercentages(sets: Array<{ active?: boolean; dropPercentage: number }>) {
+  const total = sets
+    .filter((set) => set.active !== false)
+    .reduce((sum, set) => sum + Number(set.dropPercentage || 0), 0);
+  return total === 100;
+}
+
+export function validateSlotWeights(artifacts: Array<{ active?: boolean; setId: string; slotDropPercentage?: number }>) {
+  const totals = artifacts.reduce((map, artifact) => {
+    if (artifact.active === false) return map;
+    map[artifact.setId] = (map[artifact.setId] ?? 0) + Number(artifact.slotDropPercentage || 0);
+    return map;
+  }, {} as Record<string, number>);
+  return Object.values(totals).every((total) => total === 100);
+}
+
+export function pickWeightedSet<T extends { dropPercentage: number }>(sets: T[], randomInt = crypto.randomInt): T {
+  const total = sets.reduce((sum, set) => sum + set.dropPercentage, 0);
+  const roll = randomInt(0, total);
+  let cursor = 0;
+  for (const set of sets) {
+    cursor += set.dropPercentage;
+    if (roll < cursor) return set;
+  }
+  return sets[0];
+}
+
+export function pickWeightedArtifact<T extends { slotDropPercentage: number }>(artifacts: T[], randomInt = crypto.randomInt): T {
+  const total = artifacts.reduce((sum, artifact) => sum + artifact.slotDropPercentage, 0);
+  const roll = randomInt(0, total);
+  let cursor = 0;
+  for (const artifact of artifacts) {
+    cursor += artifact.slotDropPercentage;
+    if (roll < cursor) return artifact;
+  }
+  return artifacts[0];
+}
+
+export function detectCompleteSet(loadout: Record<ArmorySlot, any | null>) {
+  const equipped = ARMORY_SLOTS.map((slot) => loadout[slot]).filter(Boolean);
+  if (equipped.length !== 4) return null;
+  const setId = equipped[0].setId;
+  return equipped.every((artifact) => artifact.setId === setId) ? setId : null;
+}
+
+function artifactId(setId: string, slot: ArmorySlot) {
+  return `${setId}_${slot.toLowerCase()}`;
+}
+
+function nextIstMidnight() {
+  const today = getArmoryToday();
+  const tomorrow = addIsoDays(today, 1);
+  return istDayStart(tomorrow);
+}
+
+function makeTicketCode() {
+  return `ARM-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+}
+
+async function getSettingsMap() {
+  const settings = await prisma.setting.findMany({
+    where: { key: { in: [...ARMORY_SETTING_KEYS] } },
+  });
+  return settings.reduce((map, setting) => ({ ...map, [setting.key]: setting.value }), {} as Record<string, string>);
+}
+
+export async function ensureArmoryDefaults() {
+  assertArmoryClientReady();
+
+  await Promise.all([
+    prisma.setting.upsert({
+      where: { key: 'armory_enabled' },
+      update: {},
+      create: { key: 'armory_enabled', value: 'true', label: 'Enable Artifacts' },
+    }),
+  ]);
+
+  const defaultsVersion = await prisma.setting.findUnique({ where: { key: ARMORY_DEFAULTS_VERSION_KEY } });
+  const shouldApplyLaunchDefaults = defaultsVersion?.value !== ARMORY_DEFAULTS_VERSION;
+
+  for (const set of DEFAULT_ARMORY_SETS) {
+    await prisma.armorySet.upsert({
+      where: { id: set.id },
+      update: shouldApplyLaunchDefaults ? {
+        dropPercentage: set.dropPercentage,
+        active: true,
+        displayOrder: set.displayOrder,
+      } : {},
+      create: set,
+    });
+
+    for (const slot of ARMORY_SLOTS) {
+      await prisma.armoryArtifact.upsert({
+        where: { id: artifactId(set.id, slot) },
+        update: shouldApplyLaunchDefaults ? {
+          name: ARTIFACT_NAMES[set.id][slot],
+          slotDropPercentage: DEFAULT_SLOT_WEIGHTS[slot],
+        } : {},
+        create: {
+          id: artifactId(set.id, slot),
+          setId: set.id,
+          slotType: slot,
+          name: ARTIFACT_NAMES[set.id][slot],
+          slotDropPercentage: DEFAULT_SLOT_WEIGHTS[slot],
+          displayOrder: ARMORY_SLOTS.indexOf(slot) + 1,
+        },
+      });
+    }
+
+    await prisma.armorySetReward.upsert({
+      where: { setId: set.id },
+      update: shouldApplyLaunchDefaults ? {
+        ...DEFAULT_REWARDS[set.id],
+        discountPercentage: DEFAULT_REWARDS[set.id].discountPercentage ?? null,
+        discountAmount: DEFAULT_REWARDS[set.id].discountAmount ?? null,
+        gamingMinutes: DEFAULT_REWARDS[set.id].gamingMinutes ?? null,
+        racingMinutes: DEFAULT_REWARDS[set.id].racingMinutes ?? null,
+        minimumBookingValue: DEFAULT_REWARDS[set.id].minimumBookingValue ?? null,
+        maximumDiscount: DEFAULT_REWARDS[set.id].maximumDiscount ?? null,
+        weekdayOnly: DEFAULT_REWARDS[set.id].weekdayOnly ?? false,
+        active: true,
+      } : {},
+      create: {
+        setId: set.id,
+        ...DEFAULT_REWARDS[set.id],
+        discountPercentage: DEFAULT_REWARDS[set.id].discountPercentage ?? null,
+        discountAmount: DEFAULT_REWARDS[set.id].discountAmount ?? null,
+        gamingMinutes: DEFAULT_REWARDS[set.id].gamingMinutes ?? null,
+        racingMinutes: DEFAULT_REWARDS[set.id].racingMinutes ?? null,
+        minimumBookingValue: DEFAULT_REWARDS[set.id].minimumBookingValue ?? null,
+        maximumDiscount: DEFAULT_REWARDS[set.id].maximumDiscount ?? null,
+        weekdayOnly: DEFAULT_REWARDS[set.id].weekdayOnly ?? false,
+        active: true,
+      },
+    });
+  }
+
+  if (shouldApplyLaunchDefaults) {
+    await prisma.setting.upsert({
+      where: { key: ARMORY_DEFAULTS_VERSION_KEY },
+      update: { value: ARMORY_DEFAULTS_VERSION },
+      create: { key: ARMORY_DEFAULTS_VERSION_KEY, value: ARMORY_DEFAULTS_VERSION, label: 'Artifacts defaults version' },
+    });
+  }
+}
+
+function assertArmoryClientReady() {
+  if (!prisma.armorySet || !prisma.armoryArtifact || !prisma.armorySetReward) {
+    throw new Error('ARMORY_PRISMA_CLIENT_STALE');
+  }
+}
+
+export async function getArmoryState(userId: string) {
+  await ensureArmoryDefaults();
+  await purgeExpiredArmoryTickets();
+  const today = getArmoryToday();
+  const [settings, sets, artifacts, inventory, loadout, todayClaim, tickets] = await Promise.all([
+    getSettingsMap(),
+    prisma.armorySet.findMany({ include: { rewards: true }, orderBy: { displayOrder: 'asc' } }),
+    prisma.armoryArtifact.findMany({ include: { set: true }, orderBy: [{ set: { displayOrder: 'asc' } }, { displayOrder: 'asc' }] }),
+    prisma.armoryInventory.findMany({
+      where: { userId, quantity: { gt: 0 } },
+      include: { artifact: { include: { set: true } } },
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.armoryLoadout.findUnique({
+      where: { userId },
+      include: {
+        headgear: { include: { set: true } },
+        armor: { include: { set: true } },
+        gloves: { include: { set: true } },
+        boots: { include: { set: true } },
+      },
+    }),
+    prisma.armoryDailyClaim.findUnique({
+      where: { userId_claimDate: { userId, claimDate: today } },
+      include: { artifact: { include: { set: true } } },
+    }),
+    prisma.armoryTicket.findMany({
+      where: { userId, expiresAt: { gt: new Date() } },
+      include: { set: true },
+      orderBy: { claimedAt: 'desc' },
+      take: 20,
+    }),
+  ]);
+
+  const enabled = settings.armory_enabled !== 'false';
+  const equipped = {
+    HEADGEAR: loadout?.headgear ?? null,
+    ARMOR: loadout?.armor ?? null,
+    GLOVES: loadout?.gloves ?? null,
+    BOOTS: loadout?.boots ?? null,
+  };
+  const completeSetId = detectCompleteSet(equipped);
+  const completeSet = completeSetId ? sets.find((set) => set.id === completeSetId) ?? null : null;
+
+  return {
+    today,
+    forge: {
+      enabled,
+      canForge: enabled && !todayClaim,
+      claimedToday: Boolean(todayClaim),
+      todayClaim,
+      reason: !enabled ? 'disabled' : todayClaim ? 'claimed' : 'ready',
+    },
+    sets,
+    artifacts,
+    inventory,
+    loadout: equipped,
+    progress: {
+      completeSet,
+      reward: completeSet?.rewards?.[0] ?? null,
+    },
+    tickets,
+  };
+}
+
+export async function forgeArtifact(userId: string) {
+  await ensureArmoryDefaults();
+  const today = getArmoryToday();
+  const settings = await getSettingsMap();
+  if (settings.armory_enabled === 'false') throw new Error('ARMORY_DISABLED');
+
+  const selected = await prisma.$transaction(async (tx) => {
+    const existing = await tx.armoryDailyClaim.findUnique({
+      where: { userId_claimDate: { userId, claimDate: today } },
+    });
+    if (existing) throw new Error('ALREADY_FORGED');
+
+    const sets = await tx.armorySet.findMany({
+      where: { active: true, dropPercentage: { gt: 0 }, artifacts: { some: { active: true, slotDropPercentage: { gt: 0 } } } },
+      include: { artifacts: { where: { active: true, slotDropPercentage: { gt: 0 } } } },
+    });
+    if (!validateDropPercentages(sets)) throw new Error('BAD_DROP_TOTAL');
+    if (!validateSlotWeights(sets.flatMap((set) => set.artifacts))) throw new Error('BAD_SLOT_TOTAL');
+    if (!sets.length) throw new Error('NO_ARTIFACTS');
+
+    const set = pickWeightedSet(sets);
+    const artifact = pickWeightedArtifact(set.artifacts);
+
+    await tx.armoryInventory.upsert({
+      where: { userId_artifactId: { userId, artifactId: artifact.id } },
+      update: { quantity: { increment: 1 } },
+      create: { userId, artifactId: artifact.id, quantity: 1 },
+    });
+    if (existing) {
+      await tx.armoryDailyClaim.update({
+        where: { userId_claimDate: { userId, claimDate: today } },
+        data: { artifactId: artifact.id },
+      });
+    } else {
+      await tx.armoryDailyClaim.create({
+        data: { userId, claimDate: today, artifactId: artifact.id },
+      });
+    }
+
+    return artifact;
+  });
+
+  return { selected, state: await getArmoryState(userId) };
+}
+
+export async function equipArtifact(userId: string, slotType: string, artifactIdValue?: string | null) {
+  if (!ARMORY_SLOTS.includes(slotType as ArmorySlot)) throw new Error('BAD_SLOT');
+  const slot = slotType as ArmorySlot;
+  const field = SLOT_FIELD[slot];
+
+  await ensureArmoryDefaults();
+  await prisma.$transaction(async (tx) => {
+    const loadout = await tx.armoryLoadout.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+
+    if (!artifactIdValue) {
+      await tx.armoryLoadout.update({ where: { userId }, data: { [field]: null } });
+      return;
+    }
+
+    const artifact = await tx.armoryArtifact.findUnique({ where: { id: artifactIdValue } });
+    if (!artifact || artifact.slotType !== slot) throw new Error('BAD_ARTIFACT');
+
+    const inventory = await tx.armoryInventory.findUnique({
+      where: { userId_artifactId: { userId, artifactId: artifactIdValue } },
+    });
+    if (!inventory || inventory.quantity <= 0) throw new Error('NOT_OWNED');
+
+    const equippedIds = [
+      loadout.headgearArtifactId,
+      loadout.armorArtifactId,
+      loadout.glovesArtifactId,
+      loadout.bootsArtifactId,
+    ].filter(Boolean);
+    const alreadyEquippedCopies = equippedIds.filter((id) => id === artifactIdValue).length;
+    if (inventory.quantity <= alreadyEquippedCopies && loadout[field] !== artifactIdValue) {
+      throw new Error('NO_FREE_COPY');
+    }
+
+    await tx.armoryLoadout.update({ where: { userId }, data: { [field]: artifactIdValue } });
+  });
+
+  return getArmoryState(userId);
+}
+
+export async function craftArmoryArtifact(userId: string, artifactIdValue: string) {
+  await ensureArmoryDefaults();
+  const crafted = await prisma.$transaction(async (tx) => {
+    const artifact = await tx.armoryArtifact.findUnique({
+      where: { id: artifactIdValue },
+      include: { set: true },
+    });
+    if (!artifact || !artifact.active) throw new Error('BAD_ARTIFACT');
+
+    const nextRarity = ARMORY_RARITY_UPGRADE[artifact.set.rarity];
+    if (!nextRarity) throw new Error('NO_CRAFT_UPGRADE');
+
+    const nextArtifact = await tx.armoryArtifact.findFirst({
+      where: {
+        slotType: artifact.slotType,
+        active: true,
+        set: { rarity: nextRarity, active: true },
+      },
+      include: { set: true },
+      orderBy: { displayOrder: 'asc' },
+    });
+    if (!nextArtifact) throw new Error('NO_CRAFT_TARGET');
+
+    const inventory = await tx.armoryInventory.findUnique({
+      where: { userId_artifactId: { userId, artifactId: artifact.id } },
+    });
+    if (!inventory || inventory.quantity < 3) throw new Error('NOT_ENOUGH_DUPLICATES');
+
+    const loadout = await tx.armoryLoadout.findUnique({ where: { userId } });
+    const equippedIds = [
+      loadout?.headgearArtifactId,
+      loadout?.armorArtifactId,
+      loadout?.glovesArtifactId,
+      loadout?.bootsArtifactId,
+    ].filter(Boolean);
+    const equippedCopies = equippedIds.filter((id) => id === artifact.id).length;
+    if (inventory.quantity - equippedCopies < 3) throw new Error('NO_FREE_CRAFT_COPIES');
+
+    await tx.armoryInventory.update({
+      where: { userId_artifactId: { userId, artifactId: artifact.id } },
+      data: { quantity: { decrement: 3 } },
+    });
+
+    await tx.armoryInventory.upsert({
+      where: { userId_artifactId: { userId, artifactId: nextArtifact.id } },
+      update: { quantity: { increment: 1 } },
+      create: { userId, artifactId: nextArtifact.id, quantity: 1 },
+    });
+
+    return nextArtifact;
+  });
+
+  return { crafted, state: await getArmoryState(userId) };
+}
+
+export async function claimArmorySet(userId: string) {
+  await ensureArmoryDefaults();
+  const ticketId = await prisma.$transaction(async (tx) => {
+    const loadout = await tx.armoryLoadout.findUnique({
+      where: { userId },
+      include: {
+        headgear: { include: { set: true } },
+        armor: { include: { set: true } },
+        gloves: { include: { set: true } },
+        boots: { include: { set: true } },
+      },
+    });
+    if (!loadout?.headgear || !loadout.armor || !loadout.gloves || !loadout.boots) throw new Error('NO_FULL_SET');
+
+    const equipped = {
+      HEADGEAR: loadout.headgear,
+      ARMOR: loadout.armor,
+      GLOVES: loadout.gloves,
+      BOOTS: loadout.boots,
+    };
+    const setId = detectCompleteSet(equipped);
+    if (!setId) throw new Error('NO_MATCHING_SET');
+
+    const reward = await tx.armorySetReward.findUnique({ where: { setId }, include: { set: true } });
+    if (!reward || !reward.active) throw new Error('REWARD_INACTIVE');
+
+    const artifactIds = [loadout.headgear.id, loadout.armor.id, loadout.gloves.id, loadout.boots.id];
+    for (const id of artifactIds) {
+      const inventory = await tx.armoryInventory.findUnique({
+        where: { userId_artifactId: { userId, artifactId: id } },
+      });
+      if (!inventory || inventory.quantity <= 0) throw new Error('MISSING_EQUIPPED_ITEM');
+      await tx.armoryInventory.update({
+        where: { userId_artifactId: { userId, artifactId: id } },
+        data: { quantity: { decrement: 1 } },
+      });
+    }
+
+    await tx.armoryLoadout.update({
+      where: { userId },
+      data: {
+        headgearArtifactId: null,
+        armorArtifactId: null,
+        glovesArtifactId: null,
+        bootsArtifactId: null,
+      },
+    });
+
+    const expiresAt = nextIstMidnight();
+    const ticket = await tx.armoryTicket.create({
+      data: {
+        userId,
+        setId,
+        code: makeTicketCode(),
+        rewardSnapshot: JSON.stringify({
+          setName: reward.set.name,
+          setRarity: reward.set.rarity,
+          rewardType: reward.rewardType,
+          discountPercentage: reward.discountPercentage,
+          discountAmount: reward.discountAmount,
+          gamingMinutes: reward.gamingMinutes,
+          racingMinutes: reward.racingMinutes,
+          validityDays: reward.validityDays,
+          minimumBookingValue: reward.minimumBookingValue,
+          eligibleStations: reward.eligibleStations,
+          weekdayOnly: reward.weekdayOnly,
+          maximumDiscount: reward.maximumDiscount,
+          description: reward.description,
+        }),
+        expiresAt,
+      },
+    });
+
+    return ticket.id;
+  });
+
+  return { ticketId, state: await getArmoryState(userId) };
+}
+
+export async function getArmoryAdminConfig() {
+  await ensureArmoryDefaults();
+  const [settings, sets, artifacts, rewards] = await Promise.all([
+    getSettingsMap(),
+    prisma.armorySet.findMany({ orderBy: { displayOrder: 'asc' } }),
+    prisma.armoryArtifact.findMany({ include: { set: true }, orderBy: [{ set: { displayOrder: 'asc' } }, { displayOrder: 'asc' }] }),
+    prisma.armorySetReward.findMany({ include: { set: true }, orderBy: { set: { displayOrder: 'asc' } } }),
+  ]);
+  return { settings, sets, artifacts, rewards };
+}
+
+export async function updateArmoryAdminConfig(body: any) {
+  await ensureArmoryDefaults();
+  const sets = Array.isArray(body.sets) ? body.sets : [];
+  if (!validateDropPercentages(sets)) throw new Error('BAD_DROP_TOTAL');
+  const artifacts = Array.isArray(body.artifacts) ? body.artifacts : [];
+  if (!validateSlotWeights(artifacts)) throw new Error('BAD_SLOT_TOTAL');
+
+  await prisma.$transaction(async (tx) => {
+    const settings = body.settings ?? {};
+    for (const key of ARMORY_SETTING_KEYS) {
+      if (settings[key] !== undefined) {
+        await tx.setting.upsert({
+          where: { key },
+          update: { value: String(settings[key] ?? '') },
+          create: { key, value: String(settings[key] ?? ''), label: key },
+        });
+      }
+    }
+
+    for (const set of sets) {
+      await tx.armorySet.update({
+        where: { id: set.id },
+        data: {
+          dropPercentage: Number(set.dropPercentage ?? 0),
+          active: Boolean(set.active),
+        },
+      });
+    }
+
+    for (const artifact of artifacts) {
+      await tx.armoryArtifact.update({
+        where: { id: artifact.id },
+        data: {
+          active: Boolean(artifact.active),
+          slotDropPercentage: Math.max(0, Number(artifact.slotDropPercentage ?? 0)),
+        },
+      });
+    }
+
+    for (const reward of Array.isArray(body.rewards) ? body.rewards : []) {
+      await tx.armorySetReward.update({
+        where: { setId: reward.setId },
+        data: {
+          rewardType: String(reward.rewardType || 'PERCENT_DISCOUNT'),
+          discountPercentage: nullableInt(reward.discountPercentage),
+          discountAmount: nullableInt(reward.discountAmount),
+          gamingMinutes: nullableInt(reward.gamingMinutes),
+          racingMinutes: nullableInt(reward.racingMinutes),
+          validityDays: Math.max(1, Number(reward.validityDays || 7)),
+          minimumBookingValue: nullableInt(reward.minimumBookingValue),
+          eligibleStations: reward.eligibleStations ? String(reward.eligibleStations) : null,
+          weekdayOnly: Boolean(reward.weekdayOnly),
+          maximumDiscount: nullableInt(reward.maximumDiscount),
+          active: Boolean(reward.active),
+          description: String(reward.description || 'Armory reward ticket'),
+        },
+      });
+    }
+  });
+
+  return getArmoryAdminConfig();
+}
+
+export async function getArmoryConsumedSets(date?: string) {
+  await purgeExpiredArmoryTickets();
+  return prisma.armoryTicket.findMany({
+    where: {
+      expiresAt: { gt: new Date() },
+      ...(date ? { claimedAt: { gte: istDayStart(date), lt: istDayStart(addIsoDays(date, 1)) } } : {}),
+    },
+    include: { user: { select: { name: true, email: true, phone: true } }, set: true },
+    orderBy: { claimedAt: 'desc' },
+    take: 200,
+  });
+}
+
+function nullableInt(value: unknown) {
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export async function lookupArmoryTicket(code: string) {
+  await purgeExpiredArmoryTickets();
+  return prisma.armoryTicket.findUnique({
+    where: { code: code.trim().toUpperCase() },
+    include: { user: { select: { name: true, email: true, phone: true } }, set: true },
+  });
+}
+
+export async function redeemArmoryTicket(ticketId: string) {
+  await purgeExpiredArmoryTickets();
+  const ticket = await prisma.armoryTicket.findUnique({ where: { id: ticketId } });
+  if (!ticket) throw new Error('TICKET_NOT_FOUND');
+  if (ticket.status === 'REDEEMED') throw new Error('TICKET_REDEEMED');
+  if (ticket.expiresAt < new Date()) throw new Error('TICKET_EXPIRED');
+  return prisma.armoryTicket.update({
+    where: { id: ticketId },
+    data: { status: 'REDEEMED', redeemedAt: new Date() },
+    include: { user: { select: { name: true, email: true, phone: true } }, set: true },
+  });
+}
+
+async function purgeExpiredArmoryTickets() {
+  await prisma.armoryTicket.deleteMany({
+    where: { expiresAt: { lte: new Date() } },
+  });
+}
+
+export function friendlyArmoryError(error: unknown) {
+  const code = error instanceof Error ? error.message : String(error);
+  const map: Record<string, { error: string; status: number }> = {
+    ARMORY_DISABLED: { error: 'The Armory is closed right now.', status: 403 },
+    ARMORY_PRISMA_CLIENT_STALE: { error: 'Artifacts needs a dev server restart after Prisma generation.', status: 500 },
+    ALREADY_FORGED: { error: 'You already forged an artifact today.', status: 429 },
+    BAD_DROP_TOTAL: { error: 'Active drop percentages must total 100%.', status: 400 },
+    BAD_SLOT_TOTAL: { error: 'Active slot weights inside each set must total 100%.', status: 400 },
+    NO_ARTIFACTS: { error: 'No artifacts are available right now.', status: 500 },
+    BAD_SLOT: { error: 'Invalid equipment slot.', status: 400 },
+    BAD_ARTIFACT: { error: 'That artifact cannot be equipped in this slot.', status: 400 },
+    NOT_OWNED: { error: 'You do not own this artifact.', status: 400 },
+    NO_FREE_COPY: { error: 'No free copy of this artifact is available.', status: 400 },
+    NO_CRAFT_UPGRADE: { error: 'This artifact cannot be crafted higher.', status: 400 },
+    NO_CRAFT_TARGET: { error: 'No matching higher artifact is available.', status: 400 },
+    NOT_ENOUGH_DUPLICATES: { error: 'You need 3 copies of the same artifact to craft.', status: 400 },
+    NO_FREE_CRAFT_COPIES: { error: 'Unequip this artifact or collect more copies before crafting.', status: 400 },
+    NO_FULL_SET: { error: 'Equip all four slots before claiming a set reward.', status: 400 },
+    NO_MATCHING_SET: { error: 'All four equipped artifacts must belong to the same set.', status: 400 },
+    REWARD_INACTIVE: { error: 'This set reward is inactive.', status: 400 },
+    MISSING_EQUIPPED_ITEM: { error: 'One equipped artifact is no longer in your inventory.', status: 400 },
+    TICKET_NOT_FOUND: { error: 'Ticket not found.', status: 404 },
+    TICKET_REDEEMED: { error: 'Ticket has already been redeemed.', status: 409 },
+    TICKET_EXPIRED: { error: 'Ticket has expired.', status: 410 },
+  };
+  return map[code] ?? { error: 'Armory action failed.', status: 500 };
+}
+
+function istDayStart(date: string) {
+  return new Date(`${date}T00:00:00+05:30`);
+}
+
+function addIsoDays(date: string, days: number) {
+  const start = istDayStart(date);
+  start.setUTCDate(start.getUTCDate() + days);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(start);
+}

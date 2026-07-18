@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Monitor, Users,
-  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy,
+  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/admin/bookings', label: 'All Bookings',   icon: BookOpen },
   { href: '/admin/walkin',   label: 'Walk-in Booking', icon: UserPlus },
   { href: '/admin/passes',   label: 'Passes',         icon: Award },
+  { href: '/admin/armory',    label: 'Artifacts',      icon: Shield },
   { href: '/admin/draws',    label: 'Guild Drop',     icon: Gift },
   { href: '/admin/stations', label: 'Stations',       icon: Monitor },
   { href: '/admin/games',    label: 'Games',          icon: Gamepad2 },
