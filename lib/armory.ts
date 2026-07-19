@@ -817,6 +817,72 @@ export async function getArmoryConsumedSets(date?: string) {
   });
 }
 
+export async function getArmoryDailyDrops(date?: string) {
+  const claimDate = date || getArmoryToday();
+  return prisma.armoryDailyClaim.findMany({
+    where: { claimDate },
+    select: {
+      id: true,
+      createdAt: true,
+      user: { select: { name: true, email: true } },
+      artifact: {
+        select: {
+          name: true,
+          slotType: true,
+          set: { select: { name: true, rarity: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 200,
+  });
+}
+
+export async function searchArmoryInventoryUsers(search: string) {
+  const query = search.trim();
+  if (query.length < 2) return [];
+
+  return prisma.user.findMany({
+    where: {
+      role: 'USER',
+      OR: [
+        { name: { contains: query } },
+        { email: { contains: query } },
+      ],
+    },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: 'asc' },
+    take: 12,
+  });
+}
+
+export async function getArmoryUserInventory(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      armoryInventory: {
+        where: { quantity: { gt: 0 } },
+        select: {
+          id: true,
+          quantity: true,
+          artifact: {
+            select: {
+              id: true,
+              name: true,
+              slotType: true,
+              set: { select: { name: true, rarity: true } },
+            },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+      },
+    },
+  });
+}
+
 function nullableInt(value: unknown) {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = Number(value);

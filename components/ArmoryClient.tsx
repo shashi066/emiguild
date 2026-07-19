@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
@@ -207,6 +207,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   const [rarityFilter, setRarityFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
   const [nextForgeTimer, setNextForgeTimer] = useState(getNextForgeTimer);
+  const ticketsSectionRef = useRef<HTMLElement>(null);
 
   const load = async () => {
     if (initialState && state) return;
@@ -345,6 +346,13 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
       if (data.crafted) {
         setForgeResult(data.crafted);
       }
+      if (data.ticket) {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            ticketsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        });
+      }
       return true;
     } catch (err: any) {
       setError(err.message || 'Artifacts action failed.');
@@ -427,7 +435,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
           />
         </section>
 
-        <section className="armory-panel tickets-panel">
+        <section ref={ticketsSectionRef} className="armory-panel tickets-panel">
           <div className="section-heading">
             <div>
               <span>Rewards</span>
