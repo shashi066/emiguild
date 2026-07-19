@@ -153,6 +153,13 @@ export default async function AdminDashboard() {
         </Link>
       </div>
 
+      <AdminRevenueRange
+        initialFrom={data.monthStart}
+        initialTo={data.today}
+        initialRevenue={data.monthRevenue}
+        initialBookingCount={data.monthBookingCount}
+      />
+
       {/* Stats grid */}
       <div className="stats-grid">
         {statsCards.map((card, i) => {
@@ -175,7 +182,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Booking status summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-lg)', marginBottom: 'var(--space-xl)' }}>
+      <div className="admin-dashboard-summary">
         <div className="card" style={{ padding: 'var(--space-lg)' }}>
           <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-lg)' }}>
             <TrendingUp size={18} style={{ display: 'inline', marginRight: 8, color: 'var(--color-accent-primary)' }} />
@@ -220,12 +227,6 @@ export default async function AdminDashboard() {
                 </div>
               </div>
             ))}
-            <AdminRevenueRange
-              initialFrom={data.monthStart}
-              initialTo={data.today}
-              initialRevenue={data.monthRevenue}
-              initialBookingCount={data.monthBookingCount}
-            />
           </div>
         </div>
       </div>

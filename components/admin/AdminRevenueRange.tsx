@@ -61,39 +61,47 @@ export function AdminRevenueRange({
   }, [from, to]);
 
   return (
-    <div className="booking-detail-item" style={{ display: 'grid', gap: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+    <section className="admin-revenue-range" aria-label="Dashboard revenue range">
+      <div className="admin-revenue-range-heading">
+        <span className="admin-revenue-range-icon">
+          <CalendarDays size={20} />
+        </span>
         <div>
-          <div className="booking-detail-label">{rangeLabel} Revenue</div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#00d4ff', fontFamily: 'Orbitron, sans-serif' }}>
-            {loading ? '...' : formatCurrency(revenue)}
-          </div>
+          <div className="admin-revenue-range-title">Revenue period</div>
+          <div className="admin-revenue-range-copy">Choose the booking dates included in the revenue total.</div>
         </div>
-        <CalendarDays size={20} color="#00d4ff" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <input
-          type="date"
-          className="form-input"
-          value={from}
-          onChange={(event) => setFrom(event.target.value)}
-          aria-label="Revenue start date"
-          style={{ minWidth: 0, padding: '8px 10px', fontSize: '0.82rem' }}
-        />
-        <input
-          type="date"
-          className="form-input"
-          value={to}
-          onChange={(event) => setTo(event.target.value)}
-          aria-label="Revenue end date"
-          style={{ minWidth: 0, padding: '8px 10px', fontSize: '0.82rem' }}
-        />
+      <div className="admin-revenue-range-fields">
+        <label>
+          <span>From</span>
+          <input
+            type="date"
+            className="form-input"
+            value={from}
+            onChange={(event) => setFrom(event.target.value)}
+            aria-label="Revenue start date"
+          />
+        </label>
+        <label>
+          <span>To</span>
+          <input
+            type="date"
+            className="form-input"
+            value={to}
+            onChange={(event) => setTo(event.target.value)}
+            aria-label="Revenue end date"
+          />
+        </label>
       </div>
 
-      <div style={{ fontSize: '0.75rem', color: error ? '#ff8a8a' : 'var(--color-text-muted)' }}>
-        {error || `${bookingCount} booking${bookingCount === 1 ? '' : 's'} counted`}
+      <div className="admin-revenue-range-result" aria-live="polite">
+        <div className="admin-revenue-range-label">{rangeLabel} revenue</div>
+        <div className="admin-revenue-range-value">{loading ? '...' : formatCurrency(revenue)}</div>
+        <div className={error ? 'admin-revenue-range-error' : 'admin-revenue-range-count'}>
+          {error || `${bookingCount} booking${bookingCount === 1 ? '' : 's'} counted`}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }

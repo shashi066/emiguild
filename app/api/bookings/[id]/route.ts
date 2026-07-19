@@ -64,8 +64,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (outcome.artifactAward.awarded && artifact && outcome.booking.user?.email) {
         after(async () => {
           await notifyUserArtifactAward({
+            bookingId: outcome.booking.id,
             customerName: outcome.booking.user?.name ?? outcome.booking.customerName ?? 'Guild member',
             customerEmail: outcome.booking.user!.email,
+            stationName: outcome.booking.station.name,
+            date: outcome.booking.date,
+            startTime: outcome.booking.startTime,
+            endTime: outcome.booking.endTime,
+            duration: outcome.booking.duration,
             artifactName: artifact.name,
             setName: artifact.set.name,
             rarity: artifact.set.rarity,

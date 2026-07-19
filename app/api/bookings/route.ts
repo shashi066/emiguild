@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { bookingSchema } from '@/lib/validations';
 import { addHours } from '@/lib/utils';
-import { notifyAdminNewBooking } from '@/lib/notify';
+import { notifyAdminNewBooking, notifyUserNewBooking } from '@/lib/notify';
 import { encryptPhone } from '@/lib/crypto';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
@@ -260,8 +260,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Fire-and-forget admin notification — never blocks the booking response
-    notifyAdminNewBooking({
+    const notificationPayload = {
       bookingId:        booking.id,
       customerName:     booking.customerName ?? booking.user?.name ?? 'Unknown',
       customerEmail:    booking.user?.email ?? null,
@@ -276,6 +275,20 @@ export async function POST(req: NextRequest) {
       bookingType:      booking.bookingType,
       extraControllers: booking.extraControllers,
       notes:            booking.notes,
+    };
+
+    // Send admin and customer confirmations after responding to the booking request.
+    after(async () => {
+      await Promise.all([
+        notifyAdminNewBooking(notificationPayload),
+        booking.user?.email
+          ? notifyUserNewBooking({
+              ...notificationPayload,
+              customerEmail: booking.user.email,
+              paymentStatus: booking.paymentStatus,
+            })
+          : Promise.resolve(),
+      ]);
     });
 
     return NextResponse.json({
