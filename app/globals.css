@@ -1251,6 +1251,105 @@ input.form-input[type="time"]:focus {
   overflow-x: hidden;
 }
 
+.admin-revenue-range {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto minmax(190px, auto);
+  align-items: center;
+  gap: var(--space-xl);
+  margin-bottom: var(--space-xl);
+  padding: var(--space-lg) var(--space-xl);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid #00d4ff;
+  border-radius: var(--radius-md);
+}
+
+.admin-revenue-range-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.admin-revenue-range-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.08);
+  border-radius: var(--radius-md);
+}
+
+.admin-revenue-range-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.admin-revenue-range-copy,
+.admin-revenue-range-count,
+.admin-revenue-range-error {
+  margin-top: 3px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.admin-revenue-range-fields {
+  display: grid;
+  grid-template-columns: 150px 150px;
+  gap: var(--space-sm);
+}
+
+.admin-revenue-range-fields label {
+  display: grid;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.admin-revenue-range-fields .form-input {
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+}
+
+.admin-revenue-range-result {
+  min-width: 190px;
+  padding-left: var(--space-xl);
+  border-left: 1px solid var(--color-border);
+  text-align: right;
+}
+
+.admin-revenue-range-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.admin-revenue-range-value {
+  margin-top: 4px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #00d4ff;
+}
+
+.admin-revenue-range-error {
+  color: #ff8a8a;
+}
+
+.admin-dashboard-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
 /* Stats Cards */
 .stats-grid {
   display: grid;
@@ -1890,6 +1989,21 @@ input.form-input[type="time"]:focus {
   }
   .admin-layout  { flex-direction: column; }
   .admin-sidebar { width: 100%; height: auto; position: static; }
+  .admin-content { padding: var(--space-lg); }
+  .admin-revenue-range {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+  }
+  .admin-revenue-range-fields { grid-template-columns: 1fr 1fr; }
+  .admin-revenue-range-result {
+    min-width: 0;
+    padding: var(--space-md) 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+    text-align: left;
+  }
+  .admin-dashboard-summary { grid-template-columns: 1fr; }
 
   .footer-grid { grid-template-columns: 1fr 1fr; }
   .booking-details-grid { grid-template-columns: 1fr; }
@@ -1904,6 +2018,15 @@ input.form-input[type="time"]:focus {
   .footer-grid { grid-template-columns: 1fr; }
   .container    { padding: 0 var(--space-md); }
   .page-header  { flex-direction: column; align-items: flex-start; }
+  .admin-content { padding: var(--space-md); }
+  .admin-content .page-header { margin-bottom: var(--space-xl); }
+  .admin-content .page-header .btn { width: 100%; justify-content: center; }
+  .admin-revenue-range { padding: var(--space-md); }
+  .admin-revenue-range-copy { display: none; }
+  .admin-revenue-range-fields { grid-template-columns: 1fr; }
+  .admin-revenue-range-fields .form-input { width: 100%; min-height: 42px; }
+  .stats-grid { gap: var(--space-md); margin-bottom: var(--space-xl); }
+  .stat-card { padding: var(--space-lg); }
   .hero-stats   { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); }
 }
 
