@@ -451,6 +451,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                 <tbody>
                   {historyRows.map((row) => {
                     if (historyType === 'drops') {
+                      const source = row.claimDate?.includes(':checkin:') ? 'Check-in' : 'Forge';
                       return (
                         <tr key={row.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                           <td style={{ padding: 'var(--space-sm)' }}>
@@ -459,7 +460,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                           </td>
                           <td style={{ padding: 'var(--space-sm)' }}>
                             <strong style={{ color: ARMORY_RARITY_COLORS[row.artifact.set.rarity] ?? 'var(--color-text-primary)' }}>{row.artifact.name}</strong>
-                            <div style={{ fontSize: '0.78rem', color: ARMORY_RARITY_COLORS[row.artifact.set.rarity] ?? 'var(--color-text-muted)' }}>{row.artifact.set.rarity}</div>
+                            <div style={{ fontSize: '0.78rem', color: ARMORY_RARITY_COLORS[row.artifact.set.rarity] ?? 'var(--color-text-muted)' }}>{row.artifact.set.rarity} · {source}</div>
                           </td>
                           <td style={{ padding: 'var(--space-sm)' }}>{slotTypeLabel(row.artifact.slotType)}</td>
                           <td style={{ padding: 'var(--space-sm)', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>

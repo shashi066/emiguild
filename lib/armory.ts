@@ -539,6 +539,155 @@ export async function forgeArtifact(userId: string) {
   };
 }
 
+type CheckInArtifact = {
+  id: string;
+  name: string;
+  slotType: string;
+  set: { id: string; name: string; rarity: string };
+};
+
+export type CheckInArtifactAward = {
+  awarded: boolean;
+  reason?: 'NO_USER_ACCOUNT' | 'ARMORY_DISABLED' | 'ALREADY_AWARDED' | 'ALREADY_CHECKED_IN';
+  artifact?: CheckInArtifact;
+};
+
+function checkInArtifactPayload(artifact: any): CheckInArtifact {
+  return {
+    id: artifact.id,
+    name: artifact.name,
+    slotType: artifact.slotType,
+    set: {
+      id: artifact.set.id,
+      name: artifact.set.name,
+      rarity: artifact.set.rarity,
+    },
+  };
+}
+
+const checkInBookingInclude = {
+  user: { select: { id: true, name: true, email: true } },
+  station: { select: { id: true, name: true } },
+} as const;
+
+export async function checkInBookingWithArtifact(bookingId: string) {
+  const claimId = `checkin_${bookingId}`;
+  const [booking, existingClaim] = await Promise.all([
+    prisma.booking.findUnique({ where: { id: bookingId }, include: checkInBookingInclude }),
+    prisma.armoryDailyClaim.findUnique({
+      where: { id: claimId },
+      include: { artifact: { include: { set: true } } },
+    }),
+  ]);
+  if (!booking) throw new Error('BOOKING_NOT_FOUND');
+
+  if (existingClaim) {
+    const updatedBooking = booking.status === 'CHECKED_IN'
+      ? booking
+      : await prisma.booking.update({
+        where: { id: bookingId },
+        data: { status: 'CHECKED_IN' },
+        include: checkInBookingInclude,
+      });
+    return {
+      booking: updatedBooking,
+      artifactAward: {
+        awarded: false,
+        reason: 'ALREADY_AWARDED',
+        artifact: checkInArtifactPayload(existingClaim.artifact),
+      } satisfies CheckInArtifactAward,
+    };
+  }
+
+  if (booking.status === 'CHECKED_IN') {
+    return {
+      booking,
+      artifactAward: { awarded: false, reason: 'ALREADY_CHECKED_IN' } satisfies CheckInArtifactAward,
+    };
+  }
+
+  if (!booking.userId) {
+    const updatedBooking = await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: 'CHECKED_IN' },
+      include: checkInBookingInclude,
+    });
+    return {
+      booking: updatedBooking,
+      artifactAward: { awarded: false, reason: 'NO_USER_ACCOUNT' } satisfies CheckInArtifactAward,
+    };
+  }
+
+  const config = await getArmoryForgeConfig();
+  if (!config.enabled) {
+    const updatedBooking = await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: 'CHECKED_IN' },
+      include: checkInBookingInclude,
+    });
+    return {
+      booking: updatedBooking,
+      artifactAward: { awarded: false, reason: 'ARMORY_DISABLED' } satisfies CheckInArtifactAward,
+    };
+  }
+  if (!config.sets.length) throw new Error('NO_ARTIFACTS');
+  if (!validateDropPercentages(config.sets)) throw new Error('BAD_DROP_TOTAL');
+  if (!validateSlotWeights(config.sets.flatMap((set) => set.artifacts))) throw new Error('BAD_SLOT_TOTAL');
+
+  const selectedSet = pickWeightedSet(config.sets);
+  const selected = pickWeightedArtifact(selectedSet.artifacts);
+
+  try {
+    const updatedBooking = await prisma.$transaction(async (tx) => {
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: { status: 'CHECKED_IN' },
+        include: checkInBookingInclude,
+      });
+      await tx.armoryInventory.upsert({
+        where: { userId_artifactId: { userId: booking.userId!, artifactId: selected.id } },
+        update: { quantity: { increment: 1 } },
+        create: { userId: booking.userId!, artifactId: selected.id, quantity: 1 },
+      });
+      await tx.armoryDailyClaim.create({
+        data: {
+          id: claimId,
+          userId: booking.userId!,
+          claimDate: `${getArmoryToday()}:checkin:${bookingId}`,
+          artifactId: selected.id,
+        },
+      });
+      return updated;
+    });
+
+    return {
+      booking: updatedBooking,
+      artifactAward: {
+        awarded: true,
+        artifact: checkInArtifactPayload(selected),
+      } satisfies CheckInArtifactAward,
+    };
+  } catch (error: any) {
+    if (error?.code !== 'P2002') throw error;
+    const [currentBooking, claim] = await Promise.all([
+      prisma.booking.findUnique({ where: { id: bookingId }, include: checkInBookingInclude }),
+      prisma.armoryDailyClaim.findUnique({
+        where: { id: claimId },
+        include: { artifact: { include: { set: true } } },
+      }),
+    ]);
+    if (!currentBooking || !claim) throw error;
+    return {
+      booking: currentBooking,
+      artifactAward: {
+        awarded: false,
+        reason: 'ALREADY_AWARDED',
+        artifact: checkInArtifactPayload(claim.artifact),
+      } satisfies CheckInArtifactAward,
+    };
+  }
+}
+
 export async function equipArtifact(userId: string, slotType: string, artifactIdValue?: string | null) {
   if (!ARMORY_SLOTS.includes(slotType as ArmorySlot)) throw new Error('BAD_SLOT');
   const slot = slotType as ArmorySlot;
@@ -820,9 +969,10 @@ export async function getArmoryConsumedSets(date?: string) {
 export async function getArmoryDailyDrops(date?: string) {
   const claimDate = date || getArmoryToday();
   return prisma.armoryDailyClaim.findMany({
-    where: { claimDate },
+    where: { claimDate: { startsWith: claimDate } },
     select: {
       id: true,
+      claimDate: true,
       createdAt: true,
       user: { select: { name: true, email: true } },
       artifact: {
@@ -937,6 +1087,7 @@ export function friendlyArmoryError(error: unknown) {
   const code = error instanceof Error ? error.message : String(error);
   const map: Record<string, { error: string; status: number }> = {
     ARMORY_DISABLED: { error: 'The Armory is closed right now.', status: 403 },
+    BOOKING_NOT_FOUND: { error: 'Booking not found.', status: 404 },
     ARMORY_PRISMA_CLIENT_STALE: { error: 'Artifacts needs a dev server restart after Prisma generation.', status: 500 },
     ALREADY_FORGED: { error: 'You already forged an artifact today.', status: 429 },
     BAD_DROP_TOTAL: { error: 'Active drop percentages must total 100%.', status: 400 },

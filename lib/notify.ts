@@ -2,13 +2,10 @@ import nodemailer from 'nodemailer';
 
 // Supports multiple recipients — comma-separated in env var
 // e.g. ADMIN_NOTIFY_EMAIL="owner@gmail.com,manager@gmail.com"
-// Supports multiple recipients — comma-separated in env var
-// e.g. ADMIN_NOTIFY_EMAIL="owner@gmail.com,manager@gmail.com"
 const ADMIN_EMAIL    = process.env.ADMIN_NOTIFY_EMAIL ?? '';
 const GMAIL_USER     = process.env.GMAIL_USER ?? '';
 const GMAIL_APP_PASS = process.env.GMAIL_APP_PASSWORD ?? '';
 const APP_URL        = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
-console.log(ADMIN_EMAIL,"mail-testing")
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: { user: GMAIL_USER, pass: GMAIL_APP_PASS },
@@ -29,6 +26,28 @@ export interface BookingNotifyPayload {
   bookingType:      string;
   extraControllers: number;
   notes?:           string | null;
+}
+
+export interface ArtifactAwardEmailPayload {
+  customerName: string;
+  customerEmail: string;
+  artifactName: string;
+  setName: string;
+  rarity: string;
+  slotType: string;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function artifactSlotLabel(slotType: string) {
+  return slotType.charAt(0) + slotType.slice(1).toLowerCase();
 }
 
 function fmt(time: string) {
@@ -87,5 +106,62 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
     });
   } catch (err) {
     console.error('[notify] Failed to send admin email:', err);
+  }
+}
+
+export async function notifyUserArtifactAward(payload: ArtifactAwardEmailPayload) {
+  if (!GMAIL_USER || !GMAIL_APP_PASS || !payload.customerEmail) return;
+
+  const rarityColors: Record<string, string> = {
+    PLATINUM: '#c7a7ff',
+    GOLD: '#f4cf58',
+    SILVER: '#8edbed',
+    BRONZE: '#d58a52',
+  };
+  const customerName = escapeHtml(payload.customerName);
+  const artifactName = escapeHtml(payload.artifactName);
+  const setName = escapeHtml(payload.setName);
+  const rarity = escapeHtml(payload.rarity);
+  const slot = escapeHtml(artifactSlotLabel(payload.slotType));
+  const rarityColor = rarityColors[payload.rarity] ?? '#c4b5fd';
+  const siteUrl = APP_URL || 'https://emiguild.in';
+  const armoryUrl = `${siteUrl}/armory`;
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#0f0f1a;color:#e5e7eb;border-radius:12px;overflow:hidden;border:1px solid #2d2d4e;">
+      <div style="padding:24px 28px;text-align:center;background:#17172a;border-bottom:3px solid ${rarityColor};">
+        ${APP_URL ? `<img src="${APP_URL}/images/logoImage.png" alt="EMI Guild" style="height:56px;margin-bottom:12px;object-fit:contain;" />` : ''}
+        <p style="margin:0 0 8px;color:${rarityColor};font-size:0.78rem;font-weight:800;text-transform:uppercase;">⚔️ Legendary Reward Acquired</p>
+        <h1 style="margin:0;color:#fff;font-size:1.35rem;">${artifactName}</h1>
+      </div>
+      <div style="padding:24px 28px;">
+        <p style="margin:0 0 12px;line-height:1.6;">Hi ${customerName}, your check-in just paid off.</p>
+        <p style="margin:0 0 20px;line-height:1.6;">A <strong style="color:${rarityColor};">${rarity} artifact</strong> has been added to your EmiGuild Armory. Collect the remaining pieces, complete the ${setName}, and unlock the ultimate reward.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;margin-bottom:22px;">
+          <tr><td style="padding:8px 0;color:#9ca3af;width:120px;">Artifact</td><td style="padding:8px 0;font-weight:700;color:${rarityColor};">${artifactName}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;">Set</td><td style="padding:8px 0;">${setName}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;">Rarity</td><td style="padding:8px 0;color:${rarityColor};font-weight:700;">${rarity}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;">Slot</td><td style="padding:8px 0;">${slot}</td></tr>
+        </table>
+        <p style="margin:0 0 20px;text-align:center;font-weight:700;line-height:1.5;color:${rarityColor};">Your next legendary drop could be one check-in away.</p>
+        <div style="text-align:center;">
+          <a href="${armoryUrl}" style="display:inline-block;padding:12px 20px;background:${rarityColor};color:#0b0b12;text-decoration:none;border-radius:6px;font-weight:800;">VIEW MY ARMORY</a>
+        </div>
+      </div>
+      <div style="padding:14px 28px;background:#0a0a14;font-size:0.75rem;color:#6b7280;text-align:center;">
+        Your artifact remains in your inventory even if the booking is later cancelled.
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"EMI Guild Armory" <${GMAIL_USER}>`,
+      to: payload.customerEmail,
+      subject: `${payload.rarity} artifact unlocked: ${payload.artifactName}`,
+      html,
+    });
+  } catch (err) {
+    console.error('[notify] Failed to send artifact award email:', err);
   }
 }
