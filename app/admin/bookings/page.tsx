@@ -8,11 +8,11 @@ import {
 } from 'lucide-react';
 import {
   formatCurrency, formatDate, formatTime,
-  getTimeSlotsForDate, CLOSING_HOUR, getTodayString, isSlotAvailable,
+  getTimeSlotsForDate, getDurationOptions, CLOSING_HOUR, getTodayString, isSlotAvailable,
 } from '@/lib/utils';
 import { decryptPhone } from '@/lib/crypto';
 
-type Station = { id: string; name: string; hourlyRate: number };
+type Station = { id: string; name: string; hourlyRate: number; minDuration: number };
 
 type Booking = {
   id: string;
@@ -52,8 +52,6 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED:  [],
   COMPLETED:  [],
 };
-
-const DURATION_OPTIONS = [1, 2, 3, 4];
 
 // ── Edit Modal ────────────────────────────────────────────────────────────────
 function EditModal({
@@ -108,8 +106,8 @@ function EditModal({
 
   // Time slots — no past-time restriction for admin, but hide already-booked slots
   const availableSlots = getTimeSlotsForDate(date).filter((t) => {
-    const slotH = parseInt(t.split(':')[0]);
-    if (slotH + duration > CLOSING_HOUR) return false;
+    const [slotHour, slotMinute] = t.split(':').map(Number);
+    if (slotHour * 60 + slotMinute + duration * 60 > CLOSING_HOUR * 60) return false;
     return isSlotAvailable(t, duration, bookedSlots);
   });
 
@@ -214,8 +212,8 @@ function EditModal({
             <div className="form-group">
               <label className="form-label">Duration</label>
               <select className="form-input" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
-                {DURATION_OPTIONS.map((d) => (
-                  <option key={d} value={d}>{d} Hour{d > 1 ? 's' : ''}</option>
+                {getDurationOptions(selectedStation?.minDuration ?? 1).map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
             </div>
