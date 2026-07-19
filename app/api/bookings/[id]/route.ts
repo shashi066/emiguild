@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { updateBookingSchema } from '@/lib/validations';
 import { addHours } from '@/lib/utils';
 import { encryptPhone } from '@/lib/crypto';
+import { checkInBookingWithArtifact, friendlyArmoryError } from '@/lib/armory';
+import { notifyUserArtifactAward } from '@/lib/notify';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -53,6 +55,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const result = updateBookingSchema.safeParse(body);
   if (!result.success) {
     return NextResponse.json({ error: 'Validation failed' }, { status: 400 });
+  }
+
+  if (isAdmin && result.data.status === 'CHECKED_IN') {
+    try {
+      const outcome = await checkInBookingWithArtifact(id);
+      const artifact = outcome.artifactAward.artifact;
+      if (outcome.artifactAward.awarded && artifact && outcome.booking.user?.email) {
+        after(async () => {
+          await notifyUserArtifactAward({
+            customerName: outcome.booking.user?.name ?? outcome.booking.customerName ?? 'Guild member',
+            customerEmail: outcome.booking.user!.email,
+            artifactName: artifact.name,
+            setName: artifact.set.name,
+            rarity: artifact.set.rarity,
+            slotType: artifact.slotType,
+          });
+        });
+      }
+      return NextResponse.json({
+        booking: { ...outcome.booking, customerPhone: encryptPhone(outcome.booking.customerPhone) },
+        artifactAward: outcome.artifactAward,
+      });
+    } catch (error) {
+      console.error('Booking check-in artifact award failed:', error);
+      const friendly = friendlyArmoryError(error);
+      return NextResponse.json({ error: friendly.error }, { status: friendly.status });
+    }
   }
 
   // ── Restore pass hours if cancelling a pass-backed booking ───────────

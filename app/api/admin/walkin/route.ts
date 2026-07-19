@@ -26,7 +26,7 @@ const walkinSchema = z.object({
   notes:            z.string().optional(),
   status:           z.enum(['PENDING', 'CONFIRMED']).optional(),
   usePass:          z.boolean().optional(),
-  linkedUserId:     z.string().nullable().optional(), // registered user's id (for pass lookup)
+  linkedUserId:     z.string().nullable().optional(), // registered user linked to this walk-in
 });
 
 // GET — list all offline (walk-in) bookings
@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
 
     const booking = await prisma.booking.create({
       data: {
-        userId:           usePass && linkedUserId ? linkedUserId : session.user.id,
+        userId:           linkedUserId ?? null,
         stationId,
         date,
         startTime,

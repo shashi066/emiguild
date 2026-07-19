@@ -93,17 +93,12 @@ function EditModal({
   // Fetch booked slots whenever station or date changes
   useEffect(() => {
     if (!stationId || !date) return;
-    fetch(`/api/slots?stationId=${stationId}&date=${date}`)
+    const params = new URLSearchParams({ stationId, date, excludeBookingId: booking.id });
+    fetch(`/api/slots?${params.toString()}`)
       .then((r) => r.json())
-      .then((data) => {
-        // Exclude the current booking's own slot so it doesn't block itself
-        const others = (data.bookings ?? []).filter(
-          (b: { startTime: string }) => b.startTime !== booking.startTime || date !== booking.date || stationId !== booking.stationId
-        );
-        setBookedSlots(others);
-      })
+      .then((data) => setBookedSlots(data.bookings ?? []))
       .catch(() => setBookedSlots([]));
-  }, [stationId, date]);
+  }, [stationId, date, booking.id]);
 
   const selectedStation  = stations.find((s) => s.id === stationId);
   const sessionCost      = (selectedStation?.hourlyRate ?? 0) * duration;
@@ -123,13 +118,17 @@ function EditModal({
 
   const handleSave = async () => {
     setError('');
+    if (!startTimeValid) {
+      setError('Please choose an available start time.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/bookings/${booking.id}`, {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          date, stationId, startTime: startTimeValid ? startTime : availableSlots[0],
+          date, stationId, startTime,
           duration, extraControllers, discount, notes, customerName, customerPhone,
         }),
       });
@@ -197,15 +196,18 @@ function EditModal({
               <label className="form-label">Start Time</label>
               <select
                 className="form-input"
-                value={startTimeValid ? startTime : (availableSlots[0] ?? '')}
+                value={startTimeValid ? startTime : ''}
                 onChange={(e) => setStartTime(e.target.value)}
               >
                 {availableSlots.length === 0 ? (
                   <option value="">No slots available</option>
                 ) : (
-                  availableSlots.map((t) => (
-                    <option key={t} value={t}>{formatTime(t)}</option>
-                  ))
+                  <>
+                    {!startTimeValid && <option value="">Select a time</option>}
+                    {availableSlots.map((t) => (
+                      <option key={t} value={t}>{formatTime(t)}</option>
+                    ))}
+                  </>
                 )}
               </select>
             </div>
@@ -339,7 +341,7 @@ function EditModal({
             className="btn btn-primary"
             style={{ flex: 2 }}
             onClick={handleSave}
-            disabled={loading || availableSlots.length === 0}
+            disabled={loading || !startTimeValid}
           >
             <CheckCircle size={15} />
             {loading ? 'Saving...' : 'Save Changes'}
@@ -361,6 +363,7 @@ export default function AdminBookingsPage() {
   const [typeFilter, setTypeFilter]     = useState('');
   const [updatingId, setUpdatingId]     = useState<string | null>(null);
   const [error, setError]               = useState('');
+  const [notice, setNotice]             = useState<{ text: string; success: boolean } | null>(null);
   const [stations, setStations]         = useState<Station[]>([]);
 
   const [cancelModal, setCancelModal]     = useState<{ id: string; name: string } | null>(null);
@@ -402,6 +405,7 @@ export default function AdminBookingsPage() {
   const handleStatusChange = async (id: string, newStatus: string, adminComment?: string) => {
     setUpdatingId(id);
     setError('');
+    setNotice(null);
     try {
       const body: Record<string, unknown> = { status: newStatus };
       if (adminComment !== undefined) body.adminComment = adminComment;
@@ -409,6 +413,23 @@ export default function AdminBookingsPage() {
       const data = await res.json();
       if (res.ok) {
         setBookings((prev) => prev.map((b) => b.id === id ? { ...b, status: newStatus as Booking['status'], adminComment: adminComment ?? b.adminComment } : b));
+        if (newStatus === 'CHECKED_IN' && data.artifactAward) {
+          const award = data.artifactAward;
+          if (award.awarded && award.artifact) {
+            setNotice({
+              text: `Checked in. ${award.artifact.name} was added to the user's Armory.`,
+              success: true,
+            });
+          } else if (award.reason === 'NO_USER_ACCOUNT') {
+            setNotice({ text: 'Checked in without an artifact because this booking has no linked user account.', success: false });
+          } else if (award.reason === 'ARMORY_DISABLED') {
+            setNotice({ text: 'Checked in without an artifact because Daily Forge is disabled.', success: false });
+          } else if (award.reason === 'ALREADY_AWARDED' && award.artifact) {
+            setNotice({ text: `Already checked in. The existing ${award.artifact.name} award was kept.`, success: true });
+          } else {
+            setNotice({ text: 'This booking was already checked in; no additional artifact was awarded.', success: false });
+          }
+        }
         return true;
       }
       setError(data.error ?? `Failed to update (${res.status})`);
@@ -460,6 +481,14 @@ export default function AdminBookingsPage() {
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 'var(--space-lg)' }}><AlertCircle size={16} /> {error}</div>}
+      {notice && (
+        <div
+          className={notice.success ? 'alert alert-success' : 'alert'}
+          style={{ marginBottom: 'var(--space-lg)', ...(!notice.success ? { borderColor: 'rgba(244, 207, 88, 0.35)', color: '#f4cf58', background: 'rgba(244, 207, 88, 0.08)' } : {}) }}
+        >
+          {notice.success ? <CheckCircle size={16} /> : <AlertCircle size={16} />} {notice.text}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="filter-bar">
