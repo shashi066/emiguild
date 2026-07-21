@@ -5,9 +5,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
+import { SideQuestsMenu } from './SideQuestsMenu';
 import {
   Calendar, BookOpen, User, LogOut,
-  LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw, Gift,
+  LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw,
+  Gamepad2, Trophy, Shield,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -21,7 +23,7 @@ export function Navbar() {
       ? pathname === '/'
       : pathname === path || pathname.startsWith(path + '/');
 
-  const navLinks = [
+  const existingNavLinks = [
     { href: '/',           label: 'Home',        icon: null },
     { href: '/book',       label: 'Book a Slot', icon: <Calendar size={15} /> },
     { href: '/passes',     label: 'Passes',      icon: <Award size={15} /> },
@@ -29,6 +31,31 @@ export function Navbar() {
     { href: '/draws',      label: '🎁 Guild Drop', icon: null },
     ...(session ? [{ href: '/my-bookings', label: 'My Bookings', icon: <BookOpen size={15} /> }] : []),
     ...(isAdmin  ? [{ href: '/admin',      label: 'Admin',       icon: <LayoutDashboard size={15} /> }] : []),
+  ];
+
+  const desktopCoreLinks = [
+    { href: '/',            label: 'Home',        icon: null },
+    { href: '/book',        label: 'Book a Slot', icon: <Calendar size={15} /> },
+    { href: '/games',       label: 'Games',       icon: <Gamepad2 size={15} /> },
+    { href: '/passes',      label: 'Passes',      icon: <Award size={15} /> },
+    { href: '/tournaments', label: 'Tournament',  icon: <Trophy size={15} /> },
+  ];
+
+  const desktopAccountLinks = [
+    ...(session ? [{ href: '/my-bookings', label: 'My Bookings', icon: <BookOpen size={15} /> }] : []),
+    ...(isAdmin ? [{ href: '/admin', label: 'Admin', icon: <LayoutDashboard size={15} /> }] : []),
+  ];
+
+  const mobileNavLinks = [
+    { href: '/',            label: 'Home',        icon: null },
+    { href: '/book',        label: 'Book a Slot', icon: <Calendar size={15} /> },
+    { href: '/games',       label: 'Games',       icon: <Gamepad2 size={15} /> },
+    { href: '/passes',      label: 'Passes',      icon: <Award size={15} /> },
+    { href: '/armory',      label: 'Artifacts',   icon: <Shield size={15} /> },
+    { href: '/daily-spin',  label: 'Guild Spin',  icon: <RotateCw size={15} /> },
+    { href: '/draws',       label: '🎁 Guild Drop', icon: null },
+    { href: '/tournaments', label: 'Tournament',  icon: <Trophy size={15} /> },
+    ...desktopAccountLinks,
   ];
 
   const closeMobile = () => setMobileOpen(false);
@@ -42,9 +69,36 @@ export function Navbar() {
             <Image src="/images/logoImage.png" alt="GameZone" height={60} width={60} style={{ objectFit: 'contain' }} />
           </Link>
 
-          {/* Desktop nav links */}
-          <ul className="navbar-nav">
-            {navLinks.map((link) => (
+          {/* Desktop navigation (1024px and above) */}
+          <ul className="navbar-nav navbar-nav-desktop">
+            {desktopCoreLinks.map((link) => (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  className={`navbar-link ${isActive(link.href) ? 'active' : ''}`}
+                >
+                  {link.icon}
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+            <SideQuestsMenu pathname={pathname} />
+            {desktopAccountLinks.map((link) => (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  className={`navbar-link ${isActive(link.href) ? 'active' : ''}`}
+                >
+                  {link.icon}
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          {/* Preserve the existing tablet navigation */}
+          <ul className="navbar-nav navbar-nav-tablet">
+            {existingNavLinks.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}
@@ -106,7 +160,7 @@ export function Navbar() {
           <div className="mobile-drawer-inner" onClick={(e) => e.stopPropagation()}>
             {/* Nav links */}
             <div className="mobile-nav-links">
-              {navLinks.map((link) => (
+              {mobileNavLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
