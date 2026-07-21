@@ -2134,12 +2134,12 @@ input.form-input[type="time"]:focus {
 /* ============================================================
    RESPONSIVE
    ============================================================ */
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .navbar-nav-desktop { display: flex; }
   .navbar-nav-tablet { display: none; }
 }
 
-@media (min-width: 1024px) and (max-width: 1280px) {
+@media (min-width: 1280px) and (max-width: 1366px) {
   .navbar-inner { gap: 8px; }
   .navbar-logo img { width: 48px; height: 48px; }
   .navbar-nav-desktop { gap: 0; }
@@ -2157,9 +2157,12 @@ input.form-input[type="time"]:focus {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1279px) {
   .navbar-nav    { display: none; }
   .navbar-actions { display: none; }
+}
+
+@media (max-width: 768px) {
 
   .hero-title { font-size: 2.2rem; }
   .hero-stats { gap: var(--space-xl); flex-wrap: wrap; }
@@ -2253,7 +2256,7 @@ input.form-input[type="time"]:focus {
   background: rgba(255,255,255,0.05);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1279px) {
   .mobile-menu-btn { display: flex; }
 }
 

@@ -69,7 +69,7 @@ export function Navbar() {
             <Image src="/images/logoImage.png" alt="GameZone" height={60} width={60} style={{ objectFit: 'contain' }} />
           </Link>
 
-          {/* Desktop navigation (1024px and above) */}
+          {/* Desktop navigation (1280px and above) */}
           <ul className="navbar-nav navbar-nav-desktop">
             {desktopCoreLinks.map((link) => (
               <li key={link.href}>

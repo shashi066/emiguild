@@ -105,7 +105,7 @@ export function SideQuestsMenu({ pathname }: SideQuestsMenuProps) {
       closeMenu();
       triggerRef.current?.focus();
     };
-    const desktopQuery = window.matchMedia('(min-width: 1024px)');
+    const desktopQuery = window.matchMedia('(min-width: 1280px)');
     const handleDesktopChange = (event: MediaQueryListEvent) => {
       if (!event.matches) closeMenu();
     };
