@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
       include: {
         user: { select: { id: true, name: true, email: true } },
         station: { select: { id: true, name: true } },
+        userPass: { select: { passType: true } },
       },
       orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
       skip: (page - 1) * limit,
@@ -180,6 +181,7 @@ export async function POST(req: NextRequest) {
     // ── Pass logic ────────────────────────────────────────────────────────
     let userPassId: string | null = null;
     let passHoursDeducted = 0;
+    let usedPassType: string | null = null;
     let sessionPrice = station.hourlyRate * duration;
 
     if (usePass) {
@@ -227,6 +229,7 @@ export async function POST(req: NextRequest) {
 
       userPassId        = pass.id;
       passHoursDeducted = duration;
+      usedPassType      = pass.passType;
       sessionPrice      = 0; // covered by pass
     }
 
@@ -274,6 +277,8 @@ export async function POST(req: NextRequest) {
       discount:         0,
       bookingType:      booking.bookingType,
       extraControllers: booking.extraControllers,
+      passType:         usedPassType,
+      passHoursDeducted,
       notes:            booking.notes,
     };
 

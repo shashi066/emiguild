@@ -25,6 +25,8 @@ export interface BookingNotifyPayload {
   discount:         number;
   bookingType:      string;
   extraControllers: number;
+  passType?:        string | null;
+  passHoursDeducted?: number;
   notes?:           string | null;
 }
 
@@ -124,7 +126,8 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
   const {
     bookingId, customerName, customerEmail, customerPhone,
     stationName, date, startTime, endTime, duration,
-    totalPrice, discount, bookingType, extraControllers, notes,
+    totalPrice, discount, bookingType, extraControllers,
+    passType, passHoursDeducted, notes,
   } = payload;
 
   const priceDisplay = discount > 0
@@ -148,6 +151,7 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
           <tr><td style="padding:8px 0;color:#9ca3af;">Date</td><td style="padding:8px 0;">${date}</td></tr>
           <tr><td style="padding:8px 0;color:#9ca3af;">Time</td><td style="padding:8px 0;">${fmt(startTime)} → ${fmt(endTime)} (${duration}h)</td></tr>
           ${extraControllers > 0 ? `<tr><td style="padding:8px 0;color:#9ca3af;">Controllers</td><td style="padding:8px 0;">+${extraControllers}</td></tr>` : ''}
+          ${passType && passHoursDeducted ? `<tr><td style="padding:8px 0;color:#9ca3af;">Payment</td><td style="padding:8px 0;font-weight:700;color:#00e676;">${passType} Pass · ${passHoursDeducted}h used</td></tr>` : ''}
           <tr><td style="padding:8px 0;color:#9ca3af;">Total</td><td style="padding:8px 0;font-weight:700;font-size:1rem;color:#00e676;">${priceDisplay}</td></tr>
           ${notes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">Notes</td><td style="padding:8px 0;font-style:italic;color:#d1d5db;">${notes}</td></tr>` : ''}
         </table>
@@ -180,7 +184,9 @@ export async function notifyUserNewBooking(payload: UserBookingEmailPayload) {
   const siteUrl = APP_URL || 'https://emiguild.in';
   const bookingsUrl = `${siteUrl}/my-bookings`;
   const calendarInvite = bookingCalendarInvite(payload, bookingsUrl);
-  const paymentLabel = payload.paymentStatus === 'PAID' ? 'Covered / Paid' : 'Pay at counter';
+  const paymentLabel = payload.passType && payload.passHoursDeducted
+    ? `${escapeHtml(payload.passType)} Pass · ${payload.passHoursDeducted}h used`
+    : payload.paymentStatus === 'PAID' ? 'Paid' : 'Pay at counter';
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#0f0f1a;color:#e5e7eb;border-radius:12px;overflow:hidden;border:1px solid #2d2d4e;">
