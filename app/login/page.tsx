@@ -107,11 +107,12 @@ export default function LoginPage() {
             />
             <p style={{
               fontSize: '0.78rem',
-              color: 'var(--color-text-muted)',
               marginTop: 6,
               textAlign: 'right',
             }}>
-              Forgot password? Visit the counter!
+              <Link href="/forgot-password" style={{ color: 'var(--color-accent-secondary)' }}>
+                Forgot password?
+              </Link>
             </p>
           </div>
 
