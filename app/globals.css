@@ -2137,6 +2137,7 @@ input.form-input[type="time"]:focus {
 @media (min-width: 1280px) {
   .navbar-nav-desktop { display: flex; }
   .navbar-nav-tablet { display: none; }
+  .hero { padding-block: var(--space-xl); }
 }
 
 @media (min-width: 1280px) and (max-width: 1366px) {

@@ -330,7 +330,7 @@ export async function notifyUserPasswordReset(payload: PasswordResetEmailPayload
           <div style="font-family:monospace;font-size:1.35rem;font-weight:800;color:#c4b5fd;letter-spacing:1px;">${temporaryPassword}</div>
         </div>
         <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);border-radius:6px;padding:14px 16px;color:#fcd34d;line-height:1.55;margin-bottom:20px;">
-          <strong>Important:</strong> After signing in with this temporary password, open Profile and change it immediately.
+          <strong>Important:</strong> This password is temporary. Sign in, then go to Profile and change your password right away.
         </div>
         <div style="text-align:center;">
           <a href="${loginUrl}" style="display:inline-block;padding:12px 20px;background:#00e676;color:#0b0b12;text-decoration:none;border-radius:6px;font-weight:800;">SIGN IN</a>

@@ -127,6 +127,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     emailSent: true,
-    message: 'A temporary password was sent to your email address.',
+    message: 'A temporary password was sent to your email address. Use it to sign in, then change your password from Profile right away. Please check your spam folder if the email does not appear in your inbox.',
   });
 }

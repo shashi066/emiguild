@@ -42,7 +42,7 @@ export default function ForgotPasswordPage() {
         <div className="auth-logo">
           <Link href="/" className="navbar-logo" style={{ justifyContent: 'center', fontSize: '1.5rem' }}>
             <Gamepad2 size={28} />
-            GameZone
+            EmiGuild
           </Link>
         </div>
 
