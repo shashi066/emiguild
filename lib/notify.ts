@@ -25,6 +25,8 @@ export interface BookingNotifyPayload {
   discount:         number;
   bookingType:      string;
   extraControllers: number;
+  passType?:        string | null;
+  passHoursDeducted?: number;
   notes?:           string | null;
 }
 
@@ -47,6 +49,12 @@ export type UserBookingEmailPayload = Omit<BookingNotifyPayload, 'customerEmail'
   customerEmail: string;
   paymentStatus: string;
 };
+
+export interface PasswordResetEmailPayload {
+  customerName: string;
+  customerEmail: string;
+  temporaryPassword: string;
+}
 
 function escapeHtml(value: string) {
   return value
@@ -124,7 +132,8 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
   const {
     bookingId, customerName, customerEmail, customerPhone,
     stationName, date, startTime, endTime, duration,
-    totalPrice, discount, bookingType, extraControllers, notes,
+    totalPrice, discount, bookingType, extraControllers,
+    passType, passHoursDeducted, notes,
   } = payload;
 
   const priceDisplay = discount > 0
@@ -148,6 +157,7 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
           <tr><td style="padding:8px 0;color:#9ca3af;">Date</td><td style="padding:8px 0;">${date}</td></tr>
           <tr><td style="padding:8px 0;color:#9ca3af;">Time</td><td style="padding:8px 0;">${fmt(startTime)} → ${fmt(endTime)} (${duration}h)</td></tr>
           ${extraControllers > 0 ? `<tr><td style="padding:8px 0;color:#9ca3af;">Controllers</td><td style="padding:8px 0;">+${extraControllers}</td></tr>` : ''}
+          ${passType && passHoursDeducted ? `<tr><td style="padding:8px 0;color:#9ca3af;">Payment</td><td style="padding:8px 0;font-weight:700;color:#00e676;">${passType} Pass · ${passHoursDeducted}h used</td></tr>` : ''}
           <tr><td style="padding:8px 0;color:#9ca3af;">Total</td><td style="padding:8px 0;font-weight:700;font-size:1rem;color:#00e676;">${priceDisplay}</td></tr>
           ${notes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">Notes</td><td style="padding:8px 0;font-style:italic;color:#d1d5db;">${notes}</td></tr>` : ''}
         </table>
@@ -180,7 +190,9 @@ export async function notifyUserNewBooking(payload: UserBookingEmailPayload) {
   const siteUrl = APP_URL || 'https://emiguild.in';
   const bookingsUrl = `${siteUrl}/my-bookings`;
   const calendarInvite = bookingCalendarInvite(payload, bookingsUrl);
-  const paymentLabel = payload.paymentStatus === 'PAID' ? 'Covered / Paid' : 'Pay at counter';
+  const paymentLabel = payload.passType && payload.passHoursDeducted
+    ? `${escapeHtml(payload.passType)} Pass · ${payload.passHoursDeducted}h used`
+    : payload.paymentStatus === 'PAID' ? 'Paid' : 'Pay at counter';
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#0f0f1a;color:#e5e7eb;border-radius:12px;overflow:hidden;border:1px solid #2d2d4e;">
@@ -293,5 +305,53 @@ export async function notifyUserArtifactAward(payload: ArtifactAwardEmailPayload
     });
   } catch (err) {
     console.error('[notify] Failed to send artifact award email:', err);
+  }
+}
+
+export async function notifyUserPasswordReset(payload: PasswordResetEmailPayload) {
+  if (!GMAIL_USER || !GMAIL_APP_PASS || !payload.customerEmail) return false;
+
+  const customerName = escapeHtml(payload.customerName);
+  const temporaryPassword = escapeHtml(payload.temporaryPassword);
+  const siteUrl = APP_URL || 'https://emiguild.in';
+  const loginUrl = `${siteUrl}/login`;
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#0f0f1a;color:#e5e7eb;border-radius:12px;overflow:hidden;border:1px solid #2d2d4e;">
+      <div style="background:linear-gradient(135deg,#6c63ff,#00e676);padding:24px 28px;text-align:center;">
+        ${APP_URL ? `<img src="${APP_URL}/images/logoImage.png" alt="EMI Guild" style="height:56px;margin-bottom:12px;object-fit:contain;" />` : ''}
+        <h1 style="margin:0;font-size:1.3rem;color:#fff;font-weight:800;">Password Reset - EMI Guild</h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:0.85rem;">Your temporary sign-in password is ready</p>
+      </div>
+      <div style="padding:24px 28px;">
+        <p style="margin:0 0 18px;line-height:1.6;">Hi ${customerName}, use the temporary password below to sign in to your account.</p>
+        <div style="background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.3);border-radius:6px;padding:18px;text-align:center;margin-bottom:20px;">
+          <div style="font-size:0.72rem;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:8px;">Temporary Password</div>
+          <div style="font-family:monospace;font-size:1.35rem;font-weight:800;color:#c4b5fd;letter-spacing:1px;">${temporaryPassword}</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);border-radius:6px;padding:14px 16px;color:#fcd34d;line-height:1.55;margin-bottom:20px;">
+          <strong>Important:</strong> This password is temporary. Sign in, then go to Profile and change your password right away.
+        </div>
+        <div style="text-align:center;">
+          <a href="${loginUrl}" style="display:inline-block;padding:12px 20px;background:#00e676;color:#0b0b12;text-decoration:none;border-radius:6px;font-weight:800;">SIGN IN</a>
+        </div>
+      </div>
+      <div style="padding:16px 28px;background:#0a0a14;font-size:0.75rem;color:#6b7280;text-align:center;">
+        If you did not request this reset, contact EMI Guild immediately.
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"EMI Guild Accounts" <${GMAIL_USER}>`,
+      to: payload.customerEmail,
+      subject: 'Your EMI Guild temporary password',
+      html,
+    });
+    return true;
+  } catch (error) {
+    console.error('[notify] Failed to send password reset email:', error);
+    return false;
   }
 }

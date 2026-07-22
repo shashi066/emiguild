@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '@/lib/password-reset';
+import { notifyUserPasswordReset } from '@/lib/notify';
 
 // POST /api/admin/users/[id]/reset-password
 // Admin resets a user's password to a temporary one
@@ -39,11 +40,23 @@ export async function POST(
     );
   }
 
-  const hashed = await bcrypt.hash(tempPassword, 12);
+  const hashed = await hashPassword(tempPassword);
   await prisma.user.update({
     where: { id },
     data:  { password: hashed },
   });
 
-  return NextResponse.json({ success: true, message: 'Password reset successfully.' });
+  const emailSent = await notifyUserPasswordReset({
+    customerName: user.name,
+    customerEmail: user.email,
+    temporaryPassword: tempPassword,
+  });
+
+  return NextResponse.json({
+    success: true,
+    emailSent,
+    message: emailSent
+      ? 'Password reset and temporary password emailed successfully.'
+      : 'Password reset successfully, but the email could not be sent.',
+  });
 }

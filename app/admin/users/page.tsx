@@ -35,6 +35,7 @@ function ResetModal({
   const [showPwd, setShowPwd]       = useState(true);
   const [loading, setLoading]       = useState(false);
   const [done, setDone]             = useState(false);
+  const [emailSent, setEmailSent]   = useState(false);
   const [error, setError]           = useState('');
   const [copied, setCopied]         = useState(false);
 
@@ -55,6 +56,7 @@ function ResetModal({
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Reset failed.'); return; }
+      setEmailSent(Boolean(data.emailSent));
       setDone(true);
     } catch {
       setError('Something went wrong.');
@@ -191,7 +193,9 @@ function ResetModal({
             <CheckCircle size={48} style={{ color: 'var(--color-accent-success)', marginBottom: 'var(--space-md)' }} />
             <h3 style={{ fontWeight: 700, marginBottom: 8 }}>Password Reset!</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-xl)' }}>
-              Tell <strong>{user.name}</strong> their new temporary password:
+              {emailSent
+                ? <>The temporary password was emailed to <strong>{user.email}</strong>.</>
+                : <>The email could not be sent. Share this password with <strong>{user.name}</strong>:</>}
             </p>
 
             {/* Show final password prominently */}
@@ -225,9 +229,11 @@ function ResetModal({
               </button>
             </div>
 
-            <div className="alert alert-info" style={{ textAlign: 'left', marginBottom: 'var(--space-lg)' }}>
+            <div className={emailSent ? 'alert alert-info' : 'alert alert-error'} style={{ textAlign: 'left', marginBottom: 'var(--space-lg)' }}>
               <AlertCircle size={15} />
-              Ask the customer to change their password after logging in.
+              {emailSent
+                ? 'The email asks the customer to change this password after logging in.'
+                : 'Share it manually and ask the customer to change it after logging in.'}
             </div>
 
             <button className="btn btn-primary" style={{ width: '100%' }} onClick={onClose}>

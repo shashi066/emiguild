@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   BookOpen, Search, CheckCircle, XCircle,
   AlertCircle, RefreshCw, Trash2, Globe, UserPlus, Phone, LogIn,
-  Pencil, X, MessageSquare, Gamepad2, Plus, Minus,
+  Pencil, X, MessageSquare, Gamepad2, Plus, Minus, Award,
 } from 'lucide-react';
 import {
   formatCurrency, formatDate, formatTime,
@@ -32,7 +32,9 @@ type Booking = {
   extraControllers: number;
   controllerCharge: number;
   discount: number;
+  passHoursDeducted: number;
   user: { id: string; name: string; email: string } | null;
+  userPass: { passType: string } | null;
   station: { id: string; name: string };
   createdAt: string;
 };
@@ -549,6 +551,8 @@ export default function AdminBookingsPage() {
                 const isBusy      = updatingId === b.id;
                 const isOffline   = b.bookingType === 'OFFLINE';
                 const canEdit     = !['CHECKED_IN', 'CANCELLED'].includes(b.status);
+                const usedPass    = b.passHoursDeducted > 0;
+                const passLabel   = b.userPass?.passType ? `${b.userPass.passType} Pass` : 'Pass';
 
                 return (
                   <tr key={b.id} style={{ opacity: isBusy ? 0.5 : 1 }}>
@@ -607,9 +611,16 @@ export default function AdminBookingsPage() {
                       <div style={{ fontWeight: 700, color: 'var(--color-accent-primary)' }}>
                         {formatCurrency(b.totalPrice)}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                        {b.paymentStatus === 'PAID' ? '✓ Paid' : 'At counter'}
-                      </div>
+                      {usedPass ? (
+                        <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#00e676' }}>
+                          <Award size={11} />
+                          {passLabel} · {b.passHoursDeducted}h used
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                          {b.paymentStatus === 'PAID' ? '✓ Paid' : 'At counter'}
+                        </div>
+                      )}
                       {b.extraControllers > 0 && (
                         <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', color: '#ffaa00' }}>
                           <Gamepad2 size={11} />

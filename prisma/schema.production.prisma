@@ -18,6 +18,7 @@ model User {
   password  String
   phone     String?
   role      String   @default("USER")   // "USER" | "ADMIN"
+  lastForgotPasswordDate String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
