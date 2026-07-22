@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Users, Shield, Calendar, KeyRound,
-  RefreshCw, X, Eye, EyeOff, CheckCircle, AlertCircle, Copy, Check,
+  RefreshCw, X, Eye, EyeOff, CheckCircle, AlertCircle, Copy, Check, Search,
 } from 'lucide-react';
 import { decryptPhone } from '@/lib/crypto';
 
@@ -251,6 +251,7 @@ export default function AdminUsersPage() {
   const [users, setUsers]           = useState<User[]>([]);
   const [loading, setLoading]       = useState(true);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [search, setSearch]         = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -270,6 +271,18 @@ export default function AdminUsersPage() {
 
   const adminCount = users.filter((u) => u.role === 'ADMIN').length;
   const userCount  = users.filter((u) => u.role === 'USER').length;
+  const searchQuery = search.trim().toLowerCase();
+  const phoneQuery = search.replace(/\D/g, '');
+  const filteredUsers = searchQuery
+    ? users.filter((user) => {
+        const searchableId = user.id.slice(-6).toLowerCase();
+        const searchablePhone = (user.phone ?? '').replace(/\D/g, '');
+        return user.name.toLowerCase().includes(searchQuery)
+          || user.email.toLowerCase().includes(searchQuery)
+          || searchableId.includes(searchQuery.replace(/^#/, ''))
+          || (phoneQuery.length > 0 && searchablePhone.includes(phoneQuery));
+      })
+    : users;
 
   return (
     <div>
@@ -304,6 +317,30 @@ export default function AdminUsersPage() {
         ))}
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
+        <div className="search-input-wrapper" style={{ width: '100%', maxWidth: 420 }}>
+          <Search size={16} className="search-icon" />
+          <input
+            id="users-search"
+            type="search"
+            className="form-input search-input"
+            placeholder="Search name, email, phone or user ID..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        {search && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch('')}>
+            <X size={14} /> Clear
+          </button>
+        )}
+        {searchQuery && (
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+            {filteredUsers.length} {filteredUsers.length === 1 ? 'result' : 'results'}
+          </span>
+        )}
+      </div>
+
       {/* Users table */}
       {loading ? (
         <div className="loading-state"><div className="spinner" />Loading users...</div>
@@ -321,7 +358,7 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <tr key={user.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
@@ -385,6 +422,13 @@ export default function AdminUsersPage() {
                   </td>
                 </tr>
               ))}
+              {filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-2xl)' }}>
+                    No users match your search.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
