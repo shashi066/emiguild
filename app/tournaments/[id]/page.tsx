@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import {
   Trophy, Calendar, Users, DollarSign, Zap,
-  Lock, Unlock, Play, Check,
+  Lock, Unlock, Play, Check, LogIn,
 } from 'lucide-react';
 import Loading from './loading';
 
@@ -33,7 +34,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 
 export default function TournamentOverviewPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const { data: session } = useSession();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,9 +121,29 @@ export default function TournamentOverviewPage() {
       )}
 
       {/* User Registration Actions */}
-      {session?.user && tournament.status === 'REGISTRATION_OPEN' && (
-        <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-          {tournament.players.some((p) => p.userId === session.user.id) ? (
+      {tournament.status === 'REGISTRATION_OPEN' && (
+        <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center', flexDirection: 'column', alignItems: 'center' }}>
+          {!session?.user ? (
+            tournament._count.players >= tournament.maxPlayers ? (
+              <button
+                type="button"
+                disabled
+                className="btn btn-primary"
+                style={{ width: '100%', maxWidth: '300px', fontSize: '1rem', padding: '0.75rem' }}
+              >
+                Tournament Full
+              </button>
+            ) : (
+              <Link
+                href={`/login?callbackUrl=${encodeURIComponent(`/tournaments/${id}`)}`}
+                className="btn btn-primary"
+                style={{ width: '100%', maxWidth: '300px', fontSize: '1rem', padding: '0.75rem' }}
+              >
+                <LogIn size={18} />
+                Login to Register
+              </Link>
+            )
+          ) : tournament.players.some((p) => p.userId === session.user.id) ? (
             <div style={{ textAlign: 'center' }}>
               <div style={{ color: '#00e676', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
                 <Check size={16} /> You are registered!
@@ -144,7 +164,7 @@ export default function TournamentOverviewPage() {
               {registering ? 'Registering...' : tournament._count.players >= tournament.maxPlayers ? 'Tournament Full' : 'Register Now'}
             </button>
           )}
-          {regError && (
+          {session?.user && regError && (
             <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', borderRadius: '8px', fontSize: '0.85rem', width: '100%', maxWidth: '300px', textAlign: 'center' }}>
               {regError}
             </div>

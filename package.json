@@ -13,7 +13,8 @@
     "db:migrate": "prisma migrate dev --schema=prisma/schema.production.prisma",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "test:password-reset": "tsx --test test/password-reset/password-reset.test.ts"
+    "test:password-reset": "tsx --test test/password-reset/password-reset.test.ts",
+    "test:armory-marketplace": "tsx --test test/armory-marketplace/marketplace.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

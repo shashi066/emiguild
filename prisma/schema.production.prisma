@@ -18,6 +18,7 @@ model User {
   password  String
   phone     String?
   role      String   @default("USER")   // "USER" | "ADMIN"
+  guildGems Int      @default(0)
   lastForgotPasswordDate String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -32,6 +33,10 @@ model User {
   armoryLoadout     ArmoryLoadout?
   armoryDailyClaims ArmoryDailyClaim[]
   armoryTickets     ArmoryTicket[]
+  armoryTradeListings ArmoryTradeListing[] @relation("ArmoryTradeSeller")
+  armoryTradePurchases ArmoryTradeListing[] @relation("ArmoryTradeBuyer")
+  guildGemLedger      GuildGemLedger[] @relation("GuildGemOwner")
+  guildGemAdjustments GuildGemLedger[] @relation("GuildGemActor")
 
   @@map("users")
 }
@@ -288,6 +293,8 @@ model ArmoryArtifact {
   armorLoadout    ArmoryLoadout[]    @relation("ArmoryArmor")
   glovesLoadout   ArmoryLoadout[]    @relation("ArmoryGloves")
   bootsLoadout    ArmoryLoadout[]    @relation("ArmoryBoots")
+  tradeOffers     ArmoryTradeListing[] @relation("ArmoryTradeOfferedArtifact")
+  tradeRequests   ArmoryTradeListing[] @relation("ArmoryTradeRequestedArtifact")
 
   @@unique([setId, slotType])
   @@map("armory_artifacts")
@@ -384,4 +391,50 @@ model ArmoryTicket {
   @@index([userId, claimDate])
   @@index([claimDate])
   @@map("armory_tickets")
+}
+
+model ArmoryTradeListing {
+  id                  String    @id @default(cuid())
+  sellerId            String
+  buyerId             String?
+  offeredArtifactId   String
+  requestedArtifactId String
+  status              String    @default("OPEN")
+  activeSellerKey     String?   @unique
+  gemCost             Int       @default(1)
+  expiresAt           DateTime
+  completedAt         DateTime?
+  cancelledAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  seller            User           @relation("ArmoryTradeSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer             User?          @relation("ArmoryTradeBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+  offeredArtifact   ArmoryArtifact @relation("ArmoryTradeOfferedArtifact", fields: [offeredArtifactId], references: [id], onDelete: Restrict)
+  requestedArtifact ArmoryArtifact @relation("ArmoryTradeRequestedArtifact", fields: [requestedArtifactId], references: [id], onDelete: Restrict)
+
+  @@index([status, expiresAt])
+  @@index([sellerId, createdAt])
+  @@index([buyerId, completedAt])
+  @@map("armory_trade_listings")
+}
+
+model GuildGemLedger {
+  id           String   @id @default(cuid())
+  userId       String
+  actorId      String?
+  amount       Int
+  balanceAfter Int
+  reason       String
+  referenceId  String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  user  User  @relation("GuildGemOwner", fields: [userId], references: [id], onDelete: Cascade)
+  actor User? @relation("GuildGemActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([reason, referenceId])
+  @@map("guild_gem_ledger")
 }

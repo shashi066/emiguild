@@ -1,11 +1,24 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { CheckCircle, Shield, Save, AlertCircle, RefreshCw, History, Package, Search } from 'lucide-react';
 import { decryptNumber } from '@/lib/crypto';
 
 const REWARD_TYPES = ['PERCENT_DISCOUNT', 'FIXED_DISCOUNT', 'GAMING_MINUTES', 'RACING_MINUTES', 'SQUAD_NIGHT', 'BRONZE_PASS'];
-type HistoryType = 'drops' | 'sets' | 'inventory';
+type HistoryType = 'drops' | 'sets' | 'inventory' | 'marketplace';
+const AdminArmoryMarketplace = dynamic(
+  () => import('@/components/admin/AdminArmoryMarketplace')
+    .then((module) => module.AdminArmoryMarketplace),
+  {
+    loading: () => (
+      <div className="loading-state">
+        <div className="spinner" />
+        Loading Artifact Exchange administration...
+      </div>
+    ),
+  },
+);
 const INVENTORY_RARITY_ORDER: Record<string, number> = { PLATINUM: 0, GOLD: 1, SILVER: 2, BRONZE: 3 };
 const ARMORY_RARITY_COLORS: Record<string, string> = {
   PLATINUM: '#c7a7ff',
@@ -386,13 +399,14 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
         <div className="card" style={tableCardStyle}>
           <h2 style={{ fontSize: '1.2rem', marginBottom: 'var(--space-md)' }}>
             <History size={18} style={{ display: 'inline', marginRight: 8 }} />
-            Artifacts History
+            Artifacts Activity
           </h2>
           <div role="tablist" aria-label="Artifacts history type" style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-md)', borderBottom: '1px solid var(--color-border)', overflowX: 'auto' }}>
             {([
               ['drops', 'Daily Drops'],
               ['sets', 'Consumed Sets'],
               ['inventory', 'User Inventory'],
+              ['marketplace', 'Artifact Exchange'],
             ] as const).map(([type, label]) => (
               <button
                 key={type}
@@ -404,7 +418,9 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                   if (historyType === type) return;
                   setHistoryType(type);
                   setHistoryRows([]);
-                  if (type !== 'inventory') loadHistory(historyDate, type);
+                  if (type === 'drops' || type === 'sets') {
+                    loadHistory(historyDate, type);
+                  }
                 }}
                 style={{ flexShrink: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
               >
@@ -414,6 +430,8 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
           </div>
           {historyType === 'inventory' ? (
             <UserInventoryHistory sets={sets} />
+          ) : historyType === 'marketplace' ? (
+            <AdminArmoryMarketplace />
           ) : (
             <>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 'var(--space-md)', alignItems: 'center' }}>

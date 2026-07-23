@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { encryptNumber } from '@/lib/crypto';
+import { expireArmoryTradeListings } from '@/lib/armory-marketplace';
 
 export const ARMORY_SLOTS = ['HEADGEAR', 'ARMOR', 'GLOVES', 'BOOTS'] as const;
 export type ArmorySlot = typeof ARMORY_SLOTS[number];
@@ -432,10 +433,17 @@ export function serializeArmoryActionResult(result: any) {
 }
 
 export async function getArmoryState(userId: string) {
-  await ensureArmoryDefaults();
+  await Promise.all([
+    ensureArmoryDefaults(),
+    expireArmoryTradeListings({ sellerId: userId }),
+  ]);
   const today = getArmoryToday();
-  const [settings, sets, artifacts, inventory, loadout, todayClaim, tickets] = await Promise.all([
+  const [settings, user, sets, artifacts, inventory, loadout, todayClaim, tickets] = await Promise.all([
     getSettingsMap(),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { guildGems: true },
+    }),
     prisma.armorySet.findMany({ include: { rewards: true }, orderBy: { displayOrder: 'asc' } }),
     prisma.armoryArtifact.findMany({ include: { set: true }, orderBy: [{ set: { displayOrder: 'asc' } }, { displayOrder: 'asc' }] }),
     prisma.armoryInventory.findMany({
@@ -482,6 +490,7 @@ export async function getArmoryState(userId: string) {
 
   return {
     today,
+    guildGems: user?.guildGems ?? 0,
     forge: {
       enabled,
       canForge: enabled && !todayClaim,
@@ -867,7 +876,27 @@ export async function claimArmorySet(userId: string) {
       include: { set: true },
     });
 
-    return { ticket, consumedArtifactIds: artifactIds };
+    const user = await tx.user.update({
+      where: { id: userId },
+      data: { guildGems: { increment: 1 } },
+      select: { guildGems: true },
+    });
+    await tx.guildGemLedger.create({
+      data: {
+        userId,
+        amount: 1,
+        balanceAfter: user.guildGems,
+        reason: 'SET_CONSUMED',
+        referenceId: ticket.id,
+      },
+    });
+
+    return {
+      ticket,
+      consumedArtifactIds: artifactIds,
+      gemsEarned: 1,
+      guildGems: user.guildGems,
+    };
   });
 
   return ticket;

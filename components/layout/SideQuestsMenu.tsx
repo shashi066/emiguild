@@ -17,7 +17,7 @@ const SIDE_QUESTS = [
   {
     href: '/armory',
     title: 'Artifacts',
-    subtitle: 'Collect gear and complete legendary sets',
+    subtitle: 'Forge, collect, trade, and complete sets',
     icon: Shield,
     accent: 'side-quest-accent-violet',
   },
