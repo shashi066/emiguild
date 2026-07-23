@@ -24,6 +24,17 @@ const DEFAULT_SLOT_WEIGHTS: Record<ArmorySlot, number> = {
   BOOTS: 40,
 };
 
+export const ADMIN_GRANT_SLOT_WEIGHTS: Readonly<Record<ArmorySlot, number>> = {
+  HEADGEAR: 10,
+  ARMOR: 20,
+  GLOVES: 30,
+  BOOTS: 40,
+};
+
+const ADMIN_GRANT_SLOT_ORDER: ArmorySlot[] = ['BOOTS', 'GLOVES', 'ARMOR', 'HEADGEAR'];
+const ADMIN_GRANT_RARITIES = new Set(['BRONZE', 'SILVER', 'GOLD', 'PLATINUM']);
+type RandomInt = (minimum: number, maximum: number) => number;
+
 const ARMORY_DEFAULTS_VERSION_KEY = 'armory_defaults_version';
 const ARMORY_DEFAULTS_VERSION = 'launch_rewards_v2';
 let armoryDefaultsReady = false;
@@ -152,7 +163,10 @@ export function validateSlotWeights(artifacts: Array<{ active?: boolean; setId: 
   return Object.values(totals).every((total) => total === 100);
 }
 
-export function pickWeightedSet<T extends { dropPercentage: number }>(sets: T[], randomInt = crypto.randomInt): T {
+export function pickWeightedSet<T extends { dropPercentage: number }>(
+  sets: T[],
+  randomInt: RandomInt = crypto.randomInt,
+): T {
   const total = sets.reduce((sum, set) => sum + set.dropPercentage, 0);
   const roll = randomInt(0, total);
   let cursor = 0;
@@ -163,7 +177,10 @@ export function pickWeightedSet<T extends { dropPercentage: number }>(sets: T[],
   return sets[0];
 }
 
-export function pickWeightedArtifact<T extends { slotDropPercentage: number }>(artifacts: T[], randomInt = crypto.randomInt): T {
+export function pickWeightedArtifact<T extends { slotDropPercentage: number }>(
+  artifacts: T[],
+  randomInt: RandomInt = crypto.randomInt,
+): T {
   const total = artifacts.reduce((sum, artifact) => sum + artifact.slotDropPercentage, 0);
   const roll = randomInt(0, total);
   let cursor = 0;
@@ -172,6 +189,46 @@ export function pickWeightedArtifact<T extends { slotDropPercentage: number }>(a
     if (roll < cursor) return artifact;
   }
   return artifacts[0];
+}
+
+export function parseAdminArtifactGrantRequest(body: unknown) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error('INVALID_GRANT_REQUEST');
+  }
+
+  const record = body as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (
+    keys.length !== 2
+    || !keys.every((key) => key === 'userId' || key === 'setId')
+    || typeof record.userId !== 'string'
+    || typeof record.setId !== 'string'
+  ) {
+    throw new Error('INVALID_GRANT_REQUEST');
+  }
+
+  const userId = record.userId.trim();
+  const setId = record.setId.trim();
+  if (!userId || !setId) throw new Error('INVALID_GRANT_REQUEST');
+  return { userId, setId };
+}
+
+export function pickAdminGrantArtifact<T extends { slotType: string }>(
+  artifacts: T[],
+  randomInt: RandomInt = crypto.randomInt,
+): T {
+  if (artifacts.length !== ARMORY_SLOTS.length) throw new Error('INCOMPLETE_SET');
+
+  const weightedArtifacts = ADMIN_GRANT_SLOT_ORDER.map((slotType) => {
+    const matches = artifacts.filter((artifact) => artifact.slotType === slotType);
+    if (matches.length !== 1) throw new Error('INCOMPLETE_SET');
+    return {
+      artifact: matches[0],
+      slotDropPercentage: ADMIN_GRANT_SLOT_WEIGHTS[slotType],
+    };
+  });
+
+  return pickWeightedArtifact(weightedArtifacts, randomInt).artifact;
 }
 
 export function detectCompleteSet(loadout: Record<ArmorySlot, any | null>) {
@@ -546,6 +603,64 @@ export async function forgeArtifact(userId: string) {
       artifact: selected,
     },
   };
+}
+
+export async function grantAdminArmoryArtifact(userId: string, setId: string) {
+  await ensureArmoryDefaults();
+
+  return prisma.$transaction(async (tx) => {
+    const [user, set] = await Promise.all([
+      tx.user.findFirst({
+        where: { id: userId, role: 'USER' },
+        select: { id: true, name: true, email: true },
+      }),
+      tx.armorySet.findFirst({
+        where: { id: setId, active: true },
+        select: {
+          id: true,
+          name: true,
+          rarity: true,
+          artifacts: {
+            where: { active: true },
+            select: { id: true, setId: true, name: true, slotType: true },
+          },
+        },
+      }),
+    ]);
+
+    if (!user) throw new Error('USER_NOT_FOUND');
+    if (!set || !ADMIN_GRANT_RARITIES.has(set.rarity)) throw new Error('SET_NOT_AVAILABLE');
+
+    const selected = pickAdminGrantArtifact(set.artifacts);
+    const grantToken = crypto.randomUUID();
+
+    await tx.armoryInventory.upsert({
+      where: { userId_artifactId: { userId, artifactId: selected.id } },
+      update: { quantity: { increment: 1 } },
+      create: { userId, artifactId: selected.id, quantity: 1 },
+    });
+    const claim = await tx.armoryDailyClaim.create({
+      data: {
+        id: `admin_${grantToken}`,
+        userId,
+        claimDate: `${getArmoryToday()}:admin:${grantToken}`,
+        artifactId: selected.id,
+      },
+      select: { id: true, claimDate: true, createdAt: true },
+    });
+
+    return {
+      ...claim,
+      source: 'ADMIN_GRANT' as const,
+      user,
+      artifact: {
+        id: selected.id,
+        name: selected.name,
+        slotType: selected.slotType,
+        set: { id: set.id, name: set.name, rarity: set.rarity },
+      },
+    };
+  });
 }
 
 type CheckInArtifact = {
