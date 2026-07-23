@@ -5,6 +5,7 @@ import {
   BookOpen, Search, CheckCircle, XCircle,
   AlertCircle, RefreshCw, Trash2, Globe, UserPlus, Phone, LogIn,
   Pencil, X, MessageSquare, Gamepad2, Plus, Minus, Award,
+  IndianRupee,
 } from 'lucide-react';
 import {
   formatCurrency, formatDate, formatTime,
@@ -356,6 +357,7 @@ function EditModal({
 export default function AdminBookingsPage() {
   const [bookings, setBookings]         = useState<Booking[]>([]);
   const [total, setTotal]               = useState(0);
+  const [dayRevenue, setDayRevenue]     = useState<{ date: string; amount: number } | null>(null);
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -390,6 +392,11 @@ export default function AdminBookingsPage() {
         customerPhone: decryptPhone(booking.customerPhone),
       })));
       setTotal(data.total ?? 0);
+      setDayRevenue(
+        dateFilter && typeof data.dayRevenue === 'number'
+          ? { date: dateFilter, amount: data.dayRevenue }
+          : null,
+      );
     } catch {
       setError('Failed to load bookings.');
     } finally {
@@ -412,7 +419,15 @@ export default function AdminBookingsPage() {
       const res  = await fetch(`/api/bookings/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (res.ok) {
+        const previousBooking = bookings.find((booking) => booking.id === id);
         setBookings((prev) => prev.map((b) => b.id === id ? { ...b, status: newStatus as Booking['status'], adminComment: adminComment ?? b.adminComment } : b));
+        if (newStatus === 'CANCELLED' && previousBooking && previousBooking.status !== 'CANCELLED') {
+          setDayRevenue((current) => (
+            current?.date === previousBooking.date
+              ? { ...current, amount: Math.max(0, current.amount - previousBooking.totalPrice) }
+              : current
+          ));
+        }
         if (newStatus === 'CHECKED_IN' && data.artifactAward) {
           const award = data.artifactAward;
           if (award.awarded && award.artifact) {
@@ -453,12 +468,34 @@ export default function AdminBookingsPage() {
     setUpdatingId(id);
     try {
       const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
-      if (res.ok) setBookings((prev) => prev.filter((b) => b.id !== id));
+      if (res.ok) {
+        const deletedBooking = bookings.find((booking) => booking.id === id);
+        setBookings((prev) => prev.filter((b) => b.id !== id));
+        if (deletedBooking && deletedBooking.status !== 'CANCELLED') {
+          setDayRevenue((current) => (
+            current?.date === deletedBooking.date
+              ? { ...current, amount: Math.max(0, current.amount - deletedBooking.totalPrice) }
+              : current
+          ));
+        }
+      }
     } finally { setUpdatingId(null); }
   };
 
   const handleEditSaved = (updated: Booking) => {
+    const previousBooking = bookings.find((booking) => booking.id === updated.id);
     setBookings((prev) => prev.map((b) => b.id === updated.id ? { ...b, ...updated } : b));
+    setDayRevenue((current) => {
+      if (!current || !previousBooking) return current;
+      let amount = current.amount;
+      if (previousBooking.status !== 'CANCELLED' && previousBooking.date === current.date) {
+        amount -= previousBooking.totalPrice;
+      }
+      if (updated.status !== 'CANCELLED' && updated.date === current.date) {
+        amount += updated.totalPrice;
+      }
+      return { ...current, amount: Math.max(0, amount) };
+    });
     setEditModal(null);
   };
 
@@ -514,7 +551,33 @@ export default function AdminBookingsPage() {
         </select>
         <input id="bookings-date-filter" type="date" className="form-input" style={{ width: 'auto' }} value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
         {hasFilters && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setStatusFilter(''); setDateFilter(''); setTypeFilter(''); }}>Clear</button>
+          <button id="clear-booking-filters" className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setStatusFilter(''); setDateFilter(''); setTypeFilter(''); }}>Clear</button>
+        )}
+        {dateFilter && (
+          <div
+            id="selected-day-revenue"
+            aria-live="polite"
+            title={`Revenue for ${formatDate(dateFilter)}, excluding cancelled bookings`}
+            style={{
+              minHeight: 36,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '0 11px',
+              border: '1px solid rgba(0, 230, 118, 0.24)',
+              borderRadius: 6,
+              background: 'rgba(0, 230, 118, 0.07)',
+              color: 'var(--color-text-secondary)',
+              fontSize: '0.76rem',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <IndianRupee size={14} style={{ color: 'var(--color-accent-success)' }} />
+            <span>Day Earned</span>
+            <strong style={{ color: 'var(--color-accent-success)', fontFamily: 'Orbitron, sans-serif', fontSize: '0.8rem' }}>
+              {dayRevenue?.date === dateFilter ? formatCurrency(dayRevenue.amount) : '...'}
+            </strong>
+          </div>
         )}
       </div>
 

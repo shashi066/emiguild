@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     ];
   }
 
-  const [bookings, total] = await Promise.all([
+  const [bookings, total, dayRevenue] = await Promise.all([
     prisma.booking.findMany({
       where,
       include: {
@@ -62,6 +62,15 @@ export async function GET(req: NextRequest) {
       take: limit,
     }),
     prisma.booking.count({ where }),
+    isAdmin && date
+      ? prisma.booking.aggregate({
+          where: {
+            date,
+            status: { not: 'CANCELLED' },
+          },
+          _sum: { totalPrice: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const encryptedBookings = bookings.map((booking) => ({
@@ -69,7 +78,15 @@ export async function GET(req: NextRequest) {
     customerPhone: encryptPhone(booking.customerPhone),
   }));
 
-  return NextResponse.json({ bookings: encryptedBookings, total, page, limit });
+  return NextResponse.json({
+    bookings: encryptedBookings,
+    total,
+    page,
+    limit,
+    dayRevenue: isAdmin && date
+      ? dayRevenue?._sum.totalPrice ?? 0
+      : null,
+  });
 }
 
 export async function POST(req: NextRequest) {
