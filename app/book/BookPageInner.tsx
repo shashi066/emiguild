@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   Calendar, Monitor, Clock, CheckCircle, ChevronRight,
-  ChevronLeft, AlertCircle, Zap, Snowflake, Gamepad2, Plus, Minus, Award, ArrowLeft,
+  ChevronLeft, AlertCircle, Snowflake, Gamepad2, Plus, Minus, Award, ArrowLeft,
 } from 'lucide-react';
 import {
   TIME_SLOTS, DURATION_OPTIONS, CLOSING_HOUR, formatTime, formatDate,
@@ -119,6 +119,10 @@ export default function BookPageInner() {
     loadSlots();
   }, [loadSlots]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [step]);
+
   const controllerCharge = extraControllers * controllerPrice * selectedDuration;
   const sessionCost = selectedStation ? selectedStation.hourlyRate * selectedDuration : 0;
   const totalPrice = (usePass ? 0 : sessionCost) + controllerCharge;
@@ -177,6 +181,17 @@ export default function BookPageInner() {
     if (step === 2) return !!selectedStation;
     if (step === 3) return !!selectedTime;
     return true;
+  };
+
+  const selectStation = (station: Station) => {
+    setSelectedStation(station);
+    setSelectedDuration(station.minDuration ?? 1);
+    setSelectedTime('');
+    setExtraControllers(0);
+    setTimeout(
+      () => controllerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      50,
+    );
   };
 
   const today = getTodayString();
@@ -308,57 +323,41 @@ export default function BookPageInner() {
               </p>
             </div>
 
-            <div className="stations-grid">
+            <div className="stations-grid booking-station-grid">
               {stations.map((station) => (
-                <div
+                <button
+                  type="button"
                   key={station.id}
-                  className={`station-card ${selectedStation?.id === station.id ? 'selected' : ''}`}
-                  onClick={() => {
-                    setSelectedStation(station);
-                    setSelectedDuration(station.minDuration ?? 1);
-                    setSelectedTime('');
-                    setExtraControllers(0);
-                    setTimeout(() => controllerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setSelectedStation(station);
-                      setSelectedDuration(station.minDuration ?? 1);
-                      setSelectedTime('');
-                      setExtraControllers(0);
-                      setTimeout(() => controllerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-                    }
-                  }}
+                  className={`station-card booking-station-option ${selectedStation?.id === station.id ? 'selected' : ''}`}
+                  onClick={() => selectStation(station)}
+                  aria-pressed={selectedStation?.id === station.id}
                 >
-                  <div className="station-image">
+                  <span className="booking-station-icon" aria-hidden="true">
                     {STATION_ICONS[station.position] || '🖥️'}
-                  </div>
-                  <div className="station-body">
-                    <div className="station-name">{station.name}</div>
-                    <div className="station-description">{station.description}</div>
-                    <div className="station-specs">{station.specs}</div>
-                    {station.hasControllers === false && (
-                      <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
-                        padding: '4px 9px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
-                        background: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
-                        🏎️ Racing Passes
-                      </div>
-                    )}
-                    <div className="station-footer">
-                      <div>
-                        <div className="station-price">{formatCurrency(station.hourlyRate)}</div>
-                        <div className="station-price-label">per hour</div>
-                      </div>
+                  </span>
+
+                  <span className="booking-station-details">
+                    <span className="booking-station-heading">
+                      <span className="station-name">{station.name}</span>
                       {selectedStation?.id === station.id && (
-                        <div style={{ color: 'var(--color-accent-success)' }}>
-                          <CheckCircle size={22} />
-                        </div>
+                        <CheckCircle
+                          className="booking-station-check"
+                          size={17}
+                          aria-hidden="true"
+                        />
                       )}
-                    </div>
-                  </div>
-                </div>
+                    </span>
+                    <span className={`booking-station-type ${station.hasControllers ? '' : 'racing'}`}>
+                      <Gamepad2 size={12} aria-hidden="true" />
+                      {station.hasControllers ? 'PlayStation' : 'Racing simulator'}
+                    </span>
+                  </span>
+
+                  <span className="booking-station-rate">
+                    <strong>{formatCurrency(station.hourlyRate)}</strong>
+                    <span>per hour</span>
+                  </span>
+                </button>
               ))}
             </div>
 
@@ -786,22 +785,6 @@ export default function BookPageInner() {
               </div>
             </div>
 
-            {/* Station specs */}
-            <div
-              style={{
-                background: 'rgba(0, 212, 255, 0.05)',
-                border: '1px solid rgba(0, 212, 255, 0.15)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-md)',
-                marginBottom: 'var(--space-lg)',
-                fontSize: '0.8rem',
-                color: 'var(--color-accent-secondary)',
-              }}
-            >
-              <Zap size={13} style={{ display: 'inline', marginRight: 4 }} />
-              {selectedStation?.specs}
-            </div>
-
             {/* Notes */}
             <div className="form-group" style={{ marginBottom: 'var(--space-lg)' }}>
               <label className="form-label" htmlFor="booking-notes">
@@ -820,15 +803,17 @@ export default function BookPageInner() {
 
             {!session && (
               <div className="alert alert-error" style={{ marginBottom: 'var(--space-md)' }}>
-                <AlertCircle size={16} />
-                You need to{' '}
-                <Link
-                  href="/login"
-                  style={{ color: 'var(--color-accent-secondary)', fontWeight: 700 }}
-                >
-                  sign in
-                </Link>{' '}
-                to complete your booking.
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>
+                  You need to{' '}
+                  <Link
+                    href="/login"
+                    style={{ color: 'var(--color-accent-secondary)', fontWeight: 700 }}
+                  >
+                    sign in
+                  </Link>{' '}
+                  to complete your booking.
+                </span>
               </div>
             )}
 

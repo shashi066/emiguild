@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Users, Shield, Calendar, KeyRound,
-  RefreshCw, X, Eye, EyeOff, CheckCircle, AlertCircle, Copy, Check,
+  RefreshCw, X, Eye, EyeOff, CheckCircle, AlertCircle, Copy, Check, Search,
 } from 'lucide-react';
 import { decryptPhone } from '@/lib/crypto';
+import {
+  UserDetailsModal,
+  type AdminUserDetails,
+} from '@/components/admin/UserDetailsModal';
 
 type User = {
   id: string;
@@ -251,6 +255,10 @@ export default function AdminUsersPage() {
   const [users, setUsers]           = useState<User[]>([]);
   const [loading, setLoading]       = useState(true);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [detailsTarget, setDetailsTarget] = useState<User | null>(null);
+  const [search, setSearch]         = useState('');
+  const detailsCacheRef = useRef(new Map<string, AdminUserDetails>());
+  const detailsTriggerRef = useRef<HTMLTableRowElement | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -268,13 +276,47 @@ export default function AdminUsersPage() {
 
   useEffect(() => { load(); }, []);
 
+  const cacheDetails = useCallback((userId: string, details: AdminUserDetails) => {
+    detailsCacheRef.current.set(userId, details);
+  }, []);
+
+  const openDetails = (user: User, trigger: HTMLTableRowElement) => {
+    detailsTriggerRef.current = trigger;
+    setDetailsTarget(user);
+  };
+
+  const closeDetails = useCallback(() => {
+    setDetailsTarget(null);
+    window.requestAnimationFrame(() => detailsTriggerRef.current?.focus());
+  }, []);
+
   const adminCount = users.filter((u) => u.role === 'ADMIN').length;
   const userCount  = users.filter((u) => u.role === 'USER').length;
+  const searchQuery = search.trim().toLowerCase();
+  const phoneQuery = search.replace(/\D/g, '');
+  const filteredUsers = searchQuery
+    ? users.filter((user) => {
+        const searchableId = user.id.slice(-6).toLowerCase();
+        const searchablePhone = (user.phone ?? '').replace(/\D/g, '');
+        return user.name.toLowerCase().includes(searchQuery)
+          || user.email.toLowerCase().includes(searchQuery)
+          || searchableId.includes(searchQuery.replace(/^#/, ''))
+          || (phoneQuery.length > 0 && searchablePhone.includes(phoneQuery));
+      })
+    : users;
 
   return (
     <div>
       {resetTarget && (
         <ResetModal user={resetTarget} onClose={() => { setResetTarget(null); }} />
+      )}
+      {detailsTarget && (
+        <UserDetailsModal
+          user={detailsTarget}
+          cachedDetails={detailsCacheRef.current.get(detailsTarget.id)}
+          onLoaded={cacheDetails}
+          onClose={closeDetails}
+        />
       )}
 
       <div className="page-header">
@@ -304,6 +346,30 @@ export default function AdminUsersPage() {
         ))}
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
+        <div className="search-input-wrapper" style={{ width: '100%', maxWidth: 420 }}>
+          <Search size={16} className="search-icon" />
+          <input
+            id="users-search"
+            type="search"
+            className="form-input search-input"
+            placeholder="Search name, email, phone or user ID..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        {search && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch('')}>
+            <X size={14} /> Clear
+          </button>
+        )}
+        {searchQuery && (
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+            {filteredUsers.length} {filteredUsers.length === 1 ? 'result' : 'results'}
+          </span>
+        )}
+      </div>
+
       {/* Users table */}
       {loading ? (
         <div className="loading-state"><div className="spinner" />Loading users...</div>
@@ -321,8 +387,21 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
+              {filteredUsers.map((user) => (
+                <tr
+                  key={user.id}
+                  className="admin-user-row"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View details for ${user.name}`}
+                  onClick={(event) => openDetails(user, event.currentTarget)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openDetails(user, event.currentTarget);
+                    }
+                  }}
+                >
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                       <div style={{
@@ -374,7 +453,11 @@ export default function AdminUsersPage() {
                   <td>
                     <button
                       className="btn btn-ghost btn-sm"
-                      onClick={() => setResetTarget(user)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setResetTarget(user);
+                      }}
+                      onKeyDown={(event) => event.stopPropagation()}
                       title="Reset password"
                       id={`reset-pwd-${user.id}`}
                       style={{ color: 'var(--color-accent-primary)', gap: 6 }}
@@ -385,10 +468,22 @@ export default function AdminUsersPage() {
                   </td>
                 </tr>
               ))}
+              {filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-2xl)' }}>
+                    No users match your search.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       )}
+      <style>{`
+        .admin-user-row { cursor: pointer; }
+        .admin-user-row:hover { background: rgba(108, 99, 255, 0.055); }
+        .admin-user-row:focus-visible { outline: 2px solid var(--color-accent-secondary); outline-offset: -2px; }
+      `}</style>
     </div>
   );
 }

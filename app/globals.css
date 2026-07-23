@@ -1118,6 +1118,151 @@ input.form-input[type="time"]:focus {
   font-family: 'Outfit', sans-serif;
 }
 
+/* Compact station selector used only in booking step 2. */
+.stations-grid.booking-station-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.station-card.booking-station-option {
+  width: 100%;
+  min-height: 68px;
+  padding: 9px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  background: var(--color-bg-card);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  appearance: none;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.station-card.booking-station-option:hover {
+  transform: none;
+  border-color: var(--color-border-accent);
+  box-shadow: none;
+}
+
+.station-card.booking-station-option.selected {
+  border-color: var(--color-accent-primary);
+  background: rgba(108, 99, 255, 0.08);
+  box-shadow: none;
+}
+
+.station-card.booking-station-option:focus-visible {
+  outline: 2px solid var(--color-accent-secondary);
+  outline-offset: 2px;
+}
+
+.booking-station-icon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+}
+
+.booking-station-option.selected .booking-station-icon {
+  border-color: var(--color-accent-primary);
+  background: rgba(108, 99, 255, 0.12);
+}
+
+.booking-station-details {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.booking-station-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.booking-station-heading .station-name {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-station-check {
+  flex: 0 0 auto;
+  color: var(--color-accent-success);
+}
+
+.booking-station-type {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-accent-secondary);
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.booking-station-type.racing {
+  color: #f59e0b;
+}
+
+.booking-station-rate {
+  min-width: 58px;
+  padding-left: 9px;
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+
+.booking-station-rate strong {
+  color: var(--color-accent-primary);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.85rem;
+}
+
+.booking-station-rate span {
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+}
+
+@media (max-width: 640px) {
+  .stations-grid.booking-station-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .station-card.booking-station-option {
+    min-height: 66px;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .booking-station-icon {
+    width: 42px;
+    height: 42px;
+    font-size: 1.2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .station-card.booking-station-option {
+    transition: none;
+  }
+}
+
 /* ============================================================
    CONTROLLER SELECTOR
    ============================================================ */

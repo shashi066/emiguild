@@ -17,9 +17,11 @@ import {
   IndianRupee,
   Package,
   Percent,
+  Store,
   Shield,
   Sparkles,
   Ticket,
+  X,
   Zap,
 } from 'lucide-react';
 
@@ -201,13 +203,17 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   const [saving, setSaving] = useState(false);
   const [forging, setForging] = useState(false);
   const [error, setError] = useState(initialError);
+  const [notice, setNotice] = useState('');
   const [forgeResult, setForgeResult] = useState<any>(null);
   const [forgeCharging, setForgeCharging] = useState(false);
   const [actionOverlay, setActionOverlay] = useState<ArmoryActionOverlayType | null>(null);
+  const [claimConfirmation, setClaimConfirmation] = useState<any>(null);
   const [rarityFilter, setRarityFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
   const [nextForgeTimer, setNextForgeTimer] = useState(getNextForgeTimer);
   const ticketsSectionRef = useRef<HTMLElement>(null);
+  const claimConfirmButtonRef = useRef<HTMLButtonElement>(null);
+  const previousClaimFocusRef = useRef<HTMLElement | null>(null);
 
   const load = async () => {
     if (initialState && state) return;
@@ -236,6 +242,23 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!claimConfirmation) return;
+    claimConfirmButtonRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !saving) {
+        setClaimConfirmation(null);
+        window.setTimeout(() => {
+          if (previousClaimFocusRef.current?.isConnected) {
+            previousClaimFocusRef.current.focus();
+          }
+        }, 0);
+      }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [claimConfirmation, saving]);
 
   const inventoryTotal = useMemo(() => {
     return (state?.inventory ?? []).reduce((sum: number, row: any) => sum + (row.quantity ?? 0), 0);
@@ -269,6 +292,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
     }
     if (overlayType) setActionOverlay(overlayType);
     setError('');
+    setNotice('');
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -332,6 +356,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
               loadout,
               progress: { completeSet: null, reward: null },
               tickets: [data.ticket, ...(current.tickets ?? [])],
+              guildGems: data.guildGems ?? current.guildGems ?? 0,
             };
           }
 
@@ -347,6 +372,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
         setForgeResult(data.crafted);
       }
       if (data.ticket) {
+        setNotice(`Set consumed. +${data.gemsEarned ?? 1} Guild Gem earned.`);
         window.requestAnimationFrame(() => {
           window.requestAnimationFrame(() => {
             ticketsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -374,6 +400,34 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   const equipArtifact = (artifact: any) => act('/api/armory/equip', { slotType: artifact.slotType, artifactId: artifact.id }, 'equip');
   const unequipSlot = (slot: string) => act('/api/armory/equip', { slotType: slot, artifactId: null }, 'unequip');
   const craftArtifact = (artifact: any) => act('/api/armory/craft', { artifactId: artifact.id });
+  const openClaimConfirmation = () => {
+    if (!setProgress.completeSet) return;
+    previousClaimFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    setClaimConfirmation({
+      set: setProgress.completeSet,
+      reward: state?.progress?.reward,
+    });
+  };
+  const closeClaimConfirmation = () => {
+    if (saving) return;
+    setClaimConfirmation(null);
+    window.setTimeout(() => {
+      if (previousClaimFocusRef.current?.isConnected) {
+        previousClaimFocusRef.current.focus();
+      }
+    }, 0);
+  };
+  const confirmSetClaim = async () => {
+    await act('/api/armory/claim-set');
+    setClaimConfirmation(null);
+    window.setTimeout(() => {
+      if (previousClaimFocusRef.current?.isConnected) {
+        previousClaimFocusRef.current.focus();
+      }
+    }, 0);
+  };
 
   if (loading || status === 'loading') {
     return <div className="loading-state"><div className="spinner" />Loading Artifacts...</div>;
@@ -399,20 +453,22 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   return (
     <main className="armory-rpg">
       <div className="armory-shell">
-        <ArmoryHeader inventoryTotal={inventoryTotal} />
+        <ArmoryHeader inventoryTotal={inventoryTotal} guildGems={state?.guildGems ?? 0} />
         <DailyForgePanel state={state} saving={saving} forging={forging} nextForgeTimer={nextForgeTimer} onForge={() => act('/api/armory/forge')} />
         {error && <div className="armory-error">{error}</div>}
+        {notice && <div className="armory-notice"><Gem size={16} />{notice}</div>}
 
         <RewardPreviewPanel sets={state?.sets ?? []} />
 
         <div className="armory-main-grid">
           <section className="armory-center">
             <LoadoutGrid loadout={state?.loadout ?? {}} saving={saving} onUnequip={unequipSlot} />
-            <SetProgressPanel state={state} progress={setProgress} saving={saving} onClaim={() => {
-              if (confirm(`Claiming this reward will consume all four equipped ${setProgress.completeSet?.name} artifacts. This cannot be undone.`)) {
-                act('/api/armory/claim-set');
-              }
-            }} />
+            <SetProgressPanel
+              state={state}
+              progress={setProgress}
+              saving={saving}
+              onClaim={openClaimConfirmation}
+            />
           </section>
         </div>
 
@@ -452,6 +508,77 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
           )}
         </section>
       </div>
+      {claimConfirmation && (
+        <div
+          className="claim-confirm-layer"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeClaimConfirmation();
+          }}
+        >
+          <section
+            className="claim-confirm-card"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="claim-confirm-title"
+            aria-describedby="claim-confirm-warning"
+            style={{
+              ['--claim-accent' as any]: rarityTheme(claimConfirmation.set.rarity).color,
+            }}
+          >
+            <button
+              type="button"
+              className="claim-confirm-close"
+              aria-label="Close reward confirmation"
+              onClick={closeClaimConfirmation}
+              disabled={saving}
+            >
+              <X size={18} />
+            </button>
+            <span className="claim-confirm-icon"><Gem size={24} /></span>
+            <div className="claim-confirm-copy">
+              <span>Set Completion</span>
+              <h2 id="claim-confirm-title">Consume {claimConfirmation.set.name}?</h2>
+              <p>Exchange the complete equipped set for its reward ticket and a Guild Gem.</p>
+            </div>
+            <div className="claim-confirm-summary">
+              <div>
+                <span>Artifacts consumed</span>
+                <strong>4 equipped pieces</strong>
+              </div>
+              <div>
+                <span>Reward ticket</span>
+                <strong>{claimConfirmation.reward?.description ?? 'Set completion reward'}</strong>
+              </div>
+              <div>
+                <span>Guild Gems</span>
+                <strong className="claim-gem-reward"><Gem size={15} /> +1</strong>
+              </div>
+            </div>
+            <p id="claim-confirm-warning" className="claim-confirm-warning">
+              This permanently removes all four equipped artifacts and cannot be undone.
+            </p>
+            <div className="claim-confirm-actions">
+              <button
+                type="button"
+                className="armory-secondary"
+                onClick={closeClaimConfirmation}
+                disabled={saving}
+              >
+                Keep Set
+              </button>
+              <button
+                ref={claimConfirmButtonRef}
+                type="button"
+                className="armory-primary"
+                onClick={confirmSetClaim}
+                disabled={saving}
+              >
+                {saving ? 'Claiming...' : 'Consume & Claim'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {(forgeCharging || revealArtifact) && (
         <ForgeReveal
           artifact={revealArtifact}
@@ -528,7 +655,7 @@ function RewardPreviewPanel({ sets }: { sets: any[] }) {
   );
 }
 
-function ArmoryHeader({ inventoryTotal }: { inventoryTotal: number }) {
+function ArmoryHeader({ inventoryTotal, guildGems }: { inventoryTotal: number; guildGems: number }) {
   return (
     <header className="armory-topbar">
       <Link href="/" className="armory-back"><ArrowLeft size={16} /> Back</Link>
@@ -536,6 +663,12 @@ function ArmoryHeader({ inventoryTotal }: { inventoryTotal: number }) {
         <a href="#artifact-vault" className="inventory-shortcut" aria-label="Go to inventory">
           <Package size={14} /> {inventoryTotal}
         </a>
+        <Link href="/armory/marketplace" className="marketplace-shortcut">
+          <Store size={14} /> Artifact Exchange
+        </Link>
+        <span className="gem-balance" aria-label={`${guildGems} Guild Gems`}>
+          <Gem size={14} aria-hidden="true" /> {guildGems}
+        </span>
       </div>
     </header>
   );
@@ -877,10 +1010,12 @@ function ArmoryStyles() {
       .armory-shell { width: min(1140px, 100%); margin: 0 auto; display: grid; gap: var(--space-md); }
       .armory-panel, .forge-panel { border: 1px solid rgba(231,206,137,0.18); border-radius: 8px; background: #0c1220; }
       .armory-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; }
-      .armory-back, .topbar-stats span, .inventory-shortcut, .filter, .mini-action, .armory-secondary, .armory-primary { min-height: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; border: 1px solid rgba(255,255,255,0.14); color: var(--color-text-primary); background: rgba(255,255,255,0.04); padding: 0 12px; font-weight: 800; letter-spacing: 0; }
+      .armory-back, .topbar-stats span, .inventory-shortcut, .marketplace-shortcut, .filter, .mini-action, .armory-secondary, .armory-primary { min-height: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; border: 1px solid rgba(255,255,255,0.14); color: var(--color-text-primary); background: rgba(255,255,255,0.04); padding: 0 12px; font-weight: 800; letter-spacing: 0; }
       .armory-back { justify-self: start; }
       .topbar-stats { display: flex; gap: 8px; overflow: hidden; }
-      .topbar-stats span, .inventory-shortcut { min-height: 38px; white-space: nowrap; font-size: 0.82rem; }
+      .topbar-stats span, .inventory-shortcut, .marketplace-shortcut { min-height: 38px; white-space: nowrap; font-size: 0.82rem; }
+      .marketplace-shortcut { color: #8ee8ff; border-color: rgba(142,232,255,0.24); }
+      .gem-balance { color: #c7b7ff; }
       .inventory-panel { scroll-margin-top: 12px; }
       .armory-primary { background: #ffd66e; color: #171008; border-color: rgba(255,214,110,0.5); }
       .armory-secondary { background: rgba(97,232,255,0.08); border-color: rgba(97,232,255,0.24); color: #dff8ff; }
@@ -916,6 +1051,23 @@ function ArmoryStyles() {
       .armory-action-orb svg { position: relative; z-index: 1; }
       .equip-action .armory-action-orb { color: #61e8ff; background: rgba(97,232,255,0.1); }
       .unequip-action .armory-action-orb { color: #ffd66e; background: rgba(255,214,110,0.1); }
+      .claim-confirm-layer { position: fixed; inset: 0; z-index: 1002; display: grid; place-items: center; padding: 16px; background: rgba(2,5,12,0.84); }
+      .claim-confirm-card { position: relative; width: min(460px, 100%); display: grid; gap: 14px; padding: 20px; border: 1px solid color-mix(in srgb, var(--claim-accent) 48%, rgba(255,255,255,0.12)); border-radius: 8px; background: #0c1220; box-shadow: 0 20px 52px rgba(0,0,0,0.46); }
+      .claim-confirm-close { position: absolute; top: 9px; right: 9px; width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: transparent; color: var(--color-text-muted); }
+      .claim-confirm-close:disabled { opacity: 0.5; }
+      .claim-confirm-icon { width: 46px; height: 46px; display: grid; place-items: center; color: var(--claim-accent); border: 1px solid color-mix(in srgb, var(--claim-accent) 45%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--claim-accent) 10%, transparent); }
+      .claim-confirm-copy { display: grid; gap: 4px; padding-right: 34px; }
+      .claim-confirm-copy > span { color: var(--claim-accent); font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+      .claim-confirm-copy h2 { margin: 0; font-family: var(--font-orbitron); font-size: 1.18rem; letter-spacing: 0; }
+      .claim-confirm-copy p, .claim-confirm-warning { margin: 0; color: var(--color-text-secondary); font-size: 0.84rem; line-height: 1.5; }
+      .claim-confirm-summary { display: grid; border-top: 1px solid rgba(255,255,255,0.1); border-bottom: 1px solid rgba(255,255,255,0.1); }
+      .claim-confirm-summary > div { min-height: 48px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+      .claim-confirm-summary > div:last-child { border-bottom: 0; }
+      .claim-confirm-summary span { color: var(--color-text-muted); font-size: 0.75rem; }
+      .claim-confirm-summary strong { min-width: 0; color: var(--color-text-primary); font-size: 0.78rem; text-align: right; }
+      .claim-gem-reward { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; color: #d8c4ff !important; }
+      .claim-confirm-warning { padding: 10px; border-left: 3px solid #ffb86c; background: rgba(255,184,108,0.07); color: #f0d4b5; }
+      .claim-confirm-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .reveal-rarity { min-height: 38px; display: none; align-items: center; border-top: 1px solid var(--reveal-color); border-bottom: 1px solid var(--reveal-color); padding: 0 18px; color: var(--reveal-color); font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.76rem; animation: revealFade 180ms ease both; }
       .reveal-ready .reveal-rarity { display: inline-flex; }
       .reveal-art-wrap { width: min(300px, 78vw); aspect-ratio: 1; display: grid; place-items: center; position: relative; animation: revealPop 280ms ease both; }
@@ -932,6 +1084,7 @@ function ArmoryStyles() {
       .reveal-copy strong { margin-top: 8px; color: #dff8ff; font-size: 0.82rem; }
       .reveal-actions { width: min(390px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; animation: revealFade 180ms ease 520ms both; }
       .armory-error { border: 1px solid rgba(255,92,92,0.32); background: rgba(255,92,92,0.1); border-radius: 8px; padding: var(--space-md); color: #ffb4b4; }
+      .armory-notice { display: flex; align-items: center; gap: 8px; border: 1px solid rgba(184,132,255,0.28); background: rgba(184,132,255,0.09); border-radius: 8px; padding: 12px var(--space-md); color: #e6d8ff; font-weight: 800; }
       .armory-main-grid { display: grid; gap: var(--space-md); }
       .armory-center { display: grid; gap: var(--space-md); }
       .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1002,7 +1155,7 @@ function ArmoryStyles() {
       @keyframes forgePulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.72; } }
       @media (max-width: 980px) { .artifact-grid, .reward-preview-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
       @media (max-width: 720px) { .armory-rpg { padding-left: 10px; padding-right: 10px; } .armory-topbar { align-items: flex-start; } .topbar-stats { flex-wrap: wrap; justify-content: flex-end; } .forge-panel { grid-template-columns: 1fr; } .forge-action { min-width: 0; } .artifact-grid, .reward-preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .reveal-actions { grid-template-columns: 1fr; } .forge-reveal-scene { min-height: calc(100vh - 36px); } }
-      @media (max-width: 380px) { .artifact-grid, .reward-preview-grid { grid-template-columns: 1fr; } .loadout-stage { grid-template-columns: 1fr; } .topbar-stats { display: grid; grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 380px) { .artifact-grid, .reward-preview-grid { grid-template-columns: 1fr; } .loadout-stage { grid-template-columns: 1fr; } .topbar-stats { display: grid; grid-template-columns: 1fr 1fr; } .marketplace-shortcut { padding: 0 8px; white-space: normal; text-align: center; line-height: 1.05; } .claim-confirm-card { padding: 16px 12px 12px; } .claim-confirm-actions { grid-template-columns: 1fr; } }
       @media (prefers-reduced-motion: reduce) { .forge-reveal-layer, .forge-charge, .reveal-rarity, .reveal-art-wrap, .reveal-copy, .reveal-actions, .forge-panel.forging .forge-ring, .armory-action-layer, .armory-action-orb::before { animation: none; } }
     `}</style>
   );
