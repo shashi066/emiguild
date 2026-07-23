@@ -2310,6 +2310,12 @@ input.form-input[type="time"]:focus {
 
 @media (max-width: 768px) {
 
+  .hero {
+    align-items: flex-start;
+    padding-block: var(--space-xl);
+  }
+  .hero > .container { min-width: 0; }
+  .hero-content { width: 100%; }
   .hero-title { font-size: 2.2rem; }
   .hero-stats { gap: var(--space-xl); flex-wrap: wrap; }
 

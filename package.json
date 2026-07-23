@@ -15,6 +15,7 @@
     "db:studio": "prisma studio",
     "test:password-reset": "tsx --test test/password-reset/password-reset.test.ts",
     "test:armory-marketplace": "tsx --test test/armory-marketplace/marketplace.test.ts",
+    "test:armory-grant": "tsx --test test/armory/admin-grant.test.ts",
     "test:admin-users": "tsx --test test/admin-users/user-details.test.ts"
   },
   "dependencies": {

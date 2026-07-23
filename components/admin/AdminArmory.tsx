@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { CheckCircle, Shield, Save, AlertCircle, RefreshCw, History, Package, Search } from 'lucide-react';
+import { CheckCircle, Shield, Save, AlertCircle, RefreshCw, History, Package, Search, Gift, X } from 'lucide-react';
 import { decryptNumber } from '@/lib/crypto';
 
 const REWARD_TYPES = ['PERCENT_DISCOUNT', 'FIXED_DISCOUNT', 'GAMING_MINUTES', 'RACING_MINUTES', 'SQUAD_NIGHT', 'BRONZE_PASS'];
@@ -429,7 +429,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
             ))}
           </div>
           {historyType === 'inventory' ? (
-            <UserInventoryHistory sets={sets} />
+            <UserInventoryHistory sets={sets} artifacts={artifacts} />
           ) : historyType === 'marketplace' ? (
             <AdminArmoryMarketplace />
           ) : (
@@ -469,7 +469,11 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                 <tbody>
                   {historyRows.map((row) => {
                     if (historyType === 'drops') {
-                      const source = row.claimDate?.includes(':checkin:') ? 'Check-in' : 'Forge';
+                      const source = row.claimDate?.includes(':admin:')
+                        ? 'Admin Grant'
+                        : row.claimDate?.includes(':checkin:')
+                          ? 'Check-in'
+                          : 'Forge';
                       return (
                         <tr key={row.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                           <td style={{ padding: 'var(--space-sm)' }}>
@@ -527,14 +531,25 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
   );
 }
 
-function UserInventoryHistory({ sets }: { sets: any[] }) {
+function UserInventoryHistory({ sets, artifacts }: { sets: any[]; artifacts: any[] }) {
   const [search, setSearch] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any>(null);
   const [searching, setSearching] = useState(false);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedSetId, setSelectedSetId] = useState('');
+  const [grantDialogOpen, setGrantDialogOpen] = useState(false);
+  const [granting, setGranting] = useState(false);
+  const [grantMessage, setGrantMessage] = useState('');
   const searchRequestRef = useRef(0);
+  const grantButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeGrantDialog = () => {
+    if (granting) return;
+    setGrantDialogOpen(false);
+    window.requestAnimationFrame(() => grantButtonRef.current?.focus());
+  };
 
   useEffect(() => {
     const query = search.trim();
@@ -563,6 +578,15 @@ function UserInventoryHistory({ sets }: { sets: any[] }) {
     return () => window.clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    if (!grantDialogOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeGrantDialog();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [grantDialogOpen, granting]);
+
   const loadInventory = async (userId: string) => {
     setInventoryLoading(true);
     setError('');
@@ -580,6 +604,36 @@ function UserInventoryHistory({ sets }: { sets: any[] }) {
     }
   };
 
+  const grantArtifact = async () => {
+    if (!inventory?.id || !selectedSetId) return;
+    setGranting(true);
+    setError('');
+    setGrantMessage('');
+    try {
+      const res = await fetch('/api/admin/armory/grant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: inventory.id, setId: selectedSetId }),
+      });
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(data.error || 'Failed to grant artifact.');
+
+      const artifact = data.grant?.artifact;
+      setGrantMessage(
+        artifact
+          ? `${artifact.name} (${slotTypeLabel(artifact.slotType)}) was added to ${inventory.name}'s inventory.`
+          : `An artifact was added to ${inventory.name}'s inventory.`,
+      );
+      setGrantDialogOpen(false);
+      await loadInventory(inventory.id);
+      window.requestAnimationFrame(() => grantButtonRef.current?.focus());
+    } catch (err: any) {
+      setError(err.message || 'Failed to grant artifact.');
+    } finally {
+      setGranting(false);
+    }
+  };
+
   const items = inventory?.armoryInventory ?? [];
   const totalItems = items.reduce((sum: number, row: any) => sum + Number(row.quantity || 0), 0);
   const quantityBySetAndSlot = new Map<string, number>(
@@ -591,6 +645,20 @@ function UserInventoryHistory({ sets }: { sets: any[] }) {
       const rarityDifference = (INVENTORY_RARITY_ORDER[a.rarity] ?? 99) - (INVENTORY_RARITY_ORDER[b.rarity] ?? 99);
       return rarityDifference || Number(a.displayOrder || 0) - Number(b.displayOrder || 0);
     });
+  const grantableSets = sets
+    .filter((set: any) => set.active && ARMORY_RARITY_COLORS[set.rarity])
+    .slice()
+    .sort((a: any, b: any) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0));
+  const hasAllActiveSlots = (setId: string) => {
+    const activeSlots = new Set(
+      artifacts
+        .filter((artifact: any) => artifact.setId === setId && artifact.active)
+        .map((artifact: any) => artifact.slotType),
+    );
+    return ['HEADGEAR', 'ARMOR', 'GLOVES', 'BOOTS'].every((slot) => activeSlots.has(slot));
+  };
+  const selectedSet = grantableSets.find((set: any) => set.id === selectedSetId) ?? null;
+  const selectedSetReady = selectedSet ? hasAllActiveSlots(selectedSet.id) : false;
 
   return (
     <div>
@@ -607,6 +675,9 @@ function UserInventoryHistory({ sets }: { sets: any[] }) {
           onChange={(event) => {
             setSearch(event.target.value);
             setInventory(null);
+            setSelectedSetId('');
+            setGrantMessage('');
+            setGrantDialogOpen(false);
             setError('');
           }}
           style={{ width: '100%' }}
@@ -622,7 +693,11 @@ function UserInventoryHistory({ sets }: { sets: any[] }) {
             <button
               key={user.id}
               type="button"
-              onClick={() => loadInventory(user.id)}
+              onClick={() => {
+                setSelectedSetId('');
+                setGrantMessage('');
+                loadInventory(user.id);
+              }}
               style={{ display: 'grid', gap: 2, padding: '8px 4px', textAlign: 'left', color: 'var(--color-text-primary)', background: 'transparent', border: 0, borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }}
             >
               <strong>{user.name}</strong>
@@ -649,6 +724,47 @@ function UserInventoryHistory({ sets }: { sets: any[] }) {
               <Package size={16} /> {totalItems} item{totalItems !== 1 ? 's' : ''}
             </span>
           </div>
+
+          <div className="armory-grant-controls">
+            <label>
+              <span className="form-label">Grant artifact rarity</span>
+              <select
+                className="form-input"
+                value={selectedSetId}
+                onChange={(event) => {
+                  setSelectedSetId(event.target.value);
+                  setGrantMessage('');
+                  setError('');
+                }}
+              >
+                <option value="">Choose rarity</option>
+                {grantableSets.map((set: any) => {
+                  const ready = hasAllActiveSlots(set.id);
+                  const label = set.rarity.charAt(0) + set.rarity.slice(1).toLowerCase();
+                  return (
+                    <option key={set.id} value={set.id} disabled={!ready}>
+                      {label}{ready ? '' : ' (all four slots required)'}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <button
+              ref={grantButtonRef}
+              className="btn btn-primary btn-sm"
+              type="button"
+              disabled={!selectedSetReady || granting}
+              onClick={() => setGrantDialogOpen(true)}
+            >
+              <Gift size={15} /> Grant Random Artifact
+            </button>
+          </div>
+
+          {grantMessage && (
+            <div className="alert alert-success armory-grant-notice">
+              <CheckCircle size={16} /> {grantMessage}
+            </div>
+          )}
 
           {items.length === 0 ? (
             <p style={{ color: 'var(--color-text-muted)', padding: 'var(--space-sm) 0' }}>This user has no artifacts.</p>
@@ -694,6 +810,156 @@ function UserInventoryHistory({ sets }: { sets: any[] }) {
       ) : search.trim().length < 2 ? (
         <p style={{ color: 'var(--color-text-muted)', padding: 'var(--space-md) 0' }}>Enter at least 2 characters to search.</p>
       ) : null}
+
+      {grantDialogOpen && inventory && selectedSet && (
+        <div
+          className="armory-grant-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeGrantDialog();
+          }}
+        >
+          <div
+            className="armory-grant-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="armory-grant-title"
+            aria-describedby="armory-grant-description"
+            style={{ borderTopColor: ARMORY_RARITY_COLORS[selectedSet.rarity] }}
+          >
+            <button
+              className="armory-grant-close"
+              type="button"
+              aria-label="Close grant confirmation"
+              disabled={granting}
+              onClick={closeGrantDialog}
+            >
+              <X size={18} />
+            </button>
+            <Gift size={22} style={{ color: ARMORY_RARITY_COLORS[selectedSet.rarity] }} />
+            <h3 id="armory-grant-title">
+              Grant a random {selectedSet.rarity.charAt(0) + selectedSet.rarity.slice(1).toLowerCase()} artifact?
+            </h3>
+            <p id="armory-grant-description">
+              One artifact will be added to <strong>{inventory.name}</strong>. This does not use their Daily Forge.
+            </p>
+            <div className="armory-grant-odds" aria-label="Random artifact slot odds">
+              <span>Boots <strong>40%</strong></span>
+              <span>Gloves <strong>30%</strong></span>
+              <span>Armor <strong>20%</strong></span>
+              <span>Headgear <strong>10%</strong></span>
+            </div>
+            <div className="armory-grant-actions">
+              <button className="btn btn-ghost btn-sm" type="button" autoFocus disabled={granting} onClick={closeGrantDialog}>
+                Cancel
+              </button>
+              <button className="btn btn-primary btn-sm" type="button" disabled={granting} onClick={grantArtifact}>
+                <Gift size={15} /> {granting ? 'Granting...' : 'Grant Artifact'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .armory-grant-controls {
+          display: grid;
+          grid-template-columns: minmax(190px, 280px) auto;
+          align-items: end;
+          gap: 10px;
+          padding: 14px 0;
+          border-bottom: 1px solid var(--color-border);
+        }
+        .armory-grant-controls label {
+          min-width: 0;
+        }
+        .armory-grant-controls .btn {
+          min-height: 40px;
+          justify-self: start;
+        }
+        .armory-grant-notice {
+          margin-top: 12px;
+        }
+        .armory-grant-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 1300;
+          display: grid;
+          place-items: center;
+          padding: 20px;
+          background: rgba(0, 0, 0, 0.74);
+        }
+        .armory-grant-dialog {
+          position: relative;
+          width: min(440px, 100%);
+          display: grid;
+          gap: 12px;
+          padding: 22px;
+          border: 1px solid var(--color-border);
+          border-top-width: 3px;
+          border-radius: 8px;
+          background: var(--color-bg-card);
+          box-shadow: var(--shadow-lg);
+        }
+        .armory-grant-dialog h3,
+        .armory-grant-dialog p {
+          margin: 0;
+        }
+        .armory-grant-dialog h3 {
+          padding-right: 32px;
+          font-size: 1.08rem;
+        }
+        .armory-grant-dialog p {
+          color: var(--color-text-secondary);
+          line-height: 1.5;
+        }
+        .armory-grant-close {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          width: 38px;
+          height: 38px;
+          display: grid;
+          place-items: center;
+          border: 0;
+          background: transparent;
+          color: var(--color-text-muted);
+          cursor: pointer;
+        }
+        .armory-grant-odds {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          border-top: 1px solid var(--color-border);
+          border-bottom: 1px solid var(--color-border);
+        }
+        .armory-grant-odds span {
+          display: grid;
+          gap: 2px;
+          padding: 9px 5px;
+          color: var(--color-text-muted);
+          font-size: 0.72rem;
+          text-align: center;
+        }
+        .armory-grant-odds strong {
+          color: var(--color-text-primary);
+          font-size: 0.82rem;
+        }
+        .armory-grant-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+        }
+        @media (max-width: 560px) {
+          .armory-grant-controls {
+            grid-template-columns: 1fr;
+          }
+          .armory-grant-controls .btn {
+            width: 100%;
+          }
+          .armory-grant-odds {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+      `}</style>
     </div>
   );
 }
