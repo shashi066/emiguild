@@ -5,6 +5,7 @@ import { bookingSchema } from '@/lib/validations';
 import { addHours } from '@/lib/utils';
 import { notifyAdminNewBooking, notifyUserNewBooking } from '@/lib/notify';
 import { encryptPhone } from '@/lib/crypto';
+import { isPassDateEligible, PASS_WEEKDAY_ONLY_ERROR } from '@/lib/pass-rules';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -202,6 +203,13 @@ export async function POST(req: NextRequest) {
     let sessionPrice = station.hourlyRate * duration;
 
     if (usePass) {
+      if (!isPassDateEligible(date)) {
+        return NextResponse.json(
+          { error: PASS_WEEKDAY_ONLY_ERROR, code: 'PASS_WEEKDAY_ONLY' },
+          { status: 400 }
+        );
+      }
+
       const now = new Date();
       const pass = passId
         ? await prisma.userPass.findFirst({

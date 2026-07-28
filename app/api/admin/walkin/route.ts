@@ -5,6 +5,7 @@ import { addHours } from '@/lib/utils';
 import { notifyAdminNewBooking } from '@/lib/notify';
 import { z } from 'zod';
 import { encryptPhone } from '@/lib/crypto';
+import { isPassDateEligible, PASS_WEEKDAY_ONLY_ERROR } from '@/lib/pass-rules';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -153,6 +154,13 @@ export async function POST(req: NextRequest) {
     let userPassId: string | null = null;
     let passHoursDeducted = 0;
     let sessionPrice = station.hourlyRate * duration;
+
+    if (usePass && !isPassDateEligible(date)) {
+      return NextResponse.json(
+        { error: PASS_WEEKDAY_ONLY_ERROR, code: 'PASS_WEEKDAY_ONLY' },
+        { status: 400 }
+      );
+    }
 
     if (usePass && linkedUserId) {
       const now = new Date();

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { formatDate, formatTime, formatCurrency, getTodayString, isSlotAvailable, getTimeSlotsForDate, getDurationOptions } from '@/lib/utils';
 import { decryptPhone } from '@/lib/crypto';
+import { isPassDateEligible } from '@/lib/pass-rules';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 type BookedSlot = { startTime: string; endTime: string; status: string };
@@ -138,16 +139,17 @@ export default function WalkinBookingPage() {
       ) ?? null
     : null;
   const stationPassAllowed = selectedStation != null;
+  const passDateAllowed = isPassDateEligible(form.date);
   const controllerCharge = form.extraControllers * controllerPrice * form.duration;
   const sessionCost = selectedStation ? selectedStation.hourlyRate * form.duration : 0;
   const priceBeforeDiscount = (usePass ? 0 : sessionCost) + controllerCharge;
   const estimatedTotal = Math.round(priceBeforeDiscount * (1 - form.discount / 100));
 
   useEffect(() => {
-    if (!activePass && usePass) {
+    if ((!activePass || !passDateAllowed) && usePass) {
       setUsePass(false);
     }
-  }, [activePass, usePass]);
+  }, [activePass, passDateAllowed, usePass]);
 
   // Filtered user list for dropdown
   const filteredUsers = userQuery.trim().length < 1 ? [] : allUsers.filter((u) => {
@@ -786,7 +788,7 @@ export default function WalkinBookingPage() {
                   padding: 'var(--space-md)',
                   transition: 'all 0.2s',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: usePass ? 10 : 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: usePass || !passDateAllowed ? 10 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Award size={15} style={{ color: PASS_COLOR[activePass.passType] }} />
                       <span style={{ fontWeight: 700, fontSize: '0.875rem', color: PASS_COLOR[activePass.passType] }}>
@@ -799,13 +801,13 @@ export default function WalkinBookingPage() {
                     {/* Toggle */}
                     <button
                       type="button"
-                      onClick={() => stationPassAllowed && setUsePass(!usePass)}
-                      disabled={!stationPassAllowed}
+                      onClick={() => stationPassAllowed && passDateAllowed && setUsePass(!usePass)}
+                      disabled={!stationPassAllowed || !passDateAllowed}
                       style={{
                         width: 44, height: 24, borderRadius: 12,
                         background: usePass ? PASS_COLOR[activePass.passType] : 'rgba(255,255,255,0.1)',
-                        border: 'none', cursor: stationPassAllowed ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background 0.2s', flexShrink: 0,
-                        opacity: stationPassAllowed ? 1 : 0.5,
+                        border: 'none', cursor: stationPassAllowed && passDateAllowed ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                        opacity: stationPassAllowed && passDateAllowed ? 1 : 0.5,
                       }}
                     >
                       <span style={{
@@ -814,6 +816,11 @@ export default function WalkinBookingPage() {
                       }} />
                     </button>
                   </div>
+                  {!passDateAllowed && (
+                    <div style={{ fontSize: '0.78rem', color: '#f59e0b' }}>
+                      Passes are available Monday through Friday only.
+                    </div>
+                  )}
                   {usePass && (
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', display: 'flex', gap: 16 }}>
                       <span>✅ Session cost: <s style={{ opacity: 0.5 }}>{selectedStation ? `₹${(selectedStation.hourlyRate * form.duration).toLocaleString('en-IN')}` : '—'}</s> <strong style={{ color: 'var(--color-accent-success)' }}>₹0</strong></span>

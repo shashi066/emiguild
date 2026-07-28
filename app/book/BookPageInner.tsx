@@ -13,6 +13,7 @@ import {
   formatCurrency, getTodayString, toLocalDateString, isSlotAvailable, addHours, getTimeSlotsForDate,
   getDurationOptions,
 } from '@/lib/utils';
+import { isPassDateEligible } from '@/lib/pass-rules';
 
 type Station = {
   id: string;
@@ -134,12 +135,13 @@ export default function BookPageInner() {
           : ['BLACK', 'APEX'].includes(pass.passType)
       ) ?? null
     : null;
+  const passDateAllowed = isPassDateEligible(selectedDate);
 
   useEffect(() => {
-    if (!compatiblePass && usePass) {
+    if ((!compatiblePass || !passDateAllowed) && usePass) {
       setUsePass(false);
     }
-  }, [compatiblePass, usePass]);
+  }, [compatiblePass, passDateAllowed, usePass]);
 
   const handleSubmit = async () => {
     if (!session) {
@@ -590,7 +592,7 @@ export default function BookPageInner() {
                 {/* Pass payment toggle */}
                 {compatiblePass && (() => {
                   const remaining = compatiblePass.totalHours - compatiblePass.usedHours;
-                  const canUse = remaining >= selectedDuration && stationPassAllowed;
+                  const canUse = remaining >= selectedDuration && stationPassAllowed && passDateAllowed;
                   const PASS_COLOR: Record<string, string> = {
                     BRONZE: '#cd7f32',
                     SILVER: '#c0c0c0',
@@ -635,7 +637,9 @@ export default function BookPageInner() {
                               Use {compatiblePass.passType.charAt(0) + compatiblePass.passType.slice(1).toLowerCase()} Pass
                             </div>
                             <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              {canUse
+                              {!passDateAllowed
+                                ? 'Passes are available Monday through Friday only.'
+                                : canUse
                                 ? `${remaining} hrs remaining → ${remaining - selectedDuration} after this session`
                                 : `Only ${remaining} hr(s) left — need ${selectedDuration} hr(s)`}
                             </div>
