@@ -20,6 +20,7 @@ const bookingPreviewSelect = {
   extraControllers: true,
   controllerCharge: true,
   passHoursDeducted: true,
+  appliedBenefitType: true,
   station: { select: { name: true } },
   userPass: { select: { passType: true } },
 } as const;

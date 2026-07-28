@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { isGuildMembershipType } from '@/lib/guild-membership';
 
 // GET /api/user/pass — get current user's active pass
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ pass: null, passes: [] });
@@ -11,6 +12,7 @@ export async function GET() {
 
   try {
     const now = new Date();
+    const includeHistory = req.nextUrl.searchParams.get('history') === '1';
 
     // Auto-expire any passes that have passed their expiresAt date
     await prisma.userPass.updateMany({
@@ -23,11 +25,13 @@ export async function GET() {
     });
 
     const activePasses = await prisma.userPass.findMany({
-      where: {
-        userId: session.user.id,
-        status: 'ACTIVE',
-        expiresAt: { gte: now },
-      },
+      where: includeHistory
+        ? { userId: session.user.id }
+        : {
+            userId: session.user.id,
+            status: 'ACTIVE',
+            expiresAt: { gte: now },
+          },
       include: {
         bookings: {
           where: { passHoursDeducted: { gt: 0 } },
@@ -42,7 +46,10 @@ export async function GET() {
       orderBy: { purchasedAt: 'desc' },
     });
 
-    const firstPass = activePasses[0];
+    const firstPass = activePasses.find((pass) =>
+      pass.status === 'ACTIVE' && pass.expiresAt >= now
+      && !isGuildMembershipType(pass.passType)
+    );
     const pass = firstPass ?? null;
 
     return NextResponse.json({ pass, passes: activePasses });

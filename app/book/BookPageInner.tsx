@@ -14,6 +14,12 @@ import {
   getDurationOptions,
 } from '@/lib/utils';
 import { isPassDateEligible } from '@/lib/pass-rules';
+import {
+  getGuildMembershipEligibility,
+  guildMembershipName,
+  isGuildMembershipType,
+  selectPreferredGuildMembership,
+} from '@/lib/guild-membership';
 
 type Station = {
   id: string;
@@ -61,7 +67,8 @@ export default function BookPageInner() {
   const [notes, setNotes]                       = useState('');
   const [usePass, setUsePass]                   = useState(false);
   const [activePasses, setActivePasses]         = useState<Array<{
-    id: string; passType: string; totalHours: number; usedHours: number; expiresAt: string;
+    id: string; passType: string; totalHours: number; usedHours: number;
+    status: string; purchasedAt: string; expiresAt: string;
   }>>([]);
 
   const controllerSectionRef = useRef<HTMLDivElement>(null);
@@ -128,14 +135,22 @@ export default function BookPageInner() {
   const sessionCost = selectedStation ? selectedStation.hourlyRate * selectedDuration : 0;
   const totalPrice = (usePass ? 0 : sessionCost) + controllerCharge;
   const stationPassAllowed = selectedStation != null;
+  const hourPasses = activePasses.filter((pass) => !isGuildMembershipType(pass.passType));
   const compatiblePass = selectedStation
-    ? activePasses.find((pass) =>
+    ? hourPasses.find((pass) =>
         selectedStation.hasControllers
           ? ['BRONZE', 'SILVER', 'GOLD'].includes(pass.passType)
           : ['BLACK', 'APEX'].includes(pass.passType)
       ) ?? null
     : null;
   const passDateAllowed = isPassDateEligible(selectedDate);
+  const activeMembership = selectPreferredGuildMembership(activePasses);
+  const membershipEligibility = getGuildMembershipEligibility({
+    membership: activeMembership,
+    bookingDate: selectedDate,
+    hasControllers: selectedStation?.hasControllers ?? false,
+    extraControllers,
+  });
 
   useEffect(() => {
     if ((!compatiblePass || !passDateAllowed) && usePass) {
@@ -580,13 +595,44 @@ export default function BookPageInner() {
 
             {selectedTime && (
               <>
-                {activePasses.length > 0 && !compatiblePass && (
+                {hourPasses.length > 0 && !compatiblePass && (
                   <div className="alert alert-info" style={{ marginTop: 'var(--space-lg)' }}>
                     <Award size={16} />
                     {selectedStation?.hasControllers
                       ? 'This station uses Bronze, Silver, or Gold passes.'
                       : 'This station uses Black or Apex simulator passes.'}
                   </div>
+                )}
+
+                {activeMembership && (
+                  <section
+                    aria-label="Active Guild Membership"
+                    style={{
+                      marginTop: 'var(--space-lg)',
+                      padding: '14px 16px',
+                      borderLeft: `3px solid ${activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#60a5fa'}`,
+                      background: membershipEligibility.eligible
+                        ? 'rgba(74,222,128,0.055)'
+                        : 'rgba(245,158,11,0.055)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <strong style={{ color: activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#93c5fd' }}>
+                        {activeMembership.passType === 'GUILD_MASTER' ? '👑' : '⚔️'} {guildMembershipName(activeMembership.passType)} Active
+                      </strong>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                        Expires {new Date(activeMembership.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                      </span>
+                    </div>
+                    <p style={{ margin: '7px 0 3px', fontSize: '0.82rem', color: membershipEligibility.eligible ? '#4ade80' : '#f59e0b', fontWeight: 700 }}>
+                      {membershipEligibility.eligible
+                        ? 'You may be eligible for 50% OFF this booking.'
+                        : membershipEligibility.reason}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                      Active Guild Membership found. GameZone will verify and apply the eligible discount. Only one offer can be used.
+                    </p>
+                  </section>
                 )}
 
                 {/* Pass payment toggle */}

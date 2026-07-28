@@ -1,4 +1,5 @@
 import { after, NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { updateBookingSchema } from '@/lib/validations';
@@ -6,6 +7,50 @@ import { addHours } from '@/lib/utils';
 import { encryptPhone } from '@/lib/crypto';
 import { checkInBookingWithArtifact, friendlyArmoryError } from '@/lib/armory';
 import { notifyUserArtifactAward } from '@/lib/notify';
+import {
+  isGuildMembershipType,
+  validateGuildBenefitApplication,
+} from '@/lib/guild-membership';
+import { findActiveGuildMembership } from '@/lib/guild-membership-server';
+import {
+  calculateHourPassUsageUpdates,
+  getHourPassStatusAfterUsage,
+  validateHourPassApplication,
+} from '@/lib/hour-pass';
+
+type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
+
+class BookingUpdateError extends Error {
+  constructor(
+    message: string,
+    readonly status = 400,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
+async function runSerializable<T>(
+  work: (tx: Prisma.TransactionClient) => Promise<T>,
+) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(work, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      const retryable = (
+        typeof error === 'object'
+        && error !== null
+        && 'code' in error
+        && error.code === 'P2034'
+      );
+      if (!retryable || attempt === 2) throw error;
+    }
+  }
+
+  throw new Error('Serializable transaction retry limit reached.');
+}
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -90,32 +135,65 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  // ── Restore pass hours if cancelling a pass-backed booking ───────────
-  if (result.data.status === 'CANCELLED' && booking.userPassId && booking.passHoursDeducted > 0) {
-    const pass = await prisma.userPass.findUnique({ where: { id: booking.userPassId } });
-    if (pass) {
-      const restoredUsedHours = Math.max(0, pass.usedHours - booking.passHoursDeducted);
-      const restoredStatus = pass.status === 'EXPIRED' ? 'EXPIRED' : 'ACTIVE';
-      await prisma.userPass.update({
-        where: { id: pass.id },
-        data: { usedHours: restoredUsedHours, status: restoredStatus },
-      });
-    }
-  }
+  const updateData = {
+    status: result.data.status,
+    ...(result.data.status === 'CANCELLED'
+      ? { adminComment: result.data.adminComment ?? null }
+      : {}),
+  };
+  const include = {
+    user: { select: { name: true, email: true } },
+    station: { select: { name: true } },
+  } satisfies Prisma.BookingInclude;
 
-  const updated = await prisma.booking.update({
-    where: { id },
-    data: {
-      status: result.data.status,
-      ...(result.data.status === 'CANCELLED'
-        ? { adminComment: result.data.adminComment ?? null }
-        : {}),
-    },
-    include: {
-      user: { select: { name: true, email: true } },
-      station: { select: { name: true } },
-    },
-  });
+  // Restore a pass reservation once, in the same transaction that cancels the booking.
+  const updated = result.data.status === 'CANCELLED'
+    ? await runSerializable(async (tx) => {
+        const currentBooking = await tx.booking.findUnique({ where: { id } });
+        if (!currentBooking) {
+          throw new BookingUpdateError('Booking not found', 404);
+        }
+
+        if (
+          currentBooking.status !== 'CANCELLED'
+          && currentBooking.userPassId
+          && currentBooking.passHoursDeducted > 0
+        ) {
+          const pass = await tx.userPass.findUnique({
+            where: { id: currentBooking.userPassId },
+          });
+          if (pass) {
+            const restoredUsedHours = Math.max(
+              0,
+              pass.usedHours - currentBooking.passHoursDeducted,
+            );
+            await tx.userPass.update({
+              where: { id: pass.id },
+              data: {
+                usedHours: restoredUsedHours,
+                status: getHourPassStatusAfterUsage({
+                  currentStatus: pass.status,
+                  expiresAt: pass.expiresAt,
+                  totalHours: pass.totalHours,
+                  usedHours: restoredUsedHours,
+                  selected: false,
+                }),
+              },
+            });
+          }
+        }
+
+        return tx.booking.update({
+          where: { id },
+          data: updateData,
+          include,
+        });
+      })
+    : await prisma.booking.update({
+        where: { id },
+        data: updateData,
+        include,
+      });
 
   return NextResponse.json({
     booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
@@ -131,20 +209,95 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const { id } = await params;
 
-  const booking = await prisma.booking.findUnique({ where: { id }, include: { station: true } });
+  const booking = await prisma.booking.findUnique({
+    where: { id },
+    include: { station: true },
+  });
   if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
   const body = await req.json();
-  const { date, stationId, startTime, duration, notes, customerName, customerPhone, extraControllers, discount: rawDiscount } = body;
-  // discount is admin-only; this route is already admin-guarded above
-  const discount: number = Math.min(100, Math.max(0, parseInt(String(rawDiscount ?? 0)) || 0));
+  const {
+    date,
+    stationId,
+    startTime,
+    notes,
+    customerName,
+    customerPhone,
+    discount: rawDiscount,
+  } = body;
+  const duration = Number(body.duration);
+  const requestedControllers = Number(body.extraControllers ?? booking.extraControllers);
+  const discount = Math.min(
+    100,
+    Math.max(0, parseInt(String(rawDiscount ?? 0), 10) || 0),
+  );
+  const requestedBenefit = body.appliedBenefitType;
+  const rawBenefitMode = body.benefitMode;
+  const legacyRequest = rawBenefitMode == null;
 
-  if (!date || !stationId || !startTime || !duration) {
+  if (
+    typeof date !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    || typeof stationId !== 'string'
+    || !stationId
+    || typeof startTime !== 'string'
+    || !/^\d{2}:\d{2}$/.test(startTime)
+    || !Number.isFinite(duration)
+    || duration < 0.5
+    || duration > 12
+    || !Number.isInteger(duration * 2)
+    || !Number.isFinite(requestedControllers)
+  ) {
     return NextResponse.json({ error: 'date, stationId, startTime and duration are required' }, { status: 400 });
   }
 
-  // Recalculate endTime using addHours to correctly handle 30-min durations
-  const endTime = addHours(startTime, Number(duration));
+  let benefitMode: BookingBenefitMode;
+  if (legacyRequest) {
+    benefitMode = booking.userPassId && booking.passHoursDeducted > 0
+      ? 'HOUR_PASS'
+      : requestedBenefit != null
+        ? 'GUILD'
+        : 'STANDARD';
+  } else if (
+    rawBenefitMode === 'STANDARD'
+    || rawBenefitMode === 'HOUR_PASS'
+    || rawBenefitMode === 'GUILD'
+  ) {
+    benefitMode = rawBenefitMode;
+  } else {
+    return NextResponse.json(
+      { error: 'Invalid booking benefit selection.', code: 'INVALID_BENEFIT' },
+      { status: 400 },
+    );
+  }
+
+  const requestedHourPassId = typeof body.hourPassId === 'string' && body.hourPassId.trim()
+    ? body.hourPassId.trim()
+    : legacyRequest
+      ? booking.userPassId
+      : null;
+
+  if (benefitMode === 'HOUR_PASS') {
+    if (!requestedHourPassId || !booking.userId) {
+      return NextResponse.json(
+        { error: 'Select a customer pass for this linked booking.', code: 'PASS_NOT_FOUND' },
+        { status: 400 },
+      );
+    }
+    if (discount > 0 || requestedBenefit != null) {
+      return NextResponse.json(
+        { error: 'A pass cannot be combined with another discount.', code: 'BENEFIT_STACKING' },
+        { status: 400 },
+      );
+    }
+  } else if (benefitMode === 'STANDARD' && requestedBenefit != null) {
+    return NextResponse.json(
+      { error: 'Invalid booking benefit selection.', code: 'INVALID_BENEFIT' },
+      { status: 400 },
+    );
+  }
+
+  const endTime = addHours(startTime, duration);
 
   const station = await prisma.station.findUnique({ 
     where: { id: stationId },
@@ -152,19 +305,50 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       id: true, name: true, hourlyRate: true, isActive: true, hasControllers: true,
     }
   });
-  if (!station) return NextResponse.json({ error: 'Station not found' }, { status: 404 });
+  if (!station || !station.isActive) {
+    return NextResponse.json({ error: 'Station not found or inactive' }, { status: 404 });
+  }
 
   // Recalculate controller charge with current setting price
-  const numControllers = Math.min(3, Math.max(0, Number(extraControllers ?? booking.extraControllers)));
+  const numControllers = station.hasControllers
+    ? Math.min(3, Math.max(0, Math.trunc(requestedControllers)))
+    : 0;
   let controllerUnitPrice = 0;
   try {
     const setting = await prisma.setting.findUnique({ where: { key: 'controller_price' } });
     controllerUnitPrice = parseFloat(setting?.value ?? '0');
   } catch { /* use 0 */ }
 
-  const sessionCost      = station.hourlyRate * Number(duration);
-  const controllerCharge = numControllers * controllerUnitPrice * Number(duration);
-  const totalPrice       = Math.round((sessionCost + controllerCharge) * (1 - discount / 100));
+  const sessionCost = station.hourlyRate * duration;
+  const controllerCharge = numControllers * controllerUnitPrice * duration;
+  const storedDiscount = benefitMode === 'HOUR_PASS' ? 0 : discount;
+  const totalPrice = benefitMode === 'HOUR_PASS'
+    ? Math.round(controllerCharge)
+    : Math.round((sessionCost + controllerCharge) * (1 - storedDiscount / 100));
+  let appliedBenefitType: string | null = null;
+
+  if (benefitMode === 'GUILD') {
+    const membership = booking.userId && isGuildMembershipType(requestedBenefit)
+      ? await findActiveGuildMembership(booking.userId, requestedBenefit)
+      : null;
+    const validation = validateGuildBenefitApplication({
+      requestedBenefit,
+      membership,
+      bookingDate: date,
+      hasControllers: station.hasControllers,
+      extraControllers: numControllers,
+      discount: storedDiscount,
+      hasLinkedUser: Boolean(booking.userId),
+      hasHourPass: false,
+    });
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.reason, code: validation.code },
+        { status: 400 }
+      );
+    }
+    appliedBenefitType = validation.benefitType;
+  }
 
   // ── Conflict Checks ───────────────────────────────────────────
   const toMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -215,31 +399,122 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     );
   }
 
-  const updated = await prisma.booking.update({
-    where: { id },
-    data: {
-      date,
-      stationId,
-      startTime,
-      endTime,
-      duration:         Number(duration),
-      extraControllers: numControllers,
-      controllerCharge,
-      discount,
-      totalPrice,
-      notes:         notes         ?? booking.notes,
-      customerName:  customerName  ?? booking.customerName,
-      customerPhone: customerPhone ?? booking.customerPhone,
-    },
-    include: {
-      user:    { select: { id: true, name: true, email: true } },
-      station: { select: { id: true, name: true } },
-    },
-  });
+  try {
+    const updated = await runSerializable(async (tx) => {
+      const currentBooking = await tx.booking.findUnique({
+        where: { id },
+        include: { userPass: true },
+      });
+      if (!currentBooking) {
+        throw new BookingUpdateError('Booking not found', 404);
+      }
+      if (!['PENDING', 'CONFIRMED'].includes(currentBooking.status)) {
+        throw new BookingUpdateError(
+          'Only pending or confirmed bookings can be edited.',
+          409,
+          'BOOKING_NOT_EDITABLE',
+        );
+      }
 
-  return NextResponse.json({
-    booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
-  });
+      const currentPass = (
+        currentBooking.userPassId
+        && currentBooking.passHoursDeducted > 0
+      )
+        ? currentBooking.userPass
+        : null;
+      const selectedPass = benefitMode === 'HOUR_PASS' && requestedHourPassId
+        ? await tx.userPass.findFirst({
+            where: {
+              id: requestedHourPassId,
+              userId: currentBooking.userId!,
+            },
+          })
+        : null;
+
+      if (benefitMode === 'HOUR_PASS') {
+        const validation = validateHourPassApplication({
+          pass: selectedPass,
+          userId: currentBooking.userId,
+          bookingDate: date,
+          duration,
+          hasControllers: station.hasControllers,
+          currentPassId: currentPass?.id ?? null,
+          currentPassHours: currentBooking.passHoursDeducted,
+        });
+        if (!validation.valid) {
+          throw new BookingUpdateError(validation.reason, 400, validation.code);
+        }
+      }
+
+      const passUpdates = calculateHourPassUsageUpdates({
+        currentPass,
+        currentPassHours: currentBooking.passHoursDeducted,
+        selectedPass,
+        selectedHours: selectedPass ? duration : 0,
+      });
+      for (const update of passUpdates) {
+        await tx.userPass.update({
+          where: { id: update.id },
+          data: {
+            usedHours: update.usedHours,
+            status: update.status,
+          },
+        });
+      }
+
+      return tx.booking.update({
+        where: { id },
+        data: {
+          date,
+          stationId,
+          startTime,
+          endTime,
+          duration,
+          extraControllers: numControllers,
+          controllerCharge,
+          discount: storedDiscount,
+          appliedBenefitType,
+          totalPrice,
+          notes: notes ?? currentBooking.notes,
+          customerName: customerName ?? currentBooking.customerName,
+          customerPhone: customerPhone ?? currentBooking.customerPhone,
+          userPassId: selectedPass?.id ?? null,
+          passHoursDeducted: selectedPass ? duration : 0,
+        },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          station: { select: { id: true, name: true } },
+          userPass: {
+            select: {
+              id: true,
+              userId: true,
+              passType: true,
+              totalHours: true,
+              usedHours: true,
+              status: true,
+              expiresAt: true,
+            },
+          },
+        },
+      });
+    });
+
+    return NextResponse.json({
+      booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
+    });
+  } catch (error) {
+    if (error instanceof BookingUpdateError) {
+      return NextResponse.json(
+        { error: error.message, ...(error.code ? { code: error.code } : {}) },
+        { status: error.status },
+      );
+    }
+    console.error('Booking edit failed:', error);
+    return NextResponse.json(
+      { error: 'Failed to update booking.' },
+      { status: 500 },
+    );
+  }
 }
 
 

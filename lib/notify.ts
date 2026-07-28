@@ -27,6 +27,10 @@ export interface BookingNotifyPayload {
   extraControllers: number;
   passType?:        string | null;
   passHoursDeducted?: number;
+  membershipType?: string | null;
+  membershipExpiresAt?: Date | string | null;
+  appliedBenefitType?: string | null;
+  normalPrice?: number;
   notes?:           string | null;
 }
 
@@ -67,6 +71,12 @@ function escapeHtml(value: string) {
 
 function artifactSlotLabel(slotType: string) {
   return slotType.charAt(0) + slotType.slice(1).toLowerCase();
+}
+
+function membershipLabel(type: string) {
+  if (type === 'GUILD_HERO') return 'Guild Hero';
+  if (type === 'GUILD_MASTER') return 'Guild Master';
+  return type;
 }
 
 function fmt(time: string) {
@@ -133,11 +143,14 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
     bookingId, customerName, customerEmail, customerPhone,
     stationName, date, startTime, endTime, duration,
     totalPrice, discount, bookingType, extraControllers,
-    passType, passHoursDeducted, notes,
+    passType, passHoursDeducted, membershipType, membershipExpiresAt,
+    appliedBenefitType, normalPrice, notes,
   } = payload;
 
-  const priceDisplay = discount > 0
-    ? `₹${totalPrice} (${discount}% discount applied)`
+  const priceDisplay = appliedBenefitType && normalPrice != null
+    ? `₹${totalPrice} (${membershipLabel(appliedBenefitType)}: ${discount}% off ₹${normalPrice})`
+    : discount > 0
+      ? `₹${totalPrice} (${discount}% discount applied)`
     : `₹${totalPrice}`;
 
   const html = `
@@ -158,6 +171,8 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
           <tr><td style="padding:8px 0;color:#9ca3af;">Time</td><td style="padding:8px 0;">${fmt(startTime)} → ${fmt(endTime)} (${duration}h)</td></tr>
           ${extraControllers > 0 ? `<tr><td style="padding:8px 0;color:#9ca3af;">Controllers</td><td style="padding:8px 0;">+${extraControllers}</td></tr>` : ''}
           ${passType && passHoursDeducted ? `<tr><td style="padding:8px 0;color:#9ca3af;">Payment</td><td style="padding:8px 0;font-weight:700;color:#00e676;">${passType} Pass · ${passHoursDeducted}h used</td></tr>` : ''}
+          ${membershipType ? `<tr><td style="padding:8px 0;color:#9ca3af;">Guild Membership</td><td style="padding:8px 0;font-weight:700;color:#f4cf58;">${membershipLabel(membershipType)}${membershipExpiresAt ? ` · expires ${new Date(membershipExpiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}` : ''}</td></tr>` : ''}
+          ${appliedBenefitType ? `<tr><td style="padding:8px 0;color:#9ca3af;">Applied Benefit</td><td style="padding:8px 0;font-weight:700;color:#4ade80;">${membershipLabel(appliedBenefitType)} · 50% OFF</td></tr>` : ''}
           <tr><td style="padding:8px 0;color:#9ca3af;">Total</td><td style="padding:8px 0;font-weight:700;font-size:1rem;color:#00e676;">${priceDisplay}</td></tr>
           ${notes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">Notes</td><td style="padding:8px 0;font-style:italic;color:#d1d5db;">${notes}</td></tr>` : ''}
         </table>
@@ -192,6 +207,8 @@ export async function notifyUserNewBooking(payload: UserBookingEmailPayload) {
   const calendarInvite = bookingCalendarInvite(payload, bookingsUrl);
   const paymentLabel = payload.passType && payload.passHoursDeducted
     ? `${escapeHtml(payload.passType)} Pass · ${payload.passHoursDeducted}h used`
+    : payload.appliedBenefitType
+      ? `${escapeHtml(membershipLabel(payload.appliedBenefitType))} · 50% discount applied`
     : payload.paymentStatus === 'PAID' ? 'Paid' : 'Pay at counter';
 
   const html = `
@@ -209,10 +226,12 @@ export async function notifyUserNewBooking(payload: UserBookingEmailPayload) {
           <tr><td style="padding:8px 0;color:#9ca3af;">Date</td><td style="padding:8px 0;">${fmtDate(payload.date)}</td></tr>
           <tr><td style="padding:8px 0;color:#9ca3af;">Time</td><td style="padding:8px 0;">${fmt(payload.startTime)} → ${fmt(payload.endTime)} (${payload.duration}h)</td></tr>
           ${payload.extraControllers > 0 ? `<tr><td style="padding:8px 0;color:#9ca3af;">Extra Controllers</td><td style="padding:8px 0;">${payload.extraControllers}</td></tr>` : ''}
+          ${payload.membershipType ? `<tr><td style="padding:8px 0;color:#9ca3af;">Guild Membership</td><td style="padding:8px 0;font-weight:700;color:#f4cf58;">${escapeHtml(membershipLabel(payload.membershipType))}${payload.membershipExpiresAt ? ` · expires ${new Date(payload.membershipExpiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}` : ''}</td></tr>` : ''}
           <tr><td style="padding:8px 0;color:#9ca3af;">Payment</td><td style="padding:8px 0;">${paymentLabel}</td></tr>
           <tr><td style="padding:8px 0;color:#9ca3af;">Total</td><td style="padding:8px 0;font-weight:700;font-size:1rem;color:#00e676;">₹${payload.totalPrice}</td></tr>
           ${notes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">Notes</td><td style="padding:8px 0;font-style:italic;color:#d1d5db;">${notes}</td></tr>` : ''}
         </table>
+        ${payload.membershipType && !payload.appliedBenefitType ? '<p style="margin:16px 0 0;padding:12px 14px;border-left:3px solid #f4cf58;background:rgba(244,207,88,0.07);color:#d1d5db;line-height:1.55;">Active Guild Membership found. GameZone will verify and apply the eligible discount. This confirmation keeps the normal booking price until verification.</p>' : ''}
         <p style="margin:20px 0;text-align:center;color:#d1d5db;line-height:1.55;">Arrive a few minutes early and step straight into the game.</p>
         <div style="text-align:center;">
           <a href="${bookingsUrl}" style="display:inline-block;margin:4px;padding:12px 20px;background:#00e676;color:#0b0b12;text-decoration:none;border-radius:6px;font-weight:800;">VIEW MY BOOKINGS</a>

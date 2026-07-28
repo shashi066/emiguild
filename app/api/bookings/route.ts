@@ -6,6 +6,10 @@ import { addHours } from '@/lib/utils';
 import { notifyAdminNewBooking, notifyUserNewBooking } from '@/lib/notify';
 import { encryptPhone } from '@/lib/crypto';
 import { isPassDateEligible, PASS_WEEKDAY_ONLY_ERROR } from '@/lib/pass-rules';
+import {
+  GUILD_MEMBERSHIP_TYPES,
+  selectPreferredGuildMembership,
+} from '@/lib/guild-membership';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -56,7 +60,17 @@ export async function GET(req: NextRequest) {
       include: {
         user: { select: { id: true, name: true, email: true } },
         station: { select: { id: true, name: true } },
-        userPass: { select: { passType: true } },
+        userPass: {
+          select: {
+            id: true,
+            userId: true,
+            passType: true,
+            totalHours: true,
+            usedHours: true,
+            status: true,
+            expiresAt: true,
+          },
+        },
       },
       orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
       skip: (page - 1) * limit,
@@ -111,6 +125,7 @@ export async function POST(req: NextRequest) {
     const passId: string | null = typeof body.passId === 'string' ? body.passId : null;
 
     // Check station exists and fetch the booking user's profile in parallel
+    const requestTime = new Date();
     const [station, bookingUser] = await Promise.all([
       prisma.station.findUnique({ 
         where: { id: stationId },
@@ -118,11 +133,36 @@ export async function POST(req: NextRequest) {
           id: true, name: true, hourlyRate: true, isActive: true, hasControllers: true,
         }
       }),
-      prisma.user.findUnique({ where: { id: session.user.id! }, select: { name: true, phone: true } }),
+      prisma.user.findUnique({
+        where: { id: session.user.id! },
+        select: {
+          name: true,
+          phone: true,
+          passes: {
+            where: {
+              passType: { in: [...GUILD_MEMBERSHIP_TYPES] },
+              status: 'ACTIVE',
+              expiresAt: { gte: requestTime },
+            },
+            select: {
+              id: true,
+              passType: true,
+              status: true,
+              purchasedAt: true,
+              expiresAt: true,
+            },
+            orderBy: { expiresAt: 'desc' },
+          },
+        },
+      }),
     ]);
     if (!station || !station.isActive) {
       return NextResponse.json({ error: 'Station not found or inactive' }, { status: 404 });
     }
+    const activeMembership = selectPreferredGuildMembership(
+      bookingUser?.passes ?? [],
+      requestTime,
+    );
 
     // Server-side guard: ignore controller add-ons for stations that don't support them
     const safeExtraControllers = station.hasControllers ? extraControllers : 0;
@@ -304,6 +344,10 @@ export async function POST(req: NextRequest) {
       extraControllers: booking.extraControllers,
       passType:         usedPassType,
       passHoursDeducted,
+      membershipType: usePass ? null : activeMembership?.passType ?? null,
+      membershipExpiresAt: usePass ? null : activeMembership?.expiresAt ?? null,
+      appliedBenefitType: null,
+      normalPrice: station.hourlyRate * duration + controllerCharge,
       notes:            booking.notes,
     };
 
