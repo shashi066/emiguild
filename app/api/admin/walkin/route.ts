@@ -12,6 +12,7 @@ import {
 } from '@/lib/guild-membership';
 import { findActiveGuildMembership } from '@/lib/guild-membership-server';
 import { validateAdminWalkinTime } from '@/lib/admin-walkin-time';
+import { adminGameRequestSchema } from '@/lib/game-request';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -30,7 +31,7 @@ const walkinSchema = z.object({
   startTime:        z.string().regex(/^\d{2}:\d{2}$/),
   duration:         z.number().min(0.5).max(12).refine((v) => v % 0.5 === 0, 'Duration must be in 30-min increments'),
   extraControllers: z.number().int().min(0).max(3).optional(),
-  notes:            z.string().optional(),
+  notes:            adminGameRequestSchema,
   status:           z.enum(['PENDING', 'CONFIRMED']).optional(),
   usePass:          z.boolean().optional(),
   linkedUserId:     z.string().nullable().optional(), // registered user linked to this walk-in
@@ -281,7 +282,7 @@ export async function POST(req: NextRequest) {
         extraControllers: safeExtraControllers,
         controllerCharge,
         discount,
-        notes:            notes ?? null,
+        notes:            notes || null,
         userPassId,
         passHoursDeducted,
         appliedBenefitType,

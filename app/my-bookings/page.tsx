@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   BookOpen, Calendar, Clock, Monitor, IndianRupee,
-  XCircle, AlertCircle, CheckCircle, Plus, Award, Crown, Sword,
+  XCircle, AlertCircle, CheckCircle, Plus, Award, Crown, Sword, Gamepad2,
 } from 'lucide-react';
 import { formatTime, formatDate, formatCurrency, getTodayString } from '@/lib/utils';
 import {
@@ -220,7 +220,12 @@ export default function MyBookingsPage() {
                             <Monitor size={14} style={{ color: 'var(--color-accent-primary)' }} />{booking.duration} hr{booking.duration > 1 ? 's' : ''}
                           </span>
                         </div>
-                        {booking.notes && <p style={{ marginTop: 'var(--space-sm)', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Note: {booking.notes}</p>}
+                        {booking.notes && (
+                          <div className="game-request-note">
+                            <Gamepad2 size={13} aria-hidden="true" />
+                            <span><strong>Game requested:</strong> {booking.notes}</span>
+                          </div>
+                        )}
                         {booking.status === 'CANCELLED' && booking.adminComment && (
                           <div style={{ marginTop: 'var(--space-sm)', padding: '8px 12px', background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', color: 'var(--color-accent-error)' }}>
                             <strong>Admin note:</strong> {booking.adminComment}

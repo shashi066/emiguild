@@ -17,6 +17,7 @@ import {
   getHourPassStatusAfterUsage,
   validateHourPassApplication,
 } from '@/lib/hour-pass';
+import { adminGameRequestSchema } from '@/lib/game-request';
 
 type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
 
@@ -225,6 +226,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     customerPhone,
     discount: rawDiscount,
   } = body;
+  const notesProvided = Object.prototype.hasOwnProperty.call(body, 'notes');
+  const parsedNotes = adminGameRequestSchema.safeParse(notes);
+  if (!parsedNotes.success) {
+    return NextResponse.json(
+      { error: parsedNotes.error.issues[0]?.message ?? 'Invalid game request.' },
+      { status: 400 },
+    );
+  }
+  const normalizedNotes = parsedNotes.data ?? null;
   const duration = Number(body.duration);
   const requestedControllers = Number(body.extraControllers ?? booking.extraControllers);
   const discount = Math.min(
@@ -475,7 +485,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           discount: storedDiscount,
           appliedBenefitType,
           totalPrice,
-          notes: notes ?? currentBooking.notes,
+          notes: notesProvided ? normalizedNotes : currentBooking.notes,
           customerName: customerName ?? currentBooking.customerName,
           customerPhone: customerPhone ?? currentBooking.customerPhone,
           userPassId: selectedPass?.id ?? null,

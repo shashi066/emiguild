@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   BookOpen, Search, CheckCircle, XCircle,
   AlertCircle, RefreshCw, Trash2, Globe, UserPlus, Phone, LogIn,
-  Pencil, X, MessageSquare, Gamepad2, Plus, Minus, Award,
+  Pencil, X, Gamepad2, Plus, Minus, Award,
   IndianRupee,
 } from 'lucide-react';
 import {
@@ -29,6 +29,7 @@ import {
   ADMIN_WALKIN_TIME_SLOTS,
   validateAdminWalkinTime,
 } from '@/lib/admin-walkin-time';
+import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 
@@ -618,15 +619,16 @@ function EditModal({
             </div>
           )}
 
-          {/* Notes */}
+          {/* Game request / notes */}
           <div className="form-group">
-            <label className="form-label">Customer Notes</label>
+            <label className="form-label">Game Request / Notes</label>
             <textarea
               className="form-input"
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special requests or notes..."
+              maxLength={ADMIN_GAME_REQUEST_MAX_LENGTH}
+              placeholder="Game to prepare or an operational note..."
               style={{ resize: 'vertical' }}
             />
           </div>
@@ -925,9 +927,9 @@ export default function AdminBookingsPage() {
                         {new Date(b.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
                       </div>
                       {b.notes && (
-                        <div style={{ marginTop: 5, display: 'flex', alignItems: 'flex-start', gap: 4, fontSize: '0.72rem', color: '#00d4ff', fontStyle: 'italic', maxWidth: 180 }}>
-                          <MessageSquare size={11} style={{ flexShrink: 0, marginTop: 1 }} />
-                          <span>{b.notes}</span>
+                        <div className="game-request-note compact">
+                          <Gamepad2 size={12} aria-hidden="true" />
+                          <span><strong>Game:</strong> {b.notes}</span>
                         </div>
                       )}
                       {b.adminComment && (

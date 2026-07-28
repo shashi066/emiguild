@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   UserPlus, Plus, Trash2, AlertCircle, RefreshCw,
   Calendar, Clock, Monitor, X, CheckCircle, Phone, User, Search, Award, ChevronDown,
+  Gamepad2,
 } from 'lucide-react';
 import { formatDate, formatTime, formatCurrency, getTodayString, isSlotAvailable, getDurationOptions } from '@/lib/utils';
 import { decryptPhone } from '@/lib/crypto';
@@ -17,6 +18,7 @@ import {
   guildMembershipName,
   selectPreferredGuildMembership,
 } from '@/lib/guild-membership';
+import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 type BookedSlot = { startTime: string; endTime: string; status: string };
@@ -488,9 +490,10 @@ export default function WalkinBookingPage() {
                           </div>
 
                           {booking.notes && (
-                            <p style={{ marginTop: 6, fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                              {booking.notes}
-                            </p>
+                            <div className="game-request-note compact">
+                              <Gamepad2 size={12} aria-hidden="true" />
+                              <span><strong>Game:</strong> {booking.notes}</span>
+                            </div>
                           )}
 
                           {/* Booking ID */}
@@ -801,15 +804,16 @@ export default function WalkinBookingPage() {
 
                   <div className="form-group">
                     <label className="form-label" htmlFor="walkin-notes">
-                      Notes <span style={{ color: 'var(--color-text-muted)', textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+                      Game Request / Notes <span className="form-optional">(optional)</span>
                     </label>
                     <input
                       id="walkin-notes"
                       type="text"
                       className="form-input"
-                      placeholder="e.g. Tournament, VIP, special setup..."
+                      placeholder="Game to prepare or an operational note..."
                       value={form.notes}
                       onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      maxLength={ADMIN_GAME_REQUEST_MAX_LENGTH}
                     />
                   </div>
                 </div>

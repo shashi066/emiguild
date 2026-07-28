@@ -311,7 +311,7 @@ export async function POST(req: NextRequest) {
         duration,
         totalPrice,
         discount:         0,
-        notes:            notes ?? null,
+        notes:            notes || null,
         status:           'CONFIRMED',
         bookingType:      'ONLINE',
         paymentStatus:    usePass ? 'PAID' : 'UNPAID',

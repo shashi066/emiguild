@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { customerGameRequestSchema } from '@/lib/game-request';
 
 export const registerSchema = z.object({
   name:     z.string().min(2, 'Name must be at least 2 characters'),
@@ -17,7 +18,7 @@ export const bookingSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Invalid start time'),
   duration: z.number().min(0.5).max(12).refine((v) => v % 0.5 === 0, 'Duration must be in 30-min increments'),
-  notes: z.string().optional(),
+  notes: customerGameRequestSchema,
 });
 
 export const updateBookingSchema = z.object({

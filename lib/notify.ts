@@ -60,7 +60,7 @@ export interface PasswordResetEmailPayload {
   temporaryPassword: string;
 }
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -152,6 +152,26 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
     : discount > 0
       ? `₹${totalPrice} (${discount}% discount applied)`
     : `₹${totalPrice}`;
+  const safeBookingId = escapeHtml(bookingId.slice(-8).toUpperCase());
+  const safeCustomerName = escapeHtml(customerName);
+  const safeCustomerEmail = customerEmail ? escapeHtml(customerEmail) : '';
+  const safeCustomerPhone = customerPhone ? escapeHtml(customerPhone) : '';
+  const safeStationName = escapeHtml(stationName);
+  const safeDate = escapeHtml(date);
+  const safeStartTime = escapeHtml(fmt(startTime));
+  const safeEndTime = escapeHtml(fmt(endTime));
+  const safePassType = passType ? escapeHtml(passType) : '';
+  const safeMembershipType = membershipType
+    ? escapeHtml(membershipLabel(membershipType))
+    : '';
+  const safeAppliedBenefit = appliedBenefitType
+    ? escapeHtml(membershipLabel(appliedBenefitType))
+    : '';
+  const safePriceDisplay = escapeHtml(priceDisplay);
+  const safeNotes = notes ? escapeHtml(notes) : '';
+  const requestLabel = bookingType === 'OFFLINE'
+    ? 'Game Request / Note'
+    : 'Game Request';
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#0f0f1a;color:#e5e7eb;border-radius:12px;overflow:hidden;border:1px solid #2d2d4e;">
@@ -162,19 +182,19 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
       </div>
       <div style="padding:24px 28px;">
         <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
-          <tr><td style="padding:8px 0;color:#9ca3af;width:140px;">Booking ID</td><td style="padding:8px 0;font-weight:600;color:#c4b5fd;">#${bookingId.slice(-8).toUpperCase()}</td></tr>
-          <tr><td style="padding:8px 0;color:#9ca3af;">Customer</td><td style="padding:8px 0;font-weight:600;">${customerName}</td></tr>
-          ${customerEmail ? `<tr><td style="padding:8px 0;color:#9ca3af;">Email</td><td style="padding:8px 0;">${customerEmail}</td></tr>` : ''}
-          ${customerPhone ? `<tr><td style="padding:8px 0;color:#9ca3af;">Phone</td><td style="padding:8px 0;">${customerPhone}</td></tr>` : ''}
-          <tr><td style="padding:8px 0;color:#9ca3af;">Station</td><td style="padding:8px 0;font-weight:600;">${stationName}</td></tr>
-          <tr><td style="padding:8px 0;color:#9ca3af;">Date</td><td style="padding:8px 0;">${date}</td></tr>
-          <tr><td style="padding:8px 0;color:#9ca3af;">Time</td><td style="padding:8px 0;">${fmt(startTime)} → ${fmt(endTime)} (${duration}h)</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;width:140px;">Booking ID</td><td style="padding:8px 0;font-weight:600;color:#c4b5fd;">#${safeBookingId}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;">Customer</td><td style="padding:8px 0;font-weight:600;">${safeCustomerName}</td></tr>
+          ${safeCustomerEmail ? `<tr><td style="padding:8px 0;color:#9ca3af;">Email</td><td style="padding:8px 0;">${safeCustomerEmail}</td></tr>` : ''}
+          ${safeCustomerPhone ? `<tr><td style="padding:8px 0;color:#9ca3af;">Phone</td><td style="padding:8px 0;">${safeCustomerPhone}</td></tr>` : ''}
+          <tr><td style="padding:8px 0;color:#9ca3af;">Station</td><td style="padding:8px 0;font-weight:600;">${safeStationName}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;">Date</td><td style="padding:8px 0;">${safeDate}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;">Time</td><td style="padding:8px 0;">${safeStartTime} → ${safeEndTime} (${duration}h)</td></tr>
           ${extraControllers > 0 ? `<tr><td style="padding:8px 0;color:#9ca3af;">Controllers</td><td style="padding:8px 0;">+${extraControllers}</td></tr>` : ''}
-          ${passType && passHoursDeducted ? `<tr><td style="padding:8px 0;color:#9ca3af;">Payment</td><td style="padding:8px 0;font-weight:700;color:#00e676;">${passType} Pass · ${passHoursDeducted}h used</td></tr>` : ''}
-          ${membershipType ? `<tr><td style="padding:8px 0;color:#9ca3af;">Guild Membership</td><td style="padding:8px 0;font-weight:700;color:#f4cf58;">${membershipLabel(membershipType)}${membershipExpiresAt ? ` · expires ${new Date(membershipExpiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}` : ''}</td></tr>` : ''}
-          ${appliedBenefitType ? `<tr><td style="padding:8px 0;color:#9ca3af;">Applied Benefit</td><td style="padding:8px 0;font-weight:700;color:#4ade80;">${membershipLabel(appliedBenefitType)} · 50% OFF</td></tr>` : ''}
-          <tr><td style="padding:8px 0;color:#9ca3af;">Total</td><td style="padding:8px 0;font-weight:700;font-size:1rem;color:#00e676;">${priceDisplay}</td></tr>
-          ${notes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">Notes</td><td style="padding:8px 0;font-style:italic;color:#d1d5db;">${notes}</td></tr>` : ''}
+          ${safePassType && passHoursDeducted ? `<tr><td style="padding:8px 0;color:#9ca3af;">Payment</td><td style="padding:8px 0;font-weight:700;color:#00e676;">${safePassType} Pass · ${passHoursDeducted}h used</td></tr>` : ''}
+          ${safeMembershipType ? `<tr><td style="padding:8px 0;color:#9ca3af;">Guild Membership</td><td style="padding:8px 0;font-weight:700;color:#f4cf58;">${safeMembershipType}${membershipExpiresAt ? ` · expires ${new Date(membershipExpiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}` : ''}</td></tr>` : ''}
+          ${safeAppliedBenefit ? `<tr><td style="padding:8px 0;color:#9ca3af;">Applied Benefit</td><td style="padding:8px 0;font-weight:700;color:#4ade80;">${safeAppliedBenefit} · 50% OFF</td></tr>` : ''}
+          <tr><td style="padding:8px 0;color:#9ca3af;">Total</td><td style="padding:8px 0;font-weight:700;font-size:1rem;color:#00e676;">${safePriceDisplay}</td></tr>
+          ${safeNotes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">${requestLabel}</td><td style="padding:8px 0;font-weight:600;color:#bff4ff;">${safeNotes}</td></tr>` : ''}
         </table>
       </div>
       <div style="padding:16px 28px;background:#0a0a14;font-size:0.75rem;color:#4b5563;text-align:center;">
@@ -187,7 +207,7 @@ export async function notifyAdminNewBooking(payload: BookingNotifyPayload) {
     await transporter.sendMail({
       from:    `"EMI Guild Bookings" <${GMAIL_USER}>`,
       to:      ADMIN_EMAIL,
-      subject: `🎮 New Booking: ${customerName} → ${stationName} on ${date}`,
+      subject: `🎮 New Booking: ${customerName.replace(/[\r\n]+/g, ' ')} → ${stationName.replace(/[\r\n]+/g, ' ')} on ${date}`,
       html,
     });
   } catch (err) {
@@ -229,8 +249,9 @@ export async function notifyUserNewBooking(payload: UserBookingEmailPayload) {
           ${payload.membershipType ? `<tr><td style="padding:8px 0;color:#9ca3af;">Guild Membership</td><td style="padding:8px 0;font-weight:700;color:#f4cf58;">${escapeHtml(membershipLabel(payload.membershipType))}${payload.membershipExpiresAt ? ` · expires ${new Date(payload.membershipExpiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}` : ''}</td></tr>` : ''}
           <tr><td style="padding:8px 0;color:#9ca3af;">Payment</td><td style="padding:8px 0;">${paymentLabel}</td></tr>
           <tr><td style="padding:8px 0;color:#9ca3af;">Total</td><td style="padding:8px 0;font-weight:700;font-size:1rem;color:#00e676;">₹${payload.totalPrice}</td></tr>
-          ${notes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">Notes</td><td style="padding:8px 0;font-style:italic;color:#d1d5db;">${notes}</td></tr>` : ''}
+          ${notes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">Game Request</td><td style="padding:8px 0;font-weight:600;color:#bff4ff;">${notes}</td></tr>` : ''}
         </table>
+        ${notes ? '<p style="margin:14px 0 0;padding:10px 12px;border-left:3px solid #00d4ff;background:rgba(0,212,255,0.07);color:#d1d5db;line-height:1.5;font-size:0.85rem;">We will do our best to prepare your requested game before the session. Availability and update time may vary.</p>' : ''}
         ${payload.membershipType && !payload.appliedBenefitType ? '<p style="margin:16px 0 0;padding:12px 14px;border-left:3px solid #f4cf58;background:rgba(244,207,88,0.07);color:#d1d5db;line-height:1.55;">Active Guild Membership found. GameZone will verify and apply the eligible discount. This confirmation keeps the normal booking price until verification.</p>' : ''}
         <p style="margin:20px 0;text-align:center;color:#d1d5db;line-height:1.55;">Arrive a few minutes early and step straight into the game.</p>
         <div style="text-align:center;">

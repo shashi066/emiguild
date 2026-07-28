@@ -3,10 +3,11 @@ import Link from 'next/link';
 import {
   BookOpen, Monitor, Users, IndianRupee,
   TrendingUp, Clock, CheckCircle, XCircle,
-  ChevronRight,
+  ChevronRight, Gamepad2,
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatTime, getTodayString } from '@/lib/utils';
 import { AdminRevenueRange } from '@/components/admin/AdminRevenueRange';
+import { StationAvailabilityBoard } from '@/components/StationAvailabilityBoard';
 
 async function getDashboardData() {
   const today = getTodayString();
@@ -153,6 +154,8 @@ export default async function AdminDashboard() {
         </Link>
       </div>
 
+      <StationAvailabilityBoard mode="admin" />
+
       <AdminRevenueRange
         initialFrom={data.monthStart}
         initialTo={data.today}
@@ -273,6 +276,12 @@ export default async function AdminDashboard() {
                       <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                         {formatTime(b.startTime)} – {formatTime(b.endTime)}
                       </div>
+                      {b.notes && (
+                        <div className="game-request-note compact">
+                          <Gamepad2 size={12} aria-hidden="true" />
+                          <span><strong>Game:</strong> {b.notes}</span>
+                        </div>
+                      )}
                     </td>
                     <td style={{ fontWeight: 700, color: 'var(--color-accent-primary)' }}>
                       {formatCurrency(b.totalPrice)}

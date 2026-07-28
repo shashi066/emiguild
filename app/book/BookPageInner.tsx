@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -20,6 +20,7 @@ import {
   isGuildMembershipType,
   selectPreferredGuildMembership,
 } from '@/lib/guild-membership';
+import { CUSTOMER_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
 
 type Station = {
   id: string;
@@ -237,9 +238,8 @@ export default function BookPageInner() {
         {/* Step Indicators */}
         <div className="booking-steps" style={{ marginBottom: 'var(--space-2xl)' }}>
           {STEPS.map((s, i) => (
-            <>
+            <Fragment key={s.num}>
               <div
-                key={s.num}
                 className={`booking-step ${step === s.num ? 'active' : step > s.num ? 'done' : ''}`}
               >
                 <div className="booking-step-num">
@@ -248,9 +248,9 @@ export default function BookPageInner() {
                 <div className="booking-step-label">{s.label}</div>
               </div>
               {i < STEPS.length - 1 && (
-                <div key={`conn-${i}`} className="booking-step-connector" />
+                <div className="booking-step-connector" />
               )}
-            </>
+            </Fragment>
           ))}
         </div>
 
@@ -835,18 +835,23 @@ export default function BookPageInner() {
               </div>
             </div>
 
-            {/* Notes */}
+            {/* Game request */}
             <div className="form-group" style={{ marginBottom: 'var(--space-lg)' }}>
               <label className="form-label" htmlFor="booking-notes">
-                Special Requests (optional)
+                Game Request <span className="form-optional">(optional)</span>
               </label>
+              <p className="form-helper">
+                Tell us which game to prepare. We will do our best to have it
+                ready, subject to availability and update time.
+              </p>
               <textarea
                 id="booking-notes"
                 className="form-input"
-                placeholder="Any special requirements or requests..."
+                placeholder="e.g. EA Sports FC 26, Tekken 8, GTA V"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                rows={3}
+                maxLength={CUSTOMER_GAME_REQUEST_MAX_LENGTH}
+                rows={2}
                 style={{ resize: 'vertical' }}
               />
             </div>
