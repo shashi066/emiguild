@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   BookOpen, Search, CheckCircle, XCircle,
   AlertCircle, RefreshCw, Trash2, Globe, UserPlus, Phone, LogIn,
-  Pencil, X, MessageSquare, Gamepad2, Plus, Minus, Award,
+  Pencil, X, Gamepad2, Plus, Minus, Award,
   IndianRupee,
 } from 'lucide-react';
 import {
@@ -12,8 +12,26 @@ import {
   getTimeSlotsForDate, getDurationOptions, CLOSING_HOUR, getTodayString, isSlotAvailable,
 } from '@/lib/utils';
 import { decryptPhone } from '@/lib/crypto';
+import {
+  GuildMembershipRecord,
+  getGuildMembershipEligibility,
+  guildMembershipName,
+  isGuildMembershipType,
+  selectPreferredGuildMembership,
+} from '@/lib/guild-membership';
+import {
+  getHourPassRemainingForBooking,
+  HourPassRecord,
+  isHourPassType,
+  validateHourPassApplication,
+} from '@/lib/hour-pass';
+import {
+  ADMIN_WALKIN_TIME_SLOTS,
+  validateAdminWalkinTime,
+} from '@/lib/admin-walkin-time';
+import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
 
-type Station = { id: string; name: string; hourlyRate: number; minDuration: number };
+type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 
 type Booking = {
   id: string;
@@ -34,10 +52,21 @@ type Booking = {
   controllerCharge: number;
   discount: number;
   passHoursDeducted: number;
+  appliedBenefitType: string | null;
   user: { id: string; name: string; email: string } | null;
-  userPass: { passType: string } | null;
+  userPass: HourPassRecord | null;
   station: { id: string; name: string };
   createdAt: string;
+};
+
+type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
+
+const PASS_COLOR: Record<string, string> = {
+  BRONZE: '#cd7f32',
+  SILVER: '#c0c0c0',
+  GOLD: '#ffd700',
+  BLACK: '#d8dee9',
+  APEX: '#67e8f9',
 };
 
 const STATUS_CONFIG = {
@@ -74,6 +103,19 @@ function EditModal({
   const [duration, setDuration]           = useState(booking.duration);
   const [extraControllers, setExtra]      = useState(booking.extraControllers);
   const [discount, setDiscount]           = useState(booking.discount ?? 0);
+  const [benefitMode, setBenefitMode] = useState<BookingBenefitMode>(
+    booking.passHoursDeducted > 0 && booking.userPass
+      ? 'HOUR_PASS'
+      : isGuildMembershipType(booking.appliedBenefitType)
+        ? 'GUILD'
+        : 'STANDARD'
+  );
+  const [selectedHourPassId, setSelectedHourPassId] = useState(
+    booking.passHoursDeducted > 0 ? booking.userPass?.id ?? '' : ''
+  );
+  const [appliedBenefitType, setAppliedBenefitType] = useState<string | null>(
+    isGuildMembershipType(booking.appliedBenefitType) ? booking.appliedBenefitType : null
+  );
   const [notes, setNotes]                 = useState(booking.notes ?? '');
   const [customerName, setCustomerName]   = useState(booking.customerName ?? '');
   const [customerPhone, setCustomerPhone] = useState(booking.customerPhone ?? '');
@@ -81,6 +123,11 @@ function EditModal({
   const [bookedSlots, setBookedSlots]       = useState<{ startTime: string; endTime: string; status: string }[]>([]);
   const [loading, setLoading]               = useState(false);
   const [error, setError]                   = useState('');
+  const [activeMembership, setActiveMembership] = useState<GuildMembershipRecord | null>(null);
+  const [customerPasses, setCustomerPasses] = useState<HourPassRecord[]>(
+    booking.passHoursDeducted > 0 && booking.userPass ? [booking.userPass] : []
+  );
+  const [membershipLoaded, setMembershipLoaded] = useState(!booking.user?.id);
 
   const isOffline = booking.bookingType === 'OFFLINE';
 
@@ -90,6 +137,41 @@ function EditModal({
       .then((r) => r.json())
       .then((d) => setCtrlPrice(parseFloat(d.controller_price ?? '0')));
   }, []);
+
+  useEffect(() => {
+    if (!booking.user?.id) return;
+    let active = true;
+    setMembershipLoaded(false);
+    fetch(`/api/admin/passes?userId=${booking.user.id}`)
+      .then((response) => (response.ok ? response.json() : { passes: [] }))
+      .then((data) => {
+        if (!active) return;
+        const passes = Array.isArray(data.passes) ? data.passes : [];
+        const hourPasses = passes.filter(
+          (pass: HourPassRecord) => isHourPassType(pass.passType)
+        ) as HourPassRecord[];
+        const currentPass = booking.passHoursDeducted > 0 ? booking.userPass : null;
+        setCustomerPasses(
+          currentPass && !hourPasses.some((pass) => pass.id === currentPass.id)
+            ? [currentPass, ...hourPasses]
+            : hourPasses
+        );
+        setActiveMembership(selectPreferredGuildMembership(passes));
+      })
+      .catch(() => {
+        if (!active) return;
+        setActiveMembership(null);
+        setCustomerPasses(
+          booking.passHoursDeducted > 0 && booking.userPass
+            ? [booking.userPass]
+            : []
+        );
+      })
+      .finally(() => {
+        if (active) setMembershipLoaded(true);
+      });
+    return () => { active = false; };
+  }, [booking.passHoursDeducted, booking.user?.id, booking.userPass]);
 
   // Fetch booked slots whenever station or date changes
   useEffect(() => {
@@ -105,12 +187,64 @@ function EditModal({
   const sessionCost      = (selectedStation?.hourlyRate ?? 0) * duration;
   const controllerCharge = extraControllers * controllerUnitPrice * duration;
   const priceBeforeDiscount = sessionCost + controllerCharge;
-  const totalPrice       = Math.round(priceBeforeDiscount * (1 - discount / 100));
+  const selectedHourPass = customerPasses.find(
+    (pass) => pass.id === selectedHourPassId
+  ) ?? null;
+  const hourPassValidation = validateHourPassApplication({
+    pass: selectedHourPass,
+    userId: booking.user?.id ?? null,
+    bookingDate: date,
+    duration,
+    hasControllers: selectedStation?.hasControllers ?? false,
+    currentPassId: booking.passHoursDeducted > 0 ? booking.userPass?.id ?? null : null,
+    currentPassHours: booking.passHoursDeducted,
+  });
+  const usesHourPass = benefitMode === 'HOUR_PASS';
+  const totalPrice = usesHourPass
+    ? Math.round(controllerCharge)
+    : Math.round(priceBeforeDiscount * (1 - discount / 100));
+  const membershipEligibility = getGuildMembershipEligibility({
+    membership: activeMembership,
+    bookingDate: date,
+    hasControllers: selectedStation?.hasControllers ?? false,
+    extraControllers,
+  });
 
-  // Time slots — no past-time restriction for admin, but hide already-booked slots
-  const availableSlots = getTimeSlotsForDate(date).filter((t) => {
+  useEffect(() => {
+    if (selectedStation && !selectedStation.hasControllers && extraControllers > 0) {
+      setExtra(0);
+    }
+  }, [extraControllers, selectedStation]);
+
+  useEffect(() => {
+    if (
+      membershipLoaded
+      && benefitMode === 'GUILD'
+      && appliedBenefitType
+      && !membershipEligibility.eligible
+    ) {
+      setBenefitMode('STANDARD');
+      setAppliedBenefitType(null);
+      setDiscount(0);
+    }
+  }, [
+    appliedBenefitType,
+    benefitMode,
+    membershipEligibility.eligible,
+    membershipLoaded,
+  ]);
+
+  // Offline edits use the admin schedule; online edits retain the public schedule.
+  const editTimeSlots = isOffline
+    ? ADMIN_WALKIN_TIME_SLOTS
+    : getTimeSlotsForDate(date);
+  const availableSlots = editTimeSlots.filter((t) => {
+    if (isOffline && !validateAdminWalkinTime(t, duration).valid) return false;
     const [slotHour, slotMinute] = t.split(':').map(Number);
-    if (slotHour * 60 + slotMinute + duration * 60 > CLOSING_HOUR * 60) return false;
+    if (
+      !isOffline
+      && slotHour * 60 + slotMinute + duration * 60 > CLOSING_HOUR * 60
+    ) return false;
     return isSlotAvailable(t, duration, bookedSlots);
   });
 
@@ -123,6 +257,10 @@ function EditModal({
       setError('Please choose an available start time.');
       return;
     }
+    if (usesHourPass && !hourPassValidation.valid) {
+      setError(hourPassValidation.reason);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/bookings/${booking.id}`, {
@@ -130,7 +268,15 @@ function EditModal({
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           date, stationId, startTime,
-          duration, extraControllers, discount, notes, customerName, customerPhone,
+          duration,
+          extraControllers,
+          discount: usesHourPass ? 0 : discount,
+          benefitMode,
+          hourPassId: usesHourPass ? selectedHourPassId : null,
+          appliedBenefitType: benefitMode === 'GUILD' ? appliedBenefitType : null,
+          notes,
+          customerName,
+          customerPhone,
         }),
       });
       const data = await res.json();
@@ -264,11 +410,151 @@ function EditModal({
             </div>
           </div>
 
-          {/* Price breakdown */}
+          {booking.user && (
+            <section
+              aria-label="Customer Hour Pass"
+              style={{
+                padding: '12px 14px',
+                borderLeft: `3px solid ${selectedHourPass ? PASS_COLOR[selectedHourPass.passType] ?? '#4ade80' : 'var(--color-border)'}`,
+                background: usesHourPass
+                  ? 'rgba(74,222,128,0.05)'
+                  : 'rgba(255,255,255,0.025)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
+                <Award size={15} style={{ color: selectedHourPass ? PASS_COLOR[selectedHourPass.passType] : '#4ade80' }} />
+                <strong style={{ fontSize: '0.85rem' }}>Customer Hour Pass</strong>
+                {usesHourPass && (
+                  <span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: '0.72rem', fontWeight: 700 }}>
+                    SELECTED
+                  </span>
+                )}
+              </div>
+
+              {!membershipLoaded ? (
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.76rem' }}>
+                  Loading customer passes...
+                </div>
+              ) : customerPasses.length === 0 ? (
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.76rem' }}>
+                  This customer has no active hour pass.
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                    <select
+                      className="form-input"
+                      aria-label="Select customer pass"
+                      value={selectedHourPassId}
+                      onChange={(event) => {
+                        setSelectedHourPassId(event.target.value);
+                        setError('');
+                      }}
+                      style={{ minWidth: 0, flex: 1 }}
+                    >
+                      <option value="">Select a pass</option>
+                      {customerPasses.map((pass) => {
+                        const remaining = getHourPassRemainingForBooking({
+                          pass,
+                          currentPassId: booking.passHoursDeducted > 0
+                            ? booking.userPass?.id ?? null
+                            : null,
+                          currentPassHours: booking.passHoursDeducted,
+                        });
+                        return (
+                          <option key={pass.id} value={pass.id}>
+                            {pass.passType} Pass - {remaining}h available
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${usesHourPass ? 'btn-ghost' : 'btn-success'}`}
+                      disabled={!usesHourPass && (!selectedHourPass || !hourPassValidation.valid)}
+                      onClick={() => {
+                        if (usesHourPass) {
+                          setBenefitMode('STANDARD');
+                          setDiscount(0);
+                          return;
+                        }
+                        setBenefitMode('HOUR_PASS');
+                        setDiscount(0);
+                        setAppliedBenefitType(null);
+                      }}
+                      style={{ flexShrink: 0 }}
+                    >
+                      {usesHourPass ? 'Remove Pass' : 'Apply Pass'}
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 7,
+                      fontSize: '0.75rem',
+                      color: hourPassValidation.valid ? '#4ade80' : '#f59e0b',
+                    }}
+                  >
+                    {hourPassValidation.valid
+                      ? `Covers ${duration}h session cost. Extra controller charges remain payable.`
+                      : selectedHourPass
+                        ? hourPassValidation.reason
+                        : 'Select a compatible pass to apply it to this booking.'}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+
+          {booking.user && activeMembership && (
+            <section
+              aria-label="Customer Guild Membership"
+              style={{
+                padding: '12px 14px',
+                borderLeft: `3px solid ${activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#60a5fa'}`,
+                background: membershipEligibility.eligible
+                  ? 'rgba(74,222,128,0.05)'
+                  : 'rgba(245,158,11,0.05)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                <div>
+                  <strong style={{ color: activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#93c5fd' }}>
+                    {guildMembershipName(activeMembership.passType)}
+                  </strong>
+                  <div style={{ marginTop: 3, fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>
+                    Expires {new Date(activeMembership.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-success btn-sm"
+                  disabled={!membershipEligibility.eligible}
+                  onClick={() => {
+                    setDiscount(50);
+                    setBenefitMode('GUILD');
+                    setAppliedBenefitType(activeMembership.passType);
+                  }}
+                >
+                  Apply Guild Discount
+                </button>
+              </div>
+              <div style={{ marginTop: 7, fontSize: '0.76rem', color: membershipEligibility.eligible ? '#4ade80' : '#f59e0b' }}>
+                {membershipEligibility.reason}
+              </div>
+            </section>
+          )}
+
           <div style={{ padding: 'var(--space-md)', background: 'rgba(108,99,255,0.06)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(108,99,255,0.15)', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
               <span style={{ color: 'var(--color-text-secondary)' }}>Session ({duration}h × ₹{selectedStation?.hourlyRate ?? 0})</span>
-              <span>₹{sessionCost}</span>
+              <span>
+                {usesHourPass ? (
+                  <>
+                    <s style={{ opacity: 0.5, marginRight: 6 }}>₹{sessionCost}</s>
+                    <strong style={{ color: '#4ade80' }}>₹0</strong>
+                  </>
+                ) : `₹${sessionCost}`}
+              </span>
             </div>
             {extraControllers > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
@@ -279,9 +565,15 @@ function EditModal({
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderTop: '1px solid rgba(108,99,255,0.15)', paddingTop: 6, color: 'var(--color-accent-primary)' }}>
-              <span>Total</span>
               <span>
-                {discount > 0 && (
+                {usesHourPass
+                  ? `${selectedHourPass?.passType ?? 'Customer'} Pass Final`
+                  : appliedBenefitType
+                    ? `${guildMembershipName(appliedBenefitType)} Final`
+                    : 'Total'}
+              </span>
+              <span>
+                {!usesHourPass && discount > 0 && (
                   <s style={{ fontSize: '0.8rem', fontWeight: 400, opacity: 0.5, marginRight: 6 }}>₹{priceBeforeDiscount}</s>
                 )}
                 ₹{totalPrice}
@@ -299,7 +591,12 @@ function EditModal({
                 max={100}
                 step={5}
                 value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value))}
+                disabled={usesHourPass}
+                onChange={(e) => {
+                  setDiscount(Number(e.target.value));
+                  setBenefitMode('STANDARD');
+                  setAppliedBenefitType(null);
+                }}
                 style={{ flex: 1, accentColor: 'var(--color-accent-secondary)' }}
               />
               <span style={{ minWidth: 44, textAlign: 'right', fontWeight: 700, color: discount > 0 ? 'var(--color-accent-secondary)' : 'var(--color-text-muted)', fontFamily: 'Orbitron, sans-serif', fontSize: '0.9rem' }}>
@@ -322,15 +619,16 @@ function EditModal({
             </div>
           )}
 
-          {/* Notes */}
+          {/* Game request / notes */}
           <div className="form-group">
-            <label className="form-label">Customer Notes</label>
+            <label className="form-label">Game Request / Notes</label>
             <textarea
               className="form-input"
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special requests or notes..."
+              maxLength={ADMIN_GAME_REQUEST_MAX_LENGTH}
+              placeholder="Game to prepare or an operational note..."
               style={{ resize: 'vertical' }}
             />
           </div>
@@ -342,7 +640,7 @@ function EditModal({
             className="btn btn-primary"
             style={{ flex: 2 }}
             onClick={handleSave}
-            disabled={loading || !startTimeValid}
+            disabled={loading || !startTimeValid || (usesHourPass && !hourPassValidation.valid)}
           >
             <CheckCircle size={15} />
             {loading ? 'Saving...' : 'Save Changes'}
@@ -629,9 +927,9 @@ export default function AdminBookingsPage() {
                         {new Date(b.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
                       </div>
                       {b.notes && (
-                        <div style={{ marginTop: 5, display: 'flex', alignItems: 'flex-start', gap: 4, fontSize: '0.72rem', color: '#00d4ff', fontStyle: 'italic', maxWidth: 180 }}>
-                          <MessageSquare size={11} style={{ flexShrink: 0, marginTop: 1 }} />
-                          <span>{b.notes}</span>
+                        <div className="game-request-note compact">
+                          <Gamepad2 size={12} aria-hidden="true" />
+                          <span><strong>Game:</strong> {b.notes}</span>
                         </div>
                       )}
                       {b.adminComment && (
@@ -682,6 +980,12 @@ export default function AdminBookingsPage() {
                       ) : (
                         <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
                           {b.paymentStatus === 'PAID' ? '✓ Paid' : 'At counter'}
+                        </div>
+                      )}
+                      {b.appliedBenefitType && (
+                        <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#4ade80' }}>
+                          <Award size={11} />
+                          {guildMembershipName(b.appliedBenefitType)} · {b.discount}% OFF
                         </div>
                       )}
                       {b.extraControllers > 0 && (

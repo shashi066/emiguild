@@ -4,9 +4,21 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   UserPlus, Plus, Trash2, AlertCircle, RefreshCw,
   Calendar, Clock, Monitor, X, CheckCircle, Phone, User, Search, Award, ChevronDown,
+  Gamepad2,
 } from 'lucide-react';
-import { formatDate, formatTime, formatCurrency, getTodayString, isSlotAvailable, getTimeSlotsForDate, getDurationOptions } from '@/lib/utils';
+import { formatDate, formatTime, formatCurrency, getTodayString, isSlotAvailable, getDurationOptions } from '@/lib/utils';
 import { decryptPhone } from '@/lib/crypto';
+import { isPassDateEligible } from '@/lib/pass-rules';
+import {
+  ADMIN_WALKIN_TIME_SLOTS,
+  validateAdminWalkinTime,
+} from '@/lib/admin-walkin-time';
+import {
+  getGuildMembershipEligibility,
+  guildMembershipName,
+  selectPreferredGuildMembership,
+} from '@/lib/guild-membership';
+import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 type BookedSlot = { startTime: string; endTime: string; status: string };
@@ -27,7 +39,15 @@ type WalkinBooking = {
   station: { id: string; name: string };
 };
 type FoundUser = { id: string; name: string; email: string; phone: string | null };
-type ActivePass = { id: string; passType: string; totalHours: number; usedHours: number; expiresAt: string };
+type ActivePass = {
+  id: string;
+  passType: string;
+  totalHours: number;
+  usedHours: number;
+  status: string;
+  purchasedAt: string;
+  expiresAt: string;
+};
 const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700', BLACK: '#d8dee9', APEX: '#67e8f9' };
 
 // DURATION_OPTIONS is now generated dynamically via getDurationOptions()
@@ -55,10 +75,11 @@ export default function WalkinBookingPage() {
     customerPhone: '',
     stationId: '',
     date: getTodayString(),
-    startTime: '10:00',
+    startTime: '09:00',
     duration: 2,
     extraControllers: 0,
     discount: 0,
+    appliedBenefitType: null as string | null,
     notes: '',
   });
 
@@ -138,16 +159,34 @@ export default function WalkinBookingPage() {
       ) ?? null
     : null;
   const stationPassAllowed = selectedStation != null;
+  const passDateAllowed = isPassDateEligible(form.date);
+  const activeMembership = selectPreferredGuildMembership(activePasses);
+  const membershipEligibility = getGuildMembershipEligibility({
+    membership: activeMembership,
+    bookingDate: form.date,
+    hasControllers: selectedStation?.hasControllers ?? false,
+    extraControllers: form.extraControllers,
+  });
   const controllerCharge = form.extraControllers * controllerPrice * form.duration;
   const sessionCost = selectedStation ? selectedStation.hourlyRate * form.duration : 0;
   const priceBeforeDiscount = (usePass ? 0 : sessionCost) + controllerCharge;
   const estimatedTotal = Math.round(priceBeforeDiscount * (1 - form.discount / 100));
 
   useEffect(() => {
-    if (!activePass && usePass) {
+    if ((!activePass || !passDateAllowed) && usePass) {
       setUsePass(false);
     }
-  }, [activePass, usePass]);
+  }, [activePass, passDateAllowed, usePass]);
+
+  useEffect(() => {
+    if (form.appliedBenefitType && !membershipEligibility.eligible) {
+      setForm((current) => ({
+        ...current,
+        discount: 0,
+        appliedBenefitType: null,
+      }));
+    }
+  }, [form.appliedBenefitType, membershipEligibility.eligible]);
 
   // Filtered user list for dropdown
   const filteredUsers = userQuery.trim().length < 1 ? [] : allUsers.filter((u) => {
@@ -192,21 +231,17 @@ export default function WalkinBookingPage() {
 
   // Reset user/pass state when form is reset
   const resetForm = () => {
-    setForm({ customerName: '', customerPhone: '', stationId: '', date: getTodayString(), startTime: '10:00', duration: 2, extraControllers: 0, discount: 0, notes: '' });
+    setForm({ customerName: '', customerPhone: '', stationId: '', date: getTodayString(), startTime: '09:00', duration: 2, extraControllers: 0, discount: 0, appliedBenefitType: null, notes: '' });
     setSelectedUser(null);
     setActivePasses([]);
     setUsePass(false);
     setUserQuery('');
   };
 
-  const SHOP_CLOSE_MINS = 23 * 60;
-  const availableSlots = getTimeSlotsForDate(form.date, 30).filter((time) => {
-    const [h, m] = time.split(':').map(Number);
-    const slotStartMins = h * 60 + m;
-    const slotEndMins = slotStartMins + Math.round(form.duration * 60);
-    if (slotEndMins > SHOP_CLOSE_MINS) return false;
-    return isSlotAvailable(time, form.duration, bookedSlots);
-  });
+  const availableSlots = ADMIN_WALKIN_TIME_SLOTS.filter((time) => (
+    validateAdminWalkinTime(time, form.duration).valid
+    && isSlotAvailable(time, form.duration, bookedSlots)
+  ));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -455,9 +490,10 @@ export default function WalkinBookingPage() {
                           </div>
 
                           {booking.notes && (
-                            <p style={{ marginTop: 6, fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                              {booking.notes}
-                            </p>
+                            <div className="game-request-note compact">
+                              <Gamepad2 size={12} aria-hidden="true" />
+                              <span><strong>Game:</strong> {booking.notes}</span>
+                            </div>
                           )}
 
                           {/* Booking ID */}
@@ -752,7 +788,12 @@ export default function WalkinBookingPage() {
                         max={100}
                         step={5}
                         value={form.discount}
-                        onChange={(e) => setForm({ ...form, discount: Number(e.target.value) })}
+                        disabled={usePass}
+                        onChange={(e) => setForm({
+                          ...form,
+                          discount: Number(e.target.value),
+                          appliedBenefitType: null,
+                        })}
                         style={{ flex: 1, accentColor: 'var(--color-accent-secondary)' }}
                       />
                       <span style={{ minWidth: 44, textAlign: 'right', fontWeight: 700, color: form.discount > 0 ? 'var(--color-accent-secondary)' : 'var(--color-text-muted)', fontFamily: 'Orbitron, sans-serif', fontSize: '0.9rem' }}>
@@ -763,19 +804,67 @@ export default function WalkinBookingPage() {
 
                   <div className="form-group">
                     <label className="form-label" htmlFor="walkin-notes">
-                      Notes <span style={{ color: 'var(--color-text-muted)', textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+                      Game Request / Notes <span className="form-optional">(optional)</span>
                     </label>
                     <input
                       id="walkin-notes"
                       type="text"
                       className="form-input"
-                      placeholder="e.g. Tournament, VIP, special setup..."
+                      placeholder="Game to prepare or an operational note..."
                       value={form.notes}
                       onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      maxLength={ADMIN_GAME_REQUEST_MAX_LENGTH}
                     />
                   </div>
                 </div>
               </div>
+
+              {selectedUser && selectedStation && activeMembership && (
+                <section
+                  aria-label="Active Guild Membership"
+                  style={{
+                    padding: 'var(--space-md)',
+                    borderLeft: `3px solid ${activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#60a5fa'}`,
+                    background: membershipEligibility.eligible
+                      ? 'rgba(74,222,128,0.05)'
+                      : 'rgba(245,158,11,0.05)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <strong style={{ color: activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#93c5fd' }}>
+                        {guildMembershipName(activeMembership.passType)}
+                      </strong>
+                      <div style={{ marginTop: 3, fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                        Expires {new Date(activeMembership.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      disabled={!membershipEligibility.eligible || usePass}
+                      onClick={() => {
+                        setUsePass(false);
+                        setForm((current) => ({
+                          ...current,
+                          discount: 50,
+                          appliedBenefitType: activeMembership.passType,
+                        }));
+                      }}
+                    >
+                      Apply Guild Discount
+                    </button>
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: '0.78rem', color: membershipEligibility.eligible ? '#4ade80' : '#f59e0b' }}>
+                    {membershipEligibility.reason}
+                  </div>
+                  {form.appliedBenefitType && (
+                    <div style={{ marginTop: 5, fontSize: '0.75rem', fontWeight: 700, color: '#4ade80' }}>
+                      50% Guild discount selected. Account-holder presence must be verified.
+                    </div>
+                  )}
+                </section>
+              )}
 
               {/* Pass toggle — shown only when registered user has an active pass */}
               {selectedUser && activePass && (
@@ -786,7 +875,7 @@ export default function WalkinBookingPage() {
                   padding: 'var(--space-md)',
                   transition: 'all 0.2s',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: usePass ? 10 : 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: usePass || !passDateAllowed ? 10 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Award size={15} style={{ color: PASS_COLOR[activePass.passType] }} />
                       <span style={{ fontWeight: 700, fontSize: '0.875rem', color: PASS_COLOR[activePass.passType] }}>
@@ -799,13 +888,24 @@ export default function WalkinBookingPage() {
                     {/* Toggle */}
                     <button
                       type="button"
-                      onClick={() => stationPassAllowed && setUsePass(!usePass)}
-                      disabled={!stationPassAllowed}
+                      onClick={() => {
+                        if (!stationPassAllowed || !passDateAllowed) return;
+                        const nextUsePass = !usePass;
+                        setUsePass(nextUsePass);
+                        if (nextUsePass) {
+                          setForm((current) => ({
+                            ...current,
+                            discount: 0,
+                            appliedBenefitType: null,
+                          }));
+                        }
+                      }}
+                      disabled={!stationPassAllowed || !passDateAllowed}
                       style={{
                         width: 44, height: 24, borderRadius: 12,
                         background: usePass ? PASS_COLOR[activePass.passType] : 'rgba(255,255,255,0.1)',
-                        border: 'none', cursor: stationPassAllowed ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background 0.2s', flexShrink: 0,
-                        opacity: stationPassAllowed ? 1 : 0.5,
+                        border: 'none', cursor: stationPassAllowed && passDateAllowed ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                        opacity: stationPassAllowed && passDateAllowed ? 1 : 0.5,
                       }}
                     >
                       <span style={{
@@ -814,6 +914,11 @@ export default function WalkinBookingPage() {
                       }} />
                     </button>
                   </div>
+                  {!passDateAllowed && (
+                    <div style={{ fontSize: '0.78rem', color: '#f59e0b' }}>
+                      Passes are available Monday through Friday only.
+                    </div>
+                  )}
                   {usePass && (
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', display: 'flex', gap: 16 }}>
                       <span>✅ Session cost: <s style={{ opacity: 0.5 }}>{selectedStation ? `₹${(selectedStation.hourlyRate * form.duration).toLocaleString('en-IN')}` : '—'}</s> <strong style={{ color: 'var(--color-accent-success)' }}>₹0</strong></span>
@@ -861,6 +966,11 @@ export default function WalkinBookingPage() {
                             </span>
                           )}
                           {formatCurrency(estimatedTotal)} — Pay at counter
+                          {form.appliedBenefitType && (
+                            <span style={{ display: 'block', marginTop: 2, fontFamily: 'inherit', fontSize: '0.72rem', color: '#4ade80' }}>
+                              {guildMembershipName(form.appliedBenefitType)} discount
+                            </span>
+                          )}
                         </>
                     }
                   </div>

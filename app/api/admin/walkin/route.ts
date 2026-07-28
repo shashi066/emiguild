@@ -5,6 +5,14 @@ import { addHours } from '@/lib/utils';
 import { notifyAdminNewBooking } from '@/lib/notify';
 import { z } from 'zod';
 import { encryptPhone } from '@/lib/crypto';
+import { isPassDateEligible, PASS_WEEKDAY_ONLY_ERROR } from '@/lib/pass-rules';
+import {
+  isGuildMembershipType,
+  validateGuildBenefitApplication,
+} from '@/lib/guild-membership';
+import { findActiveGuildMembership } from '@/lib/guild-membership-server';
+import { validateAdminWalkinTime } from '@/lib/admin-walkin-time';
+import { adminGameRequestSchema } from '@/lib/game-request';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -23,7 +31,7 @@ const walkinSchema = z.object({
   startTime:        z.string().regex(/^\d{2}:\d{2}$/),
   duration:         z.number().min(0.5).max(12).refine((v) => v % 0.5 === 0, 'Duration must be in 30-min increments'),
   extraControllers: z.number().int().min(0).max(3).optional(),
-  notes:            z.string().optional(),
+  notes:            adminGameRequestSchema,
   status:           z.enum(['PENDING', 'CONFIRMED']).optional(),
   usePass:          z.boolean().optional(),
   linkedUserId:     z.string().nullable().optional(), // registered user linked to this walk-in
@@ -80,6 +88,13 @@ export async function POST(req: NextRequest) {
     }
 
     const { customerName, customerPhone, stationId, date, startTime, duration, notes, status, extraControllers: rawExtra } = result.data;
+    const timeValidation = validateAdminWalkinTime(startTime, duration);
+    if (!timeValidation.valid) {
+      return NextResponse.json(
+        { error: timeValidation.reason, code: timeValidation.code },
+        { status: 400 },
+      );
+    }
     const endTime = addHours(startTime, duration);
     const extraControllers = Math.min(3, Math.max(0, rawExtra ?? 0));
     const passId: string | null = typeof body.passId === 'string' ? body.passId : null;
@@ -140,6 +155,48 @@ export async function POST(req: NextRequest) {
 
     const { usePass, linkedUserId } = result.data;
     const discount: number = Math.min(100, Math.max(0, parseInt(String(body.discount ?? 0)) || 0));
+    const requestedBenefit = body.appliedBenefitType;
+
+    if (usePass && discount > 0) {
+      return NextResponse.json(
+        { error: 'A pass cannot be combined with another discount.', code: 'BENEFIT_STACKING' },
+        { status: 400 }
+      );
+    }
+    if (usePass && !linkedUserId) {
+      return NextResponse.json(
+        { error: 'A registered user must be linked to use a pass.' },
+        { status: 400 }
+      );
+    }
+
+    const activeMembership = linkedUserId
+      ? await findActiveGuildMembership(linkedUserId)
+      : null;
+    let appliedBenefitType: string | null = null;
+
+    if (requestedBenefit != null) {
+      const requestedMembership = linkedUserId && isGuildMembershipType(requestedBenefit)
+        ? await findActiveGuildMembership(linkedUserId, requestedBenefit)
+        : null;
+      const validation = validateGuildBenefitApplication({
+        requestedBenefit,
+        membership: requestedMembership,
+        bookingDate: date,
+        hasControllers: station.hasControllers,
+        extraControllers: safeExtraControllers,
+        discount,
+        hasLinkedUser: Boolean(linkedUserId),
+        hasHourPass: Boolean(usePass),
+      });
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.reason, code: validation.code },
+          { status: 400 }
+        );
+      }
+      appliedBenefitType = validation.benefitType;
+    }
 
     // Fetch controller price from settings
     let controllerUnitPrice = 0;
@@ -153,6 +210,13 @@ export async function POST(req: NextRequest) {
     let userPassId: string | null = null;
     let passHoursDeducted = 0;
     let sessionPrice = station.hourlyRate * duration;
+
+    if (usePass && !isPassDateEligible(date)) {
+      return NextResponse.json(
+        { error: PASS_WEEKDAY_ONLY_ERROR, code: 'PASS_WEEKDAY_ONLY' },
+        { status: 400 }
+      );
+    }
 
     if (usePass && linkedUserId) {
       const now = new Date();
@@ -218,9 +282,10 @@ export async function POST(req: NextRequest) {
         extraControllers: safeExtraControllers,
         controllerCharge,
         discount,
-        notes:            notes ?? null,
+        notes:            notes || null,
         userPassId,
         passHoursDeducted,
+        appliedBenefitType,
       },
       include: {
         station: { select: { id: true, name: true } },
@@ -242,6 +307,10 @@ export async function POST(req: NextRequest) {
       discount,
       bookingType:      'OFFLINE',
       extraControllers: booking.extraControllers,
+      membershipType: activeMembership?.passType ?? null,
+      membershipExpiresAt: activeMembership?.expiresAt ?? null,
+      appliedBenefitType,
+      normalPrice: station.hourlyRate * duration + controllerCharge,
       notes:            booking.notes,
     });
 

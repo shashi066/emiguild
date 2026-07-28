@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -13,6 +13,14 @@ import {
   formatCurrency, getTodayString, toLocalDateString, isSlotAvailable, addHours, getTimeSlotsForDate,
   getDurationOptions,
 } from '@/lib/utils';
+import { isPassDateEligible } from '@/lib/pass-rules';
+import {
+  getGuildMembershipEligibility,
+  guildMembershipName,
+  isGuildMembershipType,
+  selectPreferredGuildMembership,
+} from '@/lib/guild-membership';
+import { CUSTOMER_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
 
 type Station = {
   id: string;
@@ -60,7 +68,8 @@ export default function BookPageInner() {
   const [notes, setNotes]                       = useState('');
   const [usePass, setUsePass]                   = useState(false);
   const [activePasses, setActivePasses]         = useState<Array<{
-    id: string; passType: string; totalHours: number; usedHours: number; expiresAt: string;
+    id: string; passType: string; totalHours: number; usedHours: number;
+    status: string; purchasedAt: string; expiresAt: string;
   }>>([]);
 
   const controllerSectionRef = useRef<HTMLDivElement>(null);
@@ -127,19 +136,28 @@ export default function BookPageInner() {
   const sessionCost = selectedStation ? selectedStation.hourlyRate * selectedDuration : 0;
   const totalPrice = (usePass ? 0 : sessionCost) + controllerCharge;
   const stationPassAllowed = selectedStation != null;
+  const hourPasses = activePasses.filter((pass) => !isGuildMembershipType(pass.passType));
   const compatiblePass = selectedStation
-    ? activePasses.find((pass) =>
+    ? hourPasses.find((pass) =>
         selectedStation.hasControllers
           ? ['BRONZE', 'SILVER', 'GOLD'].includes(pass.passType)
           : ['BLACK', 'APEX'].includes(pass.passType)
       ) ?? null
     : null;
+  const passDateAllowed = isPassDateEligible(selectedDate);
+  const activeMembership = selectPreferredGuildMembership(activePasses);
+  const membershipEligibility = getGuildMembershipEligibility({
+    membership: activeMembership,
+    bookingDate: selectedDate,
+    hasControllers: selectedStation?.hasControllers ?? false,
+    extraControllers,
+  });
 
   useEffect(() => {
-    if (!compatiblePass && usePass) {
+    if ((!compatiblePass || !passDateAllowed) && usePass) {
       setUsePass(false);
     }
-  }, [compatiblePass, usePass]);
+  }, [compatiblePass, passDateAllowed, usePass]);
 
   const handleSubmit = async () => {
     if (!session) {
@@ -220,9 +238,8 @@ export default function BookPageInner() {
         {/* Step Indicators */}
         <div className="booking-steps" style={{ marginBottom: 'var(--space-2xl)' }}>
           {STEPS.map((s, i) => (
-            <>
+            <Fragment key={s.num}>
               <div
-                key={s.num}
                 className={`booking-step ${step === s.num ? 'active' : step > s.num ? 'done' : ''}`}
               >
                 <div className="booking-step-num">
@@ -231,9 +248,9 @@ export default function BookPageInner() {
                 <div className="booking-step-label">{s.label}</div>
               </div>
               {i < STEPS.length - 1 && (
-                <div key={`conn-${i}`} className="booking-step-connector" />
+                <div className="booking-step-connector" />
               )}
-            </>
+            </Fragment>
           ))}
         </div>
 
@@ -578,7 +595,7 @@ export default function BookPageInner() {
 
             {selectedTime && (
               <>
-                {activePasses.length > 0 && !compatiblePass && (
+                {hourPasses.length > 0 && !compatiblePass && (
                   <div className="alert alert-info" style={{ marginTop: 'var(--space-lg)' }}>
                     <Award size={16} />
                     {selectedStation?.hasControllers
@@ -587,10 +604,41 @@ export default function BookPageInner() {
                   </div>
                 )}
 
+                {activeMembership && (
+                  <section
+                    aria-label="Active Guild Membership"
+                    style={{
+                      marginTop: 'var(--space-lg)',
+                      padding: '14px 16px',
+                      borderLeft: `3px solid ${activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#60a5fa'}`,
+                      background: membershipEligibility.eligible
+                        ? 'rgba(74,222,128,0.055)'
+                        : 'rgba(245,158,11,0.055)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <strong style={{ color: activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#93c5fd' }}>
+                        {activeMembership.passType === 'GUILD_MASTER' ? '👑' : '⚔️'} {guildMembershipName(activeMembership.passType)} Active
+                      </strong>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                        Expires {new Date(activeMembership.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                      </span>
+                    </div>
+                    <p style={{ margin: '7px 0 3px', fontSize: '0.82rem', color: membershipEligibility.eligible ? '#4ade80' : '#f59e0b', fontWeight: 700 }}>
+                      {membershipEligibility.eligible
+                        ? 'You may be eligible for 50% OFF this booking.'
+                        : membershipEligibility.reason}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                      Active Guild Membership found. GameZone will verify and apply the eligible discount. Only one offer can be used.
+                    </p>
+                  </section>
+                )}
+
                 {/* Pass payment toggle */}
                 {compatiblePass && (() => {
                   const remaining = compatiblePass.totalHours - compatiblePass.usedHours;
-                  const canUse = remaining >= selectedDuration && stationPassAllowed;
+                  const canUse = remaining >= selectedDuration && stationPassAllowed && passDateAllowed;
                   const PASS_COLOR: Record<string, string> = {
                     BRONZE: '#cd7f32',
                     SILVER: '#c0c0c0',
@@ -635,7 +683,9 @@ export default function BookPageInner() {
                               Use {compatiblePass.passType.charAt(0) + compatiblePass.passType.slice(1).toLowerCase()} Pass
                             </div>
                             <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              {canUse
+                              {!passDateAllowed
+                                ? 'Passes are available Monday through Friday only.'
+                                : canUse
                                 ? `${remaining} hrs remaining → ${remaining - selectedDuration} after this session`
                                 : `Only ${remaining} hr(s) left — need ${selectedDuration} hr(s)`}
                             </div>
@@ -785,18 +835,23 @@ export default function BookPageInner() {
               </div>
             </div>
 
-            {/* Notes */}
+            {/* Game request */}
             <div className="form-group" style={{ marginBottom: 'var(--space-lg)' }}>
               <label className="form-label" htmlFor="booking-notes">
-                Special Requests (optional)
+                Game Request <span className="form-optional">(optional)</span>
               </label>
+              <p className="form-helper">
+                Tell us which game to prepare. We will do our best to have it
+                ready, subject to availability and update time.
+              </p>
               <textarea
                 id="booking-notes"
                 className="form-input"
-                placeholder="Any special requirements or requests..."
+                placeholder="e.g. EA Sports FC 26, Tekken 8, GTA V"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                rows={3}
+                maxLength={CUSTOMER_GAME_REQUEST_MAX_LENGTH}
+                rows={2}
                 style={{ resize: 'vertical' }}
               />
             </div>

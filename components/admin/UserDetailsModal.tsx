@@ -21,6 +21,10 @@ import {
 } from 'lucide-react';
 import { decryptPhone } from '@/lib/crypto';
 import { formatCurrency, formatTime } from '@/lib/utils';
+import {
+  guildMembershipName,
+  isGuildMembershipType,
+} from '@/lib/guild-membership';
 
 type UserStub = {
   id: string;
@@ -44,6 +48,7 @@ type BookingPreview = {
   extraControllers: number;
   controllerCharge: number;
   passHoursDeducted: number;
+  appliedBenefitType: string | null;
   station: { name: string };
   userPass: { passType: string } | null;
 };
@@ -148,8 +153,10 @@ function BookingMoment({
 
 function RecentBooking({ booking }: { booking: BookingPreview }) {
   const date = bookingDateParts(booking.date);
-  const passText = booking.passHoursDeducted > 0
-    ? `${booking.userPass?.passType ?? 'Guild'} Pass · ${durationLabel(booking.passHoursDeducted)} used`
+  const passText = booking.appliedBenefitType
+    ? `${guildMembershipName(booking.appliedBenefitType)} · 50% OFF`
+    : booking.passHoursDeducted > 0
+      ? `${booking.userPass?.passType ?? 'Guild'} Pass · ${durationLabel(booking.passHoursDeducted)} used`
     : booking.paymentStatus === 'PAID'
       ? 'Paid'
       : 'At counter';
@@ -443,6 +450,7 @@ export function UserDetailsModal({
                     {details.activePasses.length > 0 ? (
                       <div className="user-detail-passes">
                         {details.activePasses.map((pass) => {
+                          const membership = isGuildMembershipType(pass.passType);
                           const remainingPercent = pass.totalHours > 0
                             ? Math.min(100, (pass.remainingHours / pass.totalHours) * 100)
                             : 0;
@@ -450,15 +458,23 @@ export function UserDetailsModal({
                             <div key={pass.id}>
                               <span className="user-detail-pass-icon"><Award size={15} /></span>
                               <p>
-                                <strong>{pass.passType} Pass</strong>
+                                <strong>
+                                  {membership ? guildMembershipName(pass.passType) : `${pass.passType} Pass`}
+                                </strong>
                                 <small>
-                                  {pass.remainingHours.toLocaleString('en-IN', { maximumFractionDigits: 1 })}h remaining
+                                  {membership
+                                    ? pass.passType === 'GUILD_MASTER'
+                                      ? '50% off solo and squad PS5 every day'
+                                      : '50% off solo PS5 every day'
+                                    : `${pass.remainingHours.toLocaleString('en-IN', { maximumFractionDigits: 1 })}h remaining`}
                                   {' · '}
                                   expires {joinedDate(pass.expiresAt)}
                                 </small>
-                                <span className="user-detail-pass-progress">
-                                  <i style={{ width: `${remainingPercent}%` }} />
-                                </span>
+                                {!membership && (
+                                  <span className="user-detail-pass-progress">
+                                    <i style={{ width: `${remainingPercent}%` }} />
+                                  </span>
+                                )}
                               </p>
                             </div>
                           );

@@ -4,9 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   BookOpen, Calendar, Clock, Monitor, IndianRupee,
-  XCircle, AlertCircle, CheckCircle, Plus, Award,
+  XCircle, AlertCircle, CheckCircle, Plus, Award, Crown, Sword, Gamepad2,
 } from 'lucide-react';
 import { formatTime, formatDate, formatCurrency, getTodayString } from '@/lib/utils';
+import {
+  guildMembershipName,
+  isGuildMembershipType,
+} from '@/lib/guild-membership';
 
 type Booking = {
   id: string;
@@ -19,12 +23,14 @@ type Booking = {
   notes?: string;
   adminComment?: string | null;
   passHoursDeducted?: number;
+  discount: number;
+  appliedBenefitType: string | null;
   station: { id: string; name: string };
 };
 
 type ActivePass = {
   id: string;
-  passType: 'BRONZE' | 'SILVER' | 'GOLD' | 'BLACK' | 'APEX';
+  passType: string;
   totalHours: number;
   usedHours: number;
   price: number;
@@ -57,7 +63,7 @@ const PASS_ICON: Record<string, string> = { BRONZE: '🥉', SILVER: '🥈', GOLD
 
 export default function MyBookingsPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
-  const [activePasses, setActivePasses] = useState<ActivePass[]>([]);
+  const [userPasses, setUserPasses] = useState<ActivePass[]>([]);
   const [loading, setLoading]         = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [error, setError]             = useState('');
@@ -68,12 +74,12 @@ export default function MyBookingsPage() {
     try {
       const [bRes, pRes] = await Promise.all([
         fetch('/api/bookings?limit=50'),
-        fetch('/api/user/pass'),
+        fetch('/api/user/pass?history=1'),
       ]);
       const bData = await bRes.json();
       const pData = pRes.ok ? await pRes.json() : { passes: [] };
       setBookings(bData.bookings ?? []);
-      setActivePasses(pData.passes ?? []);
+      setUserPasses(pData.passes ?? []);
     } catch {
       setError('Failed to load data.');
     } finally {
@@ -95,9 +101,9 @@ export default function MyBookingsPage() {
       if (res.ok) {
         setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'CANCELLED' } : b)));
         // Refresh pass in case hours were restored
-        const pRes = await fetch('/api/user/pass');
+        const pRes = await fetch('/api/user/pass?history=1');
         const pData = await pRes.json();
-        setActivePasses(pData.passes ?? []);
+        setUserPasses(pData.passes ?? []);
       }
     } finally {
       setCancellingId(null);
@@ -152,7 +158,7 @@ export default function MyBookingsPage() {
         <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-xl)', flexWrap: 'wrap' }}>
           <TabBtn tab="upcoming" label="Upcoming" count={upcoming.length} />
           <TabBtn tab="past"     label="Past & Cancelled" count={past.length} />
-          <TabBtn tab="pass"     label="My Pass" />
+          <TabBtn tab="pass"     label="My Passes" />
         </div>
 
         {/* ── Bookings list ── */}
@@ -184,6 +190,7 @@ export default function MyBookingsPage() {
                 const cfg = STATUS_CONFIG[booking.status];
                 const Icon = cfg.icon;
                 const usedPass = (booking.passHoursDeducted ?? 0) > 0;
+                const usedMembership = isGuildMembershipType(booking.appliedBenefitType);
                 return (
                   <div key={booking.id} className="card card-hover" style={{ padding: 'var(--space-lg)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
@@ -194,6 +201,11 @@ export default function MyBookingsPage() {
                           {usedPass && (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700' }}>
                               <Award size={10} /> Pass
+                            </span>
+                          )}
+                          {usedMembership && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.28)', color: '#4ade80' }}>
+                              <Award size={10} /> {guildMembershipName(booking.appliedBenefitType!)}
                             </span>
                           )}
                         </div>
@@ -208,7 +220,12 @@ export default function MyBookingsPage() {
                             <Monitor size={14} style={{ color: 'var(--color-accent-primary)' }} />{booking.duration} hr{booking.duration > 1 ? 's' : ''}
                           </span>
                         </div>
-                        {booking.notes && <p style={{ marginTop: 'var(--space-sm)', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Note: {booking.notes}</p>}
+                        {booking.notes && (
+                          <div className="game-request-note">
+                            <Gamepad2 size={13} aria-hidden="true" />
+                            <span><strong>Game requested:</strong> {booking.notes}</span>
+                          </div>
+                        )}
                         {booking.status === 'CANCELLED' && booking.adminComment && (
                           <div style={{ marginTop: 'var(--space-sm)', padding: '8px 12px', background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', color: 'var(--color-accent-error)' }}>
                             <strong>Admin note:</strong> {booking.adminComment}
@@ -229,6 +246,11 @@ export default function MyBookingsPage() {
                               <IndianRupee size={16} />{booking.totalPrice.toLocaleString()}
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Pay at counter</div>
+                            {usedMembership && (
+                              <div style={{ marginTop: 2, fontSize: '0.72rem', color: '#4ade80', fontWeight: 700 }}>
+                                {booking.discount}% Guild discount applied
+                              </div>
+                            )}
                           </div>
                         )}
                         {canCancel(booking) && (
@@ -249,12 +271,12 @@ export default function MyBookingsPage() {
         {activeTab === 'pass' && (
           loading ? (
             <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-text-muted)' }}>Loading...</div>
-          ) : activePasses.length === 0 ? (
+          ) : userPasses.length === 0 ? (
             <div className="card">
               <div className="empty-state">
                 <div className="empty-state-icon"><Award size={32} style={{ color: '#FFD700' }} /></div>
-                <div className="empty-state-title">No Active Pass</div>
-                <p className="empty-state-text">You don't have a monthly pass yet. Visit our guild to purchase one!</p>
+                <div className="empty-state-title">No Passes Yet</div>
+                <p className="empty-state-text">You don't have a pass or Guild Membership yet. Visit our guild to join!</p>
                 <Link href="/passes" className="btn btn-primary" style={{ marginTop: 'var(--space-md)' }}>
                   View Pass Plans
                 </Link>
@@ -262,13 +284,21 @@ export default function MyBookingsPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {activePasses.map((activePass) => {
-                const color   = PASS_COLOR[activePass.passType];
-                const icon    = PASS_ICON[activePass.passType];
-                const remaining = activePass.totalHours - activePass.usedHours;
-                const pct     = Math.min(100, (activePass.usedHours / activePass.totalHours) * 100);
+              {userPasses.map((activePass) => {
+                const membership = isGuildMembershipType(activePass.passType);
+                const color = membership
+                  ? activePass.passType === 'GUILD_MASTER' ? '#f4cf58' : '#60a5fa'
+                  : PASS_COLOR[activePass.passType] ?? '#c0c0c0';
+                const icon = PASS_ICON[activePass.passType] ?? '🎟️';
+                const remaining = Math.max(0, activePass.totalHours - activePass.usedHours);
+                const pct = activePass.totalHours > 0
+                  ? Math.min(100, (activePass.usedHours / activePass.totalHours) * 100)
+                  : 0;
                 const expires = new Date(activePass.expiresAt);
                 const daysLeft = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / 86400000));
+                const active = activePass.status === 'ACTIVE' && expires >= new Date();
+                const statusLabel = activePass.status === 'REVOKED' ? 'CANCELLED' : activePass.status;
+                const membershipName = guildMembershipName(activePass.passType);
 
                 return (
                   <div key={activePass.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -277,47 +307,84 @@ export default function MyBookingsPage() {
                       <div style={{ position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
                           <div>
-                            <div style={{ fontSize: '2.5rem', marginBottom: 6 }}>{icon}</div>
-                            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>{activePass.passType.charAt(0) + activePass.passType.slice(1).toLowerCase()} Pass</div>
+                            <div style={{ width: 44, height: 44, display: 'grid', placeItems: 'center', marginBottom: 8, color }}>
+                              {membership
+                                ? activePass.passType === 'GUILD_MASTER'
+                                  ? <Crown size={34} aria-hidden="true" />
+                                  : <Sword size={34} aria-hidden="true" />
+                                : <span style={{ fontSize: '2.3rem' }}>{icon}</span>}
+                            </div>
+                            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                              {membership
+                                ? membershipName
+                                : `${activePass.passType.charAt(0) + activePass.passType.slice(1).toLowerCase()} Pass`}
+                            </div>
                             <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              Purchased {new Date(activePass.purchasedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} · ₹{activePass.price.toLocaleString('en-IN')}
+                              Activated {new Date(activePass.purchasedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} · ₹{activePass.price.toLocaleString('en-IN')}
                             </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: '999px', background: activePass.status === 'ACTIVE' ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${activePass.status === 'ACTIVE' ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: '0.78rem', fontWeight: 700, color: activePass.status === 'ACTIVE' ? '#4ade80' : '#ef4444' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: '999px', background: active ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${active ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: '0.78rem', fontWeight: 700, color: active ? '#4ade80' : '#ef4444' }}>
                               <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
-                              {activePass.status}
+                              {statusLabel}
                             </div>
                             <div style={{ marginTop: 6, fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
                               Expires {expires.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                              {daysLeft <= 7 && <span style={{ color: '#f59e0b', marginLeft: 4 }}>({daysLeft} days left)</span>}
+                              {active && (membership || daysLeft <= 7) && (
+                                <span style={{ color: daysLeft <= 7 ? '#f59e0b' : 'var(--color-text-muted)', marginLeft: 4 }}>
+                                  ({daysLeft} days left)
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
 
-                        <div style={{ marginBottom: 16 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                            <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>Hours used</span>
-                            <span style={{ fontSize: '0.875rem', fontWeight: 700, color }}>
-                              {activePass.usedHours} / {activePass.totalHours} hrs
-                            </span>
+                        {membership ? (
+                          <div style={{ marginBottom: 16, padding: '12px 14px', borderLeft: `3px solid ${color}`, background: `${color}0b` }}>
+                            <div style={{ color, fontWeight: 800, fontSize: '0.82rem', marginBottom: 4 }}>Membership Benefit</div>
+                            <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.84rem', lineHeight: 1.55 }}>
+                              {activePass.passType === 'GUILD_MASTER'
+                                ? '50% OFF eligible solo and squad PS5 bookings every day.'
+                                : '50% OFF eligible solo PS5 bookings every day.'}
+                            </div>
+                            <div style={{ marginTop: 5, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                              GameZone verifies and manually applies the discount. Cannot be combined with other offers.
+                            </div>
                           </div>
-                          <div style={{ height: 10, background: 'rgba(255,255,255,0.08)', borderRadius: 5, overflow: 'hidden' }}>
-                            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${color}99, ${color})`, borderRadius: 5, transition: 'width 0.5s' }} />
+                        ) : (
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>Hours used</span>
+                              <span style={{ fontSize: '0.875rem', fontWeight: 700, color }}>
+                                {activePass.usedHours} / {activePass.totalHours} hrs
+                              </span>
+                            </div>
+                            <div style={{ height: 10, background: 'rgba(255,255,255,0.08)', borderRadius: 5, overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${color}99, ${color})`, borderRadius: 5 }} />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{activePass.usedHours} hrs used</span>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color }}>{remaining} hrs remaining</span>
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{activePass.usedHours} hrs used</span>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color }}>{remaining} hrs remaining</span>
-                          </div>
-                        </div>
+                        )}
 
-                        <Link href="/book" className="btn btn-primary" style={{ display: 'inline-flex' }}>
-                          <Calendar size={16} /> Book a Session with Pass
-                        </Link>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {active && (
+                            <Link href="/book" className="btn btn-primary" style={{ display: 'inline-flex' }}>
+                              <Calendar size={16} /> {membership ? 'Book a PS5 Session' : 'Book a Session with Pass'}
+                            </Link>
+                          )}
+                          {membership && (!active || daysLeft <= 7) && (
+                            <a href="tel:+919989562474" className="btn btn-ghost" style={{ display: 'inline-flex' }}>
+                              Renew Membership
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {activePass.bookings.length > 0 && (
+                    {!membership && activePass.bookings.length > 0 && (
                       <div>
                         <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
                           Sessions Used with This Pass

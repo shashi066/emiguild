@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import ScrollToSection from '@/components/ScrollToSection';
 import HeroActions from '@/components/HeroActions';
+import { StationAvailabilityBoard } from '@/components/StationAvailabilityBoard';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { formatCurrency } from '@/lib/utils';
@@ -220,6 +221,8 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      <StationAvailabilityBoard mode="public" />
 
       {/* ── FEATURES ─────────────────────────────────────── */}
       <section className="section" style={{ background: 'var(--color-bg-surface)' }}>

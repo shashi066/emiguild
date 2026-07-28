@@ -16,6 +16,7 @@ interface Booking {
   endTime: string;
   totalPrice: number;
   extraControllers: number;
+  notes: string | null;
   status: string;
   paymentStatus: string;
   station: { name: string };
@@ -131,6 +132,21 @@ export default function ConfirmationContent() {
                 </div>
                 <div className="booking-detail-value">
                   {booking.extraControllers} extra controller{booking.extraControllers > 1 ? 's' : ''}
+                </div>
+              </div>
+            )}
+            {booking.notes && (
+              <div
+                className="booking-detail-item"
+                style={{ gridColumn: '1 / -1', textAlign: 'left' }}
+              >
+                <div className="booking-detail-label">
+                  <Gamepad2 size={12} style={{ display: 'inline', marginRight: 4 }} />
+                  Game Request
+                </div>
+                <div className="booking-detail-value">{booking.notes}</div>
+                <div className="form-helper" style={{ marginTop: 5 }}>
+                  We will do our best to prepare it before your session.
                 </div>
               </div>
             )}

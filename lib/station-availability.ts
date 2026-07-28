@@ -1,0 +1,292 @@
+export type AvailabilityState = 'AVAILABLE' | 'OCCUPIED' | 'VENUE_FULL';
+
+export type AvailabilityStation = {
+  id: string;
+  name: string;
+  hasControllers: boolean;
+  position: number;
+  isActive?: boolean;
+};
+
+export type AvailabilityBooking = {
+  stationId: string;
+  startTime: string;
+  endTime: string;
+  status?: string;
+};
+
+export type LiveStationStatus = {
+  id: string;
+  name: string;
+  hasControllers: boolean;
+  position: number;
+  state: AvailabilityState;
+  availableAt: string | null;
+  availableUntil: string | null;
+  nextBookingAt: string | null;
+};
+
+export type LiveAvailability = {
+  date: string;
+  currentTime: string;
+  publicOpen: boolean;
+  publicHours: {
+    opensAt: string;
+    closesAt: string;
+  };
+  nextPublicOpenAt: string;
+  venue: {
+    capacity: number;
+    occupiedScreens: number;
+    freeScreens: number;
+  };
+  stations: LiveStationStatus[];
+};
+
+const DEFAULT_VENUE_CAPACITY = 2;
+const PUBLIC_WEEKDAY_OPEN_MINUTES = 16 * 60;
+const PUBLIC_WEEKEND_OPEN_MINUTES = 11 * 60;
+const CLOSING_MINUTES = 23 * 60;
+
+function parseTime(time: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (
+    !Number.isInteger(hours)
+    || !Number.isInteger(minutes)
+    || hours < 0
+    || hours > 24
+    || minutes < 0
+    || minutes > 59
+    || (hours === 24 && minutes !== 0)
+  ) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+function formatTime(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function addDays(date: string, days: number) {
+  const [year, month, day] = date.split('-').map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  return [
+    next.getUTCFullYear(),
+    String(next.getUTCMonth() + 1).padStart(2, '0'),
+    String(next.getUTCDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function publicOpeningMinutes(date: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return weekday === 0 || weekday === 6
+    ? PUBLIC_WEEKEND_OPEN_MINUTES
+    : PUBLIC_WEEKDAY_OPEN_MINUTES;
+}
+
+function normalizedCapacity(value: number) {
+  return Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_VENUE_CAPACITY;
+}
+
+type ParsedBooking = AvailabilityBooking & {
+  start: number;
+  end: number;
+};
+
+function parseBookings(bookings: AvailabilityBooking[]) {
+  return bookings.flatMap((booking): ParsedBooking[] => {
+    if (booking.status === 'CANCELLED') return [];
+    const start = parseTime(booking.startTime);
+    const end = parseTime(booking.endTime);
+    if (start == null || end == null || end <= start) return [];
+    return [{ ...booking, start, end }];
+  });
+}
+
+function isActiveAt(booking: ParsedBooking, minute: number) {
+  return booking.start <= minute && minute < booking.end;
+}
+
+function stateAt(
+  stationId: string,
+  minute: number,
+  bookings: ParsedBooking[],
+  capacity: number,
+): AvailabilityState {
+  const active = bookings.filter((booking) => isActiveAt(booking, minute));
+  if (active.some((booking) => booking.stationId === stationId)) {
+    return 'OCCUPIED';
+  }
+  return active.length >= capacity ? 'VENUE_FULL' : 'AVAILABLE';
+}
+
+function changeBoundaries(bookings: ParsedBooking[], currentMinutes: number) {
+  return [...new Set([
+    ...bookings.flatMap((booking) => [booking.start, booking.end]),
+    CLOSING_MINUTES,
+  ])]
+    .filter((minute) => minute > currentMinutes && minute <= CLOSING_MINUTES)
+    .sort((left, right) => left - right);
+}
+
+function nextStateChange(
+  stationId: string,
+  currentMinutes: number,
+  currentState: AvailabilityState,
+  bookings: ParsedBooking[],
+  capacity: number,
+) {
+  for (const minute of changeBoundaries(bookings, currentMinutes)) {
+    if (minute === CLOSING_MINUTES) return minute;
+    if (stateAt(stationId, minute, bookings, capacity) !== currentState) {
+      return minute;
+    }
+  }
+  return null;
+}
+
+function nextAvailableMinute(
+  stationId: string,
+  currentMinutes: number,
+  bookings: ParsedBooking[],
+  capacity: number,
+) {
+  for (const minute of changeBoundaries(bookings, currentMinutes)) {
+    if (
+      minute < CLOSING_MINUTES
+      && stateAt(stationId, minute, bookings, capacity) === 'AVAILABLE'
+    ) {
+      return minute;
+    }
+  }
+  return null;
+}
+
+export function getISTClock(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? '';
+
+  return {
+    date: `${part('year')}-${part('month')}-${part('day')}`,
+    time: `${part('hour')}:${part('minute')}`,
+  };
+}
+
+export function buildLiveStationAvailability({
+  stations,
+  bookings,
+  venueCapacity,
+  date,
+  currentTime,
+}: {
+  stations: AvailabilityStation[];
+  bookings: AvailabilityBooking[];
+  venueCapacity: number;
+  date: string;
+  currentTime: string;
+}): LiveAvailability {
+  const currentMinutes = parseTime(currentTime) ?? 0;
+  const capacity = normalizedCapacity(venueCapacity);
+  const parsedBookings = parseBookings(bookings);
+  const activeNow = parsedBookings.filter((booking) =>
+    isActiveAt(booking, currentMinutes)
+  );
+  const opensAtMinutes = publicOpeningMinutes(date);
+  const publicOpen = (
+    currentMinutes >= opensAtMinutes
+    && currentMinutes < CLOSING_MINUTES
+  );
+  const nextOpenDate = currentMinutes < opensAtMinutes ? date : addDays(date, 1);
+  const nextOpenMinutes = publicOpeningMinutes(nextOpenDate);
+
+  const stationStatuses = stations
+    .filter((station) => station.isActive !== false)
+    .sort((left, right) => left.position - right.position)
+    .map((station): LiveStationStatus => {
+      const state = stateAt(
+        station.id,
+        currentMinutes,
+        parsedBookings,
+        capacity,
+      );
+      const nextBooking = parsedBookings
+        .filter((booking) =>
+          booking.stationId === station.id
+          && booking.start > currentMinutes
+          && booking.start < CLOSING_MINUTES
+        )
+        .sort((left, right) => left.start - right.start)[0];
+
+      const availableAt = state === 'AVAILABLE'
+        ? null
+        : nextAvailableMinute(
+            station.id,
+            currentMinutes,
+            parsedBookings,
+            capacity,
+          );
+      const availableUntil = state === 'AVAILABLE'
+        ? nextStateChange(
+            station.id,
+            currentMinutes,
+            state,
+            parsedBookings,
+            capacity,
+          )
+        : null;
+
+      return {
+        id: station.id,
+        name: station.name,
+        hasControllers: station.hasControllers,
+        position: station.position,
+        state,
+        availableAt: availableAt == null ? null : formatTime(availableAt),
+        availableUntil: availableUntil == null
+          ? null
+          : formatTime(availableUntil),
+        nextBookingAt: nextBooking ? formatTime(nextBooking.start) : null,
+      };
+    });
+
+  const occupiedScreens = Math.min(activeNow.length, capacity);
+
+  return {
+    date,
+    currentTime: formatTime(currentMinutes),
+    publicOpen,
+    publicHours: {
+      opensAt: formatTime(opensAtMinutes),
+      closesAt: formatTime(CLOSING_MINUTES),
+    },
+    nextPublicOpenAt:
+      `${nextOpenDate}T${formatTime(nextOpenMinutes)}:00+05:30`,
+    venue: {
+      capacity,
+      occupiedScreens,
+      freeScreens: Math.max(0, capacity - occupiedScreens),
+    },
+    stations: stationStatuses,
+  };
+}
