@@ -10,18 +10,15 @@ import {
   Monitor,
   UserPlus,
 } from 'lucide-react';
-import { formatTime } from '@/lib/utils';
-import type {
-  AvailabilityState,
-  LiveAvailability,
-  LiveStationStatus,
-} from '@/lib/station-availability';
+import type { LiveAvailability } from '@/lib/station-availability';
+import {
+  getStationStatusCopy,
+  type StationDisplayState,
+} from '@/components/stationAvailabilityCopy';
 
 type AvailabilityResponse = LiveAvailability & {
   asOf: string;
 };
-
-type DisplayState = AvailabilityState | 'CLOSED';
 
 function nextOpeningLabel(value: string) {
   const opening = new Date(value);
@@ -32,41 +29,6 @@ function nextOpeningLabel(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   });
-}
-
-function stationStatusCopy(
-  station: LiveStationStatus,
-  state: DisplayState,
-  nextOpening: string,
-) {
-  if (state === 'CLOSED') {
-    return {
-      label: 'Closed',
-      detail: `Opens ${nextOpening}`,
-    };
-  }
-  if (state === 'OCCUPIED') {
-    return {
-      label: 'In session',
-      detail: station.availableAt
-        ? `Free at ${formatTime(station.availableAt)}`
-        : 'Booked through closing',
-    };
-  }
-  if (state === 'VENUE_FULL') {
-    return {
-      label: 'Venue full',
-      detail: station.availableAt
-        ? `Capacity opens at ${formatTime(station.availableAt)}`
-        : 'No opening before close',
-    };
-  }
-  return {
-    label: 'Available now',
-    detail: station.availableUntil
-      ? `Available until ${formatTime(station.availableUntil)}`
-      : 'Open for bookings',
-  };
 }
 
 export function StationAvailabilityBoard({
@@ -149,7 +111,7 @@ export function StationAvailabilityBoard({
       );
     }
 
-    const publicClosed = mode === 'public' && !availability.publicOpen;
+    const publicClosed = !availability.publicOpen;
     const openingLabel = nextOpeningLabel(availability.nextPublicOpenAt);
     const venueLabel = publicClosed
       ? `Closed now · Opens ${openingLabel}`
@@ -208,13 +170,14 @@ export function StationAvailabilityBoard({
         ) : (
           <div className="station-availability-list">
             {availability.stations.map((station) => {
-              const displayState: DisplayState = publicClosed
+              const displayState: StationDisplayState = publicClosed
                 ? 'CLOSED'
                 : station.state;
-              const copy = stationStatusCopy(
+              const copy = getStationStatusCopy(
                 station,
                 displayState,
                 openingLabel,
+                availability.publicHours.closesAt,
               );
 
               return (

@@ -10,6 +10,10 @@ import {
   GUILD_MEMBERSHIP_TYPES,
   selectPreferredGuildMembership,
 } from '@/lib/guild-membership';
+import {
+  isBookingStartPastInIndia,
+  validatePublicBookingTime,
+} from '@/lib/public-booking-time';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -119,13 +123,21 @@ export async function POST(req: NextRequest) {
     }
 
     const { stationId, date, startTime, duration, notes } = result.data;
+    const timeValidation = validatePublicBookingTime(date, startTime, duration);
+    if (!timeValidation.valid) {
+      return NextResponse.json(
+        { error: timeValidation.reason, code: timeValidation.code },
+        { status: 400 },
+      );
+    }
+
+    const requestTime = new Date();
     const endTime = addHours(startTime, duration);
     const extraControllers = Math.min(3, Math.max(0, parseInt(String(body.extraControllers ?? 0))));
     const usePass: boolean = body.usePass === true;
     const passId: string | null = typeof body.passId === 'string' ? body.passId : null;
 
     // Check station exists and fetch the booking user's profile in parallel
-    const requestTime = new Date();
     const [station, bookingUser] = await Promise.all([
       prisma.station.findUnique({ 
         where: { id: stationId },
@@ -168,20 +180,14 @@ export async function POST(req: NextRequest) {
     const safeExtraControllers = station.hasControllers ? extraControllers : 0;
 
     // Reject bookings only if slot start is more than 15 mins in the past (skip for admins)
-    if (!isAdmin) {
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-      if (date === todayStr) {
-        const [slotHour, slotMin] = startTime.split(':').map(Number);
-        const slotTotalMins = slotHour * 60 + slotMin;
-        const nowTotalMins = today.getHours() * 60 + today.getMinutes();
-        if (slotTotalMins + 15 <= nowTotalMins) {
-          return NextResponse.json(
-            { error: 'Cannot book a time slot that has already passed.' },
-            { status: 400 }
-          );
-        }
-      }
+    if (
+      !isAdmin
+      && isBookingStartPastInIndia(date, startTime)
+    ) {
+      return NextResponse.json(
+        { error: 'Cannot book a time slot that has already passed.' },
+        { status: 400 }
+      );
     }
 
     // Check for conflicts on this specific station

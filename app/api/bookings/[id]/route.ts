@@ -18,6 +18,8 @@ import {
   validateHourPassApplication,
 } from '@/lib/hour-pass';
 import { adminGameRequestSchema } from '@/lib/game-request';
+import { validateAdminWalkinTime } from '@/lib/admin-walkin-time';
+import { validatePublicBookingTime } from '@/lib/public-booking-time';
 
 type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
 
@@ -259,6 +261,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     || !Number.isFinite(requestedControllers)
   ) {
     return NextResponse.json({ error: 'date, stationId, startTime and duration are required' }, { status: 400 });
+  }
+
+  const timeValidation = booking.bookingType === 'OFFLINE'
+    ? validateAdminWalkinTime(startTime, duration)
+    : validatePublicBookingTime(date, startTime, duration);
+  if (!timeValidation.valid) {
+    return NextResponse.json(
+      { error: timeValidation.reason, code: timeValidation.code },
+      { status: 400 },
+    );
   }
 
   let benefitMode: BookingBenefitMode;

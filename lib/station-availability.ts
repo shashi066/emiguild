@@ -1,3 +1,10 @@
+import {
+  PUBLIC_BOOKING_CLOSE_MINUTES,
+  PUBLIC_WEEKDAY_OPEN_MINUTES,
+  getIndiaClock,
+  getPublicBookingHoursForDate,
+} from '@/lib/public-booking-time';
+
 export type AvailabilityState = 'AVAILABLE' | 'OCCUPIED' | 'VENUE_FULL';
 
 export type AvailabilityStation = {
@@ -44,9 +51,7 @@ export type LiveAvailability = {
 };
 
 const DEFAULT_VENUE_CAPACITY = 2;
-const PUBLIC_WEEKDAY_OPEN_MINUTES = 16 * 60;
-const PUBLIC_WEEKEND_OPEN_MINUTES = 11 * 60;
-const CLOSING_MINUTES = 23 * 60;
+const CLOSING_MINUTES = PUBLIC_BOOKING_CLOSE_MINUTES;
 
 function parseTime(time: string) {
   const match = /^(\d{2}):(\d{2})$/.exec(time);
@@ -86,11 +91,8 @@ function addDays(date: string, days: number) {
 }
 
 function publicOpeningMinutes(date: string) {
-  const [year, month, day] = date.split('-').map(Number);
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return weekday === 0 || weekday === 6
-    ? PUBLIC_WEEKEND_OPEN_MINUTES
-    : PUBLIC_WEEKDAY_OPEN_MINUTES;
+  return getPublicBookingHoursForDate(date)?.openMinutes
+    ?? PUBLIC_WEEKDAY_OPEN_MINUTES;
 }
 
 function normalizedCapacity(value: number) {
@@ -174,23 +176,8 @@ function nextAvailableMinute(
 }
 
 export function getISTClock(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(now);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? '';
-
-  return {
-    date: `${part('year')}-${part('month')}-${part('day')}`,
-    time: `${part('hour')}:${part('minute')}`,
-  };
+  const clock = getIndiaClock(now);
+  return { date: clock.date, time: clock.time };
 }
 
 export function buildLiveStationAvailability({

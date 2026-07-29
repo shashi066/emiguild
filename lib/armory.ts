@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { encryptNumber } from '@/lib/crypto';
 import { expireArmoryTradeListings } from '@/lib/armory-marketplace';
+import { getIstDateKey, getNextIstMidnight } from '@/lib/armory-clock';
 
 export const ARMORY_SLOTS = ['HEADGEAR', 'ARMOR', 'GLOVES', 'BOOTS'] as const;
 export type ArmorySlot = typeof ARMORY_SLOTS[number];
@@ -136,15 +137,8 @@ const ARMORY_RARITY_UPGRADE: Record<string, string> = {
   GOLD: 'PLATINUM',
 };
 
-export function getArmoryToday() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const get = (type: string) => parts.find((part) => part.type === type)!.value;
-  return `${get('year')}-${get('month')}-${get('day')}`;
+export function getArmoryToday(now: Date = new Date()) {
+  return getIstDateKey(now);
 }
 
 export function validateDropPercentages(sets: Array<{ active?: boolean; dropPercentage: number }>) {
@@ -240,12 +234,6 @@ export function detectCompleteSet(loadout: Record<ArmorySlot, any | null>) {
 
 function artifactId(setId: string, slot: ArmorySlot) {
   return `${setId}_${slot.toLowerCase()}`;
-}
-
-function nextIstMidnight() {
-  const today = getArmoryToday();
-  const tomorrow = addIsoDays(today, 1);
-  return istDayStart(tomorrow);
 }
 
 function makeTicketCode() {
@@ -494,7 +482,8 @@ export async function getArmoryState(userId: string) {
     ensureArmoryDefaults(),
     expireArmoryTradeListings({ sellerId: userId }),
   ]);
-  const today = getArmoryToday();
+  const serverNow = new Date();
+  const today = getArmoryToday(serverNow);
   const [settings, user, sets, artifacts, inventory, loadout, todayClaim, tickets] = await Promise.all([
     getSettingsMap(),
     prisma.user.findUnique({
@@ -547,6 +536,7 @@ export async function getArmoryState(userId: string) {
 
   return {
     today,
+    serverNow: serverNow.toISOString(),
     guildGems: user?.guildGems ?? 0,
     forge: {
       enabled,
@@ -554,6 +544,7 @@ export async function getArmoryState(userId: string) {
       claimedToday: Boolean(todayClaim),
       todayClaim,
       reason: !enabled ? 'disabled' : todayClaim ? 'claimed' : 'ready',
+      nextResetAt: getNextIstMidnight(serverNow).toISOString(),
     },
     sets,
     artifacts,
@@ -964,7 +955,7 @@ export async function claimArmorySet(userId: string) {
       },
     });
 
-    const expiresAt = nextIstMidnight();
+    const expiresAt = getNextIstMidnight();
     const ticket = await tx.armoryTicket.create({
       data: {
         userId,
@@ -1254,19 +1245,4 @@ export function friendlyArmoryError(error: unknown) {
     TICKET_EXPIRED: { error: 'Ticket has expired.', status: 410 },
   };
   return map[code] ?? { error: 'Armory action failed.', status: 500 };
-}
-
-function istDayStart(date: string) {
-  return new Date(`${date}T00:00:00+05:30`);
-}
-
-function addIsoDays(date: string, days: number) {
-  const start = istDayStart(date);
-  start.setUTCDate(start.getUTCDate() + days);
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(start);
 }

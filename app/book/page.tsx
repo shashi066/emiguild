@@ -7,7 +7,11 @@ export const metadata = {
     'Reserve your gaming station at GameZone Cafe. Choose your date, station, and time slot.',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default function BookPage() {
+  const serverNow = new Date().toISOString();
+
   return (
     <Suspense
       fallback={
@@ -21,7 +25,7 @@ export default function BookPage() {
         </div>
       }
     >
-      <BookPageInner />
+      <BookPageInner serverNow={serverNow} />
     </Suspense>
   );
 }
