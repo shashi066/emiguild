@@ -9,10 +9,14 @@ import {
   ChevronLeft, AlertCircle, Snowflake, Gamepad2, Plus, Minus, Award, ArrowLeft,
 } from 'lucide-react';
 import {
-  TIME_SLOTS, DURATION_OPTIONS, CLOSING_HOUR, formatTime, formatDate,
-  formatCurrency, getTodayString, toLocalDateString, isSlotAvailable, addHours, getTimeSlotsForDate,
+  CLOSING_HOUR, formatTime, formatDate,
+  formatCurrency, isSlotAvailable, addHours, getTimeSlotsForDate,
   getDurationOptions,
 } from '@/lib/utils';
+import {
+  addIndiaCalendarDays,
+  getIndiaClock,
+} from '@/lib/public-booking-time';
 import { isPassDateEligible } from '@/lib/pass-rules';
 import {
   getGuildMembershipEligibility,
@@ -47,10 +51,11 @@ const STEPS = [
   { num: 4, label: 'Confirm', icon: CheckCircle },
 ];
 
-export default function BookPageInner() {
+export default function BookPageInner({ serverNow }: { serverNow: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const initialIndiaClock = getIndiaClock(new Date(serverNow));
 
   const [step, setStep] = useState(1);
   const [stations, setStations] = useState<Station[]>([]);
@@ -59,7 +64,8 @@ export default function BookPageInner() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const [selectedDate, setSelectedDate]         = useState(getTodayString());
+  const [bookingClock, setBookingClock]         = useState(initialIndiaClock);
+  const [selectedDate, setSelectedDate]         = useState(initialIndiaClock.date);
   const [selectedStation, setSelectedStation]   = useState<Station | null>(null);
   const [selectedTime, setSelectedTime]         = useState('');
   const [selectedDuration, setSelectedDuration] = useState<number>(1);
@@ -73,6 +79,44 @@ export default function BookPageInner() {
   }>>([]);
 
   const controllerSectionRef = useRef<HTMLDivElement>(null);
+
+  // Advance the booking UI from the server-rendered instant with a monotonic
+  // browser timer. Device date, time, and timezone changes cannot alter it.
+  useEffect(() => {
+    const serverEpochMs = Date.parse(serverNow);
+    if (!Number.isFinite(serverEpochMs)) return;
+
+    const monotonicAnchorMs = performance.now();
+    const tick = () => {
+      const elapsedMs = Math.max(0, performance.now() - monotonicAnchorMs);
+      const nextClock = getIndiaClock(new Date(serverEpochMs + elapsedMs));
+      setBookingClock((current) => (
+        current.date === nextClock.date
+        && current.time === nextClock.time
+          ? current
+          : nextClock
+      ));
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 15_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [serverNow]);
+
+  useEffect(() => {
+    if (selectedDate >= bookingClock.date) return;
+    setSelectedDate(bookingClock.date);
+    setSelectedTime('');
+  }, [bookingClock.date, selectedDate]);
+
   // Load stations
   useEffect(() => {
     fetch('/api/stations')
@@ -212,10 +256,8 @@ export default function BookPageInner() {
     );
   };
 
-  const today = getTodayString();
-  const maxDate = new Date();
-  maxDate.setDate(maxDate.getDate() + 30);
-  const maxDateStr = toLocalDateString(maxDate);
+  const today = bookingClock.date;
+  const maxDateStr = addIndiaCalendarDays(today, 30) ?? today;
 
   return (
     <div className="page-wrapper">
@@ -296,15 +338,13 @@ export default function BookPageInner() {
               }}
             >
               {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
-                const d = new Date();
-                d.setDate(d.getDate() + offset);
-                const dateStr = toLocalDateString(d);
+                const dateStr = addIndiaCalendarDays(today, offset) ?? today;
                 const label =
                   offset === 0
                     ? 'Today'
                     : offset === 1
                     ? 'Tomorrow'
-                    : d.toLocaleDateString('en-IN', {
+                    : new Date(`${dateStr}T00:00:00+05:30`).toLocaleDateString('en-IN', {
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',
@@ -521,10 +561,13 @@ export default function BookPageInner() {
                     if (slotEndMinsVal > CLOSING_HOUR * 60) return null;
 
                     // Block past slots — allow up to 15 min after slot start
-                    const now = new Date();
-                    const isToday = selectedDate === getTodayString();
-                    const nowMins = now.getHours() * 60 + now.getMinutes();
-                    const isPast = isToday && nowMins > slotStartMinsVal + 15;
+                    const isPast = (
+                      selectedDate < bookingClock.date
+                      || (
+                        selectedDate === bookingClock.date
+                        && slotStartMinsVal + 15 <= bookingClock.minutes
+                      )
+                    );
 
                     // Detect frozen (BLOCKED) vs normal booked overlap
                     const isFrozen = bookedSlots.some((b) => {

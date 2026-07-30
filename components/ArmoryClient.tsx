@@ -1,8 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import {
+  canRetryForgeRefresh,
+  createForgeClockAnchor,
+  formatForgeCountdown,
+  getForgeRefreshRetryAt,
+  getForgeRemainingMs,
+  type ForgeClockAnchor,
+} from '@/lib/armory-clock';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -32,6 +40,15 @@ const FORGE_ANIMATION_MS = 3000;
 const EQUIP_ANIMATION_MS = 900;
 
 type ArmoryActionOverlayType = 'equip' | 'unequip';
+type ArmoryLoadOptions = {
+  force?: boolean;
+  background?: boolean;
+};
+type ArmoryLoadResult = {
+  ok: boolean;
+  applied: boolean;
+  error?: string;
+};
 
 const SLOT_META: Record<string, any> = {
   HEADGEAR: { label: 'Headgear', Icon: Crown },
@@ -121,23 +138,6 @@ function getEquippedSlot(loadout: any, artifactId?: string) {
   return SLOTS.find((slot) => loadout?.[slot]?.id === artifactId) ?? null;
 }
 
-function getNextForgeTimer() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '00';
-  const nextReset = new Date(`${get('year')}-${get('month')}-${get('day')}T00:00:00+05:30`);
-  nextReset.setUTCDate(nextReset.getUTCDate() + 1);
-  const diff = Math.max(0, nextReset.getTime() - Date.now());
-  const hours = Math.floor(diff / 3600000);
-  const minutes = Math.floor((diff % 3600000) / 60000);
-  const seconds = Math.floor((diff % 60000) / 1000);
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
 function buildSetProgress(state: any) {
   const loadout = state?.loadout ?? {};
   const equipped = SLOTS.map((slot) => loadout[slot]).filter(Boolean);
@@ -210,38 +210,168 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   const [claimConfirmation, setClaimConfirmation] = useState<any>(null);
   const [rarityFilter, setRarityFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
-  const [nextForgeTimer, setNextForgeTimer] = useState(getNextForgeTimer);
+  const [nextForgeTimer, setNextForgeTimer] = useState('--:--:--');
+  const [resetError, setResetError] = useState('');
   const ticketsSectionRef = useRef<HTMLElement>(null);
   const claimConfirmButtonRef = useRef<HTMLButtonElement>(null);
   const previousClaimFocusRef = useRef<HTMLElement | null>(null);
+  const stateRef = useRef<any>(initialState ?? null);
+  const forgeClockAnchorRef = useRef<ForgeClockAnchor | null>(null);
+  const forgeClockSignatureRef = useRef('');
+  const stateMutationRevisionRef = useRef(0);
+  const activeStateMutationsRef = useRef(0);
+  const stateRequestRef = useRef<Promise<{ data: any; applied: boolean }> | null>(null);
+  const clockRefreshRef = useRef<Promise<boolean> | null>(null);
+  const forgeRefreshRetryAtRef = useRef(0);
 
-  const load = async () => {
-    if (initialState && state) return;
-    if (status !== 'authenticated') {
-      setLoading(false);
-      return;
-    }
-    try {
-      setLoading(true);
+  const calibrateForgeClock = useCallback((authoritativeState: any) => {
+    const serverNow = authoritativeState?.serverNow;
+    const nextResetAt = authoritativeState?.forge?.nextResetAt;
+    const signature = `${serverNow ?? ''}|${nextResetAt ?? ''}`;
+    if (signature === forgeClockSignatureRef.current) return;
+
+    forgeClockSignatureRef.current = signature;
+    const anchor = createForgeClockAnchor(serverNow, nextResetAt, performance.now());
+    forgeClockAnchorRef.current = anchor;
+    setNextForgeTimer(formatForgeCountdown(getForgeRemainingMs(anchor, performance.now())));
+  }, []);
+
+  const requestArmoryState = useCallback(async () => {
+    if (stateRequestRef.current) return stateRequestRef.current;
+
+    const requestRevision = stateMutationRevisionRef.current;
+    const request = (async () => {
       const res = await fetch('/api/armory', { cache: 'no-store' });
       const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Failed to load Artifacts.');
-      setState(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load Artifacts.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  useEffect(() => { load(); }, [status]);
+      const applied = (
+        requestRevision === stateMutationRevisionRef.current
+        && activeStateMutationsRef.current === 0
+      );
+      if (applied) {
+        calibrateForgeClock(data);
+        stateRef.current = data;
+        setState(data);
+      }
+      return { data, applied };
+    })();
+
+    stateRequestRef.current = request;
+    try {
+      return await request;
+    } finally {
+      if (stateRequestRef.current === request) stateRequestRef.current = null;
+    }
+  }, [calibrateForgeClock]);
+
+  const load = useCallback(async ({ force = false, background = false }: ArmoryLoadOptions = {}): Promise<ArmoryLoadResult> => {
+    if (!force && initialState && stateRef.current) {
+      if (!background) setLoading(false);
+      return { ok: true, applied: true };
+    }
+    if (status !== 'authenticated') {
+      if (!background) setLoading(false);
+      return { ok: false, applied: false };
+    }
+
+    if (!background) setLoading(true);
+    try {
+      const result = await requestArmoryState();
+      if (!background) setError('');
+      return { ok: true, applied: result.applied };
+    } catch (err: any) {
+      const message = err.message || 'Failed to load Artifacts.';
+      if (!background) setError(message);
+      return { ok: false, applied: false, error: message };
+    } finally {
+      if (!background) setLoading(false);
+    }
+  }, [initialState, requestArmoryState, status]);
+
+  const refreshAuthoritativeClock = useCallback(async () => {
+    if (status !== 'authenticated') return false;
+    if (clockRefreshRef.current) return clockRefreshRef.current;
+    if (activeStateMutationsRef.current > 0) return false;
+
+    const monotonicNow = performance.now();
+    if (!canRetryForgeRefresh(monotonicNow, forgeRefreshRetryAtRef.current)) return false;
+
+    const refresh = (async () => {
+      const result = await load({ force: true, background: true });
+      if (result.ok && result.applied) {
+        if (!forgeClockAnchorRef.current) {
+          forgeRefreshRetryAtRef.current = getForgeRefreshRetryAt(performance.now());
+          setResetError('Daily Forge timing could not be verified. It will retry automatically.');
+          return false;
+        }
+        forgeRefreshRetryAtRef.current = 0;
+        setResetError('');
+        return true;
+      }
+      if (result.ok) return false;
+
+      if (result.error) {
+        forgeRefreshRetryAtRef.current = getForgeRefreshRetryAt(performance.now());
+        setResetError('Daily Forge status could not be refreshed. It will retry automatically.');
+      }
+      return false;
+    })();
+
+    clockRefreshRef.current = refresh;
+    try {
+      return await refresh;
+    } finally {
+      if (clockRefreshRef.current === refresh) clockRefreshRef.current = null;
+    }
+  }, [load, status]);
 
   useEffect(() => {
-    const tick = () => setNextForgeTimer(getNextForgeTimer());
+    stateRef.current = state;
+    calibrateForgeClock(state);
+  }, [calibrateForgeClock, state]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+
+    const tick = () => {
+      const remainingMs = getForgeRemainingMs(forgeClockAnchorRef.current, performance.now());
+      setNextForgeTimer(formatForgeCountdown(remainingMs));
+      if (
+        stateRef.current
+        && (remainingMs === null || remainingMs <= 0)
+      ) {
+        void refreshAuthoritativeClock();
+      }
+    };
+
     tick();
-    const id = window.setInterval(tick, 1000);
+    const id = window.setInterval(tick, 500);
     return () => window.clearInterval(id);
-  }, []);
+  }, [refreshAuthoritativeClock, status]);
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    let wasHidden = document.visibilityState === 'hidden';
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        wasHidden = true;
+        return;
+      }
+      if (wasHidden) {
+        wasHidden = false;
+        void refreshAuthoritativeClock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [refreshAuthoritativeClock, status]);
 
   useEffect(() => {
     if (!claimConfirmation) return;
@@ -279,11 +409,31 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
     ? allArtifacts.find((artifact: any) => artifact.id === forgeResult.id) ?? forgeResult
     : null;
   const setProgress = buildSetProgress(state);
+  const hasBlockingArmoryOverlay = Boolean(forgeCharging || revealArtifact || actionOverlay);
+
+  useEffect(() => {
+    if (!hasBlockingArmoryOverlay) return;
+
+    const body = document.body;
+    const root = document.documentElement;
+    const previousBodyOverflow = body.style.overflow;
+    const previousRootOverflow = root.style.overflow;
+
+    body.style.overflow = 'hidden';
+    root.style.overflow = 'hidden';
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      root.style.overflow = previousRootOverflow;
+    };
+  }, [hasBlockingArmoryOverlay]);
 
   const act = async (url: string, body?: any, overlayType?: ArmoryActionOverlayType) => {
     const isForge = url.endsWith('/forge');
-    const forgeStartedAt = Date.now();
-    const actionStartedAt = Date.now();
+    const forgeStartedAt = performance.now();
+    const actionStartedAt = performance.now();
+    stateMutationRevisionRef.current += 1;
+    activeStateMutationsRef.current += 1;
     setSaving(true);
     if (isForge) {
       setForging(true);
@@ -301,7 +451,10 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
       });
       const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Artifacts action failed.');
+      stateMutationRevisionRef.current += 1;
       if (data.state) {
+        calibrateForgeClock(data.state);
+        stateRef.current = data.state;
         setState(data.state);
       } else {
         setState((current: any) => {
@@ -364,7 +517,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
         });
       }
       if (data.selected && isForge) {
-        const remainingAnimationMs = Math.max(0, FORGE_ANIMATION_MS - (Date.now() - forgeStartedAt));
+        const remainingAnimationMs = Math.max(0, FORGE_ANIMATION_MS - (performance.now() - forgeStartedAt));
         if (remainingAnimationMs > 0) await wait(remainingAnimationMs);
         setForgeResult(data.selected);
       }
@@ -384,8 +537,9 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
       setError(err.message || 'Artifacts action failed.');
       return false;
     } finally {
+      activeStateMutationsRef.current = Math.max(0, activeStateMutationsRef.current - 1);
       if (overlayType) {
-        const remainingAnimationMs = Math.max(0, EQUIP_ANIMATION_MS - (Date.now() - actionStartedAt));
+        const remainingAnimationMs = Math.max(0, EQUIP_ANIMATION_MS - (performance.now() - actionStartedAt));
         if (remainingAnimationMs > 0) await wait(remainingAnimationMs);
       }
       setSaving(false);
@@ -456,6 +610,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
         <ArmoryHeader inventoryTotal={inventoryTotal} guildGems={state?.guildGems ?? 0} />
         <DailyForgePanel state={state} saving={saving} forging={forging} nextForgeTimer={nextForgeTimer} onForge={() => act('/api/armory/forge')} />
         {error && <div className="armory-error">{error}</div>}
+        {resetError && <div className="armory-error">{resetError}</div>}
         {notice && <div className="armory-notice"><Gem size={16} />{notice}</div>}
 
         <RewardPreviewPanel sets={state?.sets ?? []} />
@@ -1035,8 +1190,8 @@ function ArmoryStyles() {
       .forge-action { display: grid; gap: 8px; justify-items: stretch; min-width: 180px; }
       .forge-locked { background: rgba(255,255,255,0.04); color: var(--color-text-secondary); border-color: rgba(255,255,255,0.14); }
       .forge-locked svg { color: var(--color-accent-warning); }
-      .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }
-      .forge-reveal-scene { width: min(440px, 100%); min-height: min(640px, calc(100vh - 36px)); display: grid; grid-template-rows: auto 1fr auto auto; align-items: center; justify-items: center; gap: 14px; text-align: center; color: var(--color-text-primary); }
+      .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }
+      .forge-reveal-scene { width: min(440px, 100%); min-height: min(640px, calc(100vh - 36px)); display: grid; grid-template-rows: auto 1fr auto auto; align-items: center; justify-items: center; gap: 14px; margin: auto; text-align: center; color: var(--color-text-primary); }
       .forge-reveal-layer:not(.reveal-ready) .forge-reveal-scene { grid-template-rows: 1fr; }
       .forge-charge { align-self: center; min-height: 150px; display: inline-grid; justify-items: center; align-content: center; gap: 14px; color: #dff8ff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.88rem; animation: revealFade 120ms ease both; }
       .forge-spinner { width: 88px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; color: #61e8ff; }
