@@ -19,7 +19,16 @@ import {
 } from '@/lib/hour-pass';
 import { adminGameRequestSchema } from '@/lib/game-request';
 import { validateAdminWalkinTime } from '@/lib/admin-walkin-time';
-import { validatePublicBookingTime } from '@/lib/public-booking-time';
+import {
+  isBookingStartPastInIndia,
+  validatePublicBookingTime,
+} from '@/lib/public-booking-time';
+import {
+  hasBookingConflict,
+  isVenueAtCapacityDuring,
+  meetsStationMinimumDuration,
+} from '@/lib/booking-availability';
+import { runSerializableTransaction } from '@/lib/prisma-transaction';
 
 type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
 
@@ -31,28 +40,6 @@ class BookingUpdateError extends Error {
   ) {
     super(message);
   }
-}
-
-async function runSerializable<T>(
-  work: (tx: Prisma.TransactionClient) => Promise<T>,
-) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await prisma.$transaction(work, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      });
-    } catch (error) {
-      const retryable = (
-        typeof error === 'object'
-        && error !== null
-        && 'code' in error
-        && error.code === 'P2034'
-      );
-      if (!retryable || attempt === 2) throw error;
-    }
-  }
-
-  throw new Error('Serializable transaction retry limit reached.');
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -106,6 +93,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   if (isAdmin && result.data.status === 'CHECKED_IN') {
+    if (booking.status !== 'CONFIRMED' && booking.status !== 'CHECKED_IN') {
+      return NextResponse.json(
+        {
+          error: 'Only confirmed bookings can be checked in.',
+          code: 'INVALID_STATUS_TRANSITION',
+        },
+        { status: 409 },
+      );
+    }
     try {
       const outcome = await checkInBookingWithArtifact(id);
       const artifact = outcome.artifactAward.artifact;
@@ -149,17 +145,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     station: { select: { name: true } },
   } satisfies Prisma.BookingInclude;
 
-  // Restore a pass reservation once, in the same transaction that cancels the booking.
-  const updated = result.data.status === 'CANCELLED'
-    ? await runSerializable(async (tx) => {
+  if (
+    !isAdmin
+    && result.data.status === 'CANCELLED'
+    && isBookingStartPastInIndia(booking.date, booking.startTime, new Date(), 0)
+  ) {
+    return NextResponse.json(
+      {
+        error: 'This booking has already started and can no longer be cancelled.',
+        code: 'CANCELLATION_CLOSED',
+      },
+      { status: 409 },
+    );
+  }
+
+  try {
+    // Restore a pass reservation once, in the same transaction that cancels the booking.
+    const updated = result.data.status === 'CANCELLED'
+      ? await runSerializableTransaction(async (tx) => {
         const currentBooking = await tx.booking.findUnique({ where: { id } });
         if (!currentBooking) {
           throw new BookingUpdateError('Booking not found', 404);
         }
+        if (currentBooking.status === 'CANCELLED') {
+          return tx.booking.findUniqueOrThrow({ where: { id }, include });
+        }
+        if (!['PENDING', 'CONFIRMED'].includes(currentBooking.status)) {
+          throw new BookingUpdateError(
+            'Only pending or confirmed bookings can be cancelled.',
+            409,
+            'INVALID_STATUS_TRANSITION',
+          );
+        }
 
         if (
-          currentBooking.status !== 'CANCELLED'
-          && currentBooking.userPassId
+          currentBooking.userPassId
           && currentBooking.passHoursDeducted > 0
         ) {
           const pass = await tx.userPass.findUnique({
@@ -191,16 +211,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           data: updateData,
           include,
         });
-      })
-    : await prisma.booking.update({
-        where: { id },
-        data: updateData,
-        include,
-      });
+        })
+      : await prisma.booking.update({
+          where: { id },
+          data: updateData,
+          include,
+        });
 
-  return NextResponse.json({
-    booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
-  });
+    return NextResponse.json({
+      booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
+    });
+  } catch (error) {
+    if (error instanceof BookingUpdateError) {
+      return NextResponse.json(
+        { error: error.message, ...(error.code ? { code: error.code } : {}) },
+        { status: error.status },
+      );
+    }
+    console.error('Booking status update failed:', error);
+    return NextResponse.json(
+      { error: 'Failed to update booking status.' },
+      { status: 500 },
+    );
+  }
 }
 
 
@@ -324,11 +357,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const station = await prisma.station.findUnique({ 
     where: { id: stationId },
     select: { 
-      id: true, name: true, hourlyRate: true, isActive: true, hasControllers: true,
+      id: true, name: true, hourlyRate: true, minDuration: true,
+      isActive: true, hasControllers: true,
     }
   });
   if (!station || !station.isActive) {
     return NextResponse.json({ error: 'Station not found or inactive' }, { status: 404 });
+  }
+  if (!meetsStationMinimumDuration(duration, station.minDuration)) {
+    return NextResponse.json(
+      {
+        error: `This station requires a minimum ${station.minDuration}-hour session.`,
+        code: 'MINIMUM_DURATION',
+      },
+      { status: 400 },
+    );
   }
 
   // Recalculate controller charge with current setting price
@@ -372,57 +415,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     appliedBenefitType = validation.benefitType;
   }
 
-  // ── Conflict Checks ───────────────────────────────────────────
-  const toMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-  const startMins = toMins(startTime);
-  const endMins = toMins(endTime);
-
-  // Check for conflicts on the target station (excluding current booking)
-  const conflictingBookings = await prisma.booking.findMany({
-    where: {
-      id: { not: id },
-      stationId,
-      date,
-      status: { not: 'CANCELLED' },
-    },
-  });
-
-  for (const existing of conflictingBookings) {
-    const exStartMins = toMins(existing.startTime);
-    const exEndMins = toMins(existing.endTime);
-    if (startMins < exEndMins && endMins > exStartMins) {
-      return NextResponse.json(
-        { error: 'This time slot conflicts with another booking on this station.' },
-        { status: 409 }
-      );
-    }
-  }
-
-  // ── Venue Capacity Check ──────────────────────────────────────────────
-  // Count all active bookings overlapping this slot across ALL stations (excluding current booking).
-  const capacitySetting = await prisma.setting.findUnique({ where: { key: 'venue_capacity' } });
-  const venueCapacity   = parseInt(capacitySetting?.value ?? '2');
-
-  const allOverlapping = await prisma.booking.findMany({
-    where: { id: { not: id }, date, status: { not: 'CANCELLED' } },
-    select: { startTime: true, endTime: true },
-  });
-
-  const overlapCount = allOverlapping.filter(b => {
-    const bStart = toMins(b.startTime);
-    const bEnd   = toMins(b.endTime);
-    return startMins < bEnd && endMins > bStart;
-  }).length;
-
-  if (overlapCount >= venueCapacity) {
-    return NextResponse.json(
-      { error: 'The venue is fully booked at this time. Please choose a different slot.' },
-      { status: 409 }
-    );
-  }
+  const requestedInterval = { startTime, endTime };
 
   try {
-    const updated = await runSerializable(async (tx) => {
+    const updated = await runSerializableTransaction(async (tx) => {
       const currentBooking = await tx.booking.findUnique({
         where: { id },
         include: { userPass: true },
@@ -435,6 +431,35 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           'Only pending or confirmed bookings can be edited.',
           409,
           'BOOKING_NOT_EDITABLE',
+        );
+      }
+
+      const [capacitySetting, allBookingsToday] = await Promise.all([
+        tx.setting.findUnique({ where: { key: 'venue_capacity' } }),
+        tx.booking.findMany({
+          where: { id: { not: id }, date, status: { not: 'CANCELLED' } },
+          select: { stationId: true, startTime: true, endTime: true },
+        }),
+      ]);
+      if (hasBookingConflict(
+        requestedInterval,
+        allBookingsToday.filter((existing) => existing.stationId === stationId),
+      )) {
+        throw new BookingUpdateError(
+          'This time slot conflicts with another booking on this station.',
+          409,
+          'STATION_CONFLICT',
+        );
+      }
+      if (isVenueAtCapacityDuring(
+        requestedInterval,
+        allBookingsToday,
+        capacitySetting?.value,
+      )) {
+        throw new BookingUpdateError(
+          'The venue is fully booked at this time. Please choose a different slot.',
+          409,
+          'VENUE_FULL',
         );
       }
 
@@ -547,6 +572,49 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
   const { id } = await params;
 
-  await prisma.booking.delete({ where: { id } });
-  return NextResponse.json({ success: true });
+  try {
+    await runSerializableTransaction(async (tx) => {
+      const booking = await tx.booking.findUnique({
+        where: { id },
+        include: { userPass: true },
+      });
+      if (!booking) throw new BookingUpdateError('Booking not found', 404);
+
+      if (
+        ['PENDING', 'CONFIRMED'].includes(booking.status)
+        && booking.userPass
+        && booking.passHoursDeducted > 0
+      ) {
+        const restoredUsedHours = Math.max(
+          0,
+          booking.userPass.usedHours - booking.passHoursDeducted,
+        );
+        await tx.userPass.update({
+          where: { id: booking.userPass.id },
+          data: {
+            usedHours: restoredUsedHours,
+            status: getHourPassStatusAfterUsage({
+              currentStatus: booking.userPass.status,
+              expiresAt: booking.userPass.expiresAt,
+              totalHours: booking.userPass.totalHours,
+              usedHours: restoredUsedHours,
+              selected: false,
+            }),
+          },
+        });
+      }
+
+      await tx.booking.delete({ where: { id } });
+    });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (error instanceof BookingUpdateError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
+    console.error('Booking deletion failed:', error);
+    return NextResponse.json({ error: 'Failed to delete booking.' }, { status: 500 });
+  }
 }

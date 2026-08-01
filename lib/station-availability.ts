@@ -4,6 +4,7 @@ import {
   getIndiaClock,
   getPublicBookingHoursForDate,
 } from '@/lib/public-booking-time';
+import { normalizeVenueCapacity } from '@/lib/booking-availability';
 
 export type AvailabilityState = 'AVAILABLE' | 'OCCUPIED' | 'VENUE_FULL';
 
@@ -31,6 +32,10 @@ export type LiveStationStatus = {
   availableAt: string | null;
   availableUntil: string | null;
   nextBookingAt: string | null;
+  nextAvailableWindow: {
+    startTime: string;
+    endTime: string;
+  } | null;
 };
 
 export type LiveAvailability = {
@@ -50,7 +55,6 @@ export type LiveAvailability = {
   stations: LiveStationStatus[];
 };
 
-const DEFAULT_VENUE_CAPACITY = 2;
 const CLOSING_MINUTES = PUBLIC_BOOKING_CLOSE_MINUTES;
 
 function parseTime(time: string) {
@@ -95,12 +99,6 @@ function publicOpeningMinutes(date: string) {
     ?? PUBLIC_WEEKDAY_OPEN_MINUTES;
 }
 
-function normalizedCapacity(value: number) {
-  return Number.isInteger(value) && value > 0
-    ? value
-    : DEFAULT_VENUE_CAPACITY;
-}
-
 type ParsedBooking = AvailabilityBooking & {
   start: number;
   end: number;
@@ -142,37 +140,39 @@ function changeBoundaries(bookings: ParsedBooking[], currentMinutes: number) {
     .sort((left, right) => left - right);
 }
 
-function nextStateChange(
+function availableWindows(
   stationId: string,
   currentMinutes: number,
-  currentState: AvailabilityState,
   bookings: ParsedBooking[],
   capacity: number,
 ) {
-  for (const minute of changeBoundaries(bookings, currentMinutes)) {
-    if (minute === CLOSING_MINUTES) return minute;
-    if (stateAt(stationId, minute, bookings, capacity) !== currentState) {
-      return minute;
-    }
-  }
-  return null;
-}
+  if (currentMinutes >= CLOSING_MINUTES) return [];
 
-function nextAvailableMinute(
-  stationId: string,
-  currentMinutes: number,
-  bookings: ParsedBooking[],
-  capacity: number,
-) {
-  for (const minute of changeBoundaries(bookings, currentMinutes)) {
+  const boundaries = [
+    currentMinutes,
+    ...changeBoundaries(bookings, currentMinutes),
+  ];
+  const windows: Array<{ start: number; end: number }> = [];
+
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
     if (
-      minute < CLOSING_MINUTES
-      && stateAt(stationId, minute, bookings, capacity) === 'AVAILABLE'
+      end <= start
+      || stateAt(stationId, start, bookings, capacity) !== 'AVAILABLE'
     ) {
-      return minute;
+      continue;
+    }
+
+    const previous = windows.at(-1);
+    if (previous?.end === start) {
+      previous.end = end;
+    } else {
+      windows.push({ start, end });
     }
   }
-  return null;
+
+  return windows;
 }
 
 export function getISTClock(now = new Date()) {
@@ -194,7 +194,7 @@ export function buildLiveStationAvailability({
   currentTime: string;
 }): LiveAvailability {
   const currentMinutes = parseTime(currentTime) ?? 0;
-  const capacity = normalizedCapacity(venueCapacity);
+  const capacity = normalizeVenueCapacity(venueCapacity);
   const parsedBookings = parseBookings(bookings);
   const activeNow = parsedBookings.filter((booking) =>
     isActiveAt(booking, currentMinutes)
@@ -224,24 +224,14 @@ export function buildLiveStationAvailability({
           && booking.start < CLOSING_MINUTES
         )
         .sort((left, right) => left.start - right.start)[0];
-
-      const availableAt = state === 'AVAILABLE'
-        ? null
-        : nextAvailableMinute(
-            station.id,
-            currentMinutes,
-            parsedBookings,
-            capacity,
-          );
-      const availableUntil = state === 'AVAILABLE'
-        ? nextStateChange(
-            station.id,
-            currentMinutes,
-            state,
-            parsedBookings,
-            capacity,
-          )
-        : null;
+      const windows = availableWindows(
+        station.id,
+        currentMinutes,
+        parsedBookings,
+        capacity,
+      );
+      const currentWindow = state === 'AVAILABLE' ? windows[0] : null;
+      const nextWindow = state === 'AVAILABLE' ? windows[1] : windows[0];
 
       return {
         id: station.id,
@@ -249,11 +239,19 @@ export function buildLiveStationAvailability({
         hasControllers: station.hasControllers,
         position: station.position,
         state,
-        availableAt: availableAt == null ? null : formatTime(availableAt),
-        availableUntil: availableUntil == null
+        availableAt: state === 'AVAILABLE' || !nextWindow
           ? null
-          : formatTime(availableUntil),
+          : formatTime(nextWindow.start),
+        availableUntil: currentWindow == null
+          ? null
+          : formatTime(currentWindow.end),
         nextBookingAt: nextBooking ? formatTime(nextBooking.start) : null,
+        nextAvailableWindow: nextWindow
+          ? {
+              startTime: formatTime(nextWindow.start),
+              endTime: formatTime(nextWindow.end),
+            }
+          : null,
       };
     });
 

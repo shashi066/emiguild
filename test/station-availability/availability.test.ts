@@ -66,6 +66,10 @@ test('marks the third station full only during the exact two-TV overlap', () => 
   assert.equal(duringOverlap.venue.freeScreens, 0);
   assert.equal(racingDuringOverlap?.state, 'VENUE_FULL');
   assert.equal(racingDuringOverlap?.availableAt, '17:30');
+  assert.deepEqual(racingDuringOverlap?.nextAvailableWindow, {
+    startTime: '17:30',
+    endTime: '23:00',
+  });
 
   const atExactEnd = buildLiveStationAvailability({
     stations,
@@ -109,6 +113,10 @@ test('merges contiguous station bookings when calculating the free time', () => 
   );
   assert.equal(alpha?.state, 'OCCUPIED');
   assert.equal(alpha?.availableAt, '18:00');
+  assert.deepEqual(alpha?.nextAvailableWindow, {
+    startTime: '18:00',
+    endTime: '23:00',
+  });
 });
 
 test('reports how long an available station remains usable', () => {
@@ -133,6 +141,10 @@ test('reports how long an available station remains usable', () => {
   assert.equal(alpha?.state, 'AVAILABLE');
   assert.equal(alpha?.availableUntil, '17:00');
   assert.equal(alpha?.nextBookingAt, '17:00');
+  assert.deepEqual(alpha?.nextAvailableWindow, {
+    startTime: '18:00',
+    endTime: '23:00',
+  });
 });
 
 test('ignores cancelled bookings but includes frozen slots', () => {
@@ -246,6 +258,7 @@ test('returns only public station and timing fields', () => {
       'hasControllers',
       'id',
       'name',
+      'nextAvailableWindow',
       'nextBookingAt',
       'position',
       'state',

@@ -3,13 +3,29 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { addHours } from '@/lib/utils';
 import { z } from 'zod';
+import { validateAdminWalkinTime } from '@/lib/admin-walkin-time';
+import {
+  hasBookingConflict,
+  isVenueAtCapacityDuring,
+} from '@/lib/booking-availability';
+import { runSerializableTransaction } from '@/lib/prisma-transaction';
+
+class FreezeCreationError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
 
 const freezeSchema = z.object({
   stationId: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   duration: z.number().int().min(1).max(12),
-  reason: z.string().optional(),
+  reason: z.string().trim().max(300).optional(),
 });
 
 // GET /api/admin/freeze — list all frozen slots (BLOCKED bookings)
@@ -51,51 +67,85 @@ export async function POST(req: NextRequest) {
     }
 
     const { stationId, date, startTime, duration, reason } = result.data;
+    const timeValidation = validateAdminWalkinTime(startTime, duration);
+    if (!timeValidation.valid) {
+      return NextResponse.json(
+        { error: timeValidation.reason, code: timeValidation.code },
+        { status: 400 },
+      );
+    }
     const endTime = addHours(startTime, duration);
 
-    // Check station exists
-    const station = await prisma.station.findUnique({ where: { id: stationId } });
-    if (!station || !station.isActive) {
-      return NextResponse.json({ error: 'Station not found or inactive' }, { status: 404 });
-    }
-
-    // Check for any existing bookings (including other frozen) in this slot
-    const conflicts = await prisma.booking.findMany({
-      where: { stationId, date, status: { not: 'CANCELLED' } },
-    });
-
-    const [startH] = startTime.split(':').map(Number);
-    const [endH] = endTime.split(':').map(Number);
-
-    for (const b of conflicts) {
-      const [bStart] = b.startTime.split(':').map(Number);
-      const [bEnd] = b.endTime.split(':').map(Number);
-      if (startH < bEnd && endH > bStart) {
-        const label = b.status === 'BLOCKED' ? 'already frozen' : 'already booked by a customer';
-        return NextResponse.json(
-          { error: `This slot is ${label}. Please choose a different time.` },
-          { status: 409 }
+    const requestedInterval = { startTime, endTime };
+    const frozen = await runSerializableTransaction(async (tx) => {
+      const [station, capacitySetting, allBookingsToday] = await Promise.all([
+        tx.station.findUnique({ where: { id: stationId } }),
+        tx.setting.findUnique({ where: { key: 'venue_capacity' } }),
+        tx.booking.findMany({
+          where: { date, status: { not: 'CANCELLED' } },
+          select: { stationId: true, startTime: true, endTime: true, status: true },
+        }),
+      ]);
+      if (!station || !station.isActive) {
+        throw new FreezeCreationError(
+          'Station not found or inactive',
+          404,
+          'STATION_NOT_FOUND',
         );
       }
-    }
 
-    const frozen = await prisma.booking.create({
-      data: {
-        userId: session.user.id,   // admin's user ID as placeholder
-        stationId,
-        date,
-        startTime,
-        endTime,
-        duration,
-        totalPrice: 0,
-        status: 'BLOCKED',
-        notes: reason ? `[Walk-in] ${reason}` : '[Walk-in] Reserved for offline customer',
-      },
-      include: { station: { select: { id: true, name: true } } },
+      const stationConflict = allBookingsToday.find((booking) => (
+        booking.stationId === stationId
+        && hasBookingConflict(requestedInterval, [booking])
+      ));
+      if (stationConflict) {
+        const label = stationConflict.status === 'BLOCKED'
+          ? 'already frozen'
+          : 'already booked by a customer';
+        throw new FreezeCreationError(
+          `This slot is ${label}. Please choose a different time.`,
+          409,
+          'STATION_CONFLICT',
+        );
+      }
+      if (isVenueAtCapacityDuring(
+        requestedInterval,
+        allBookingsToday,
+        capacitySetting?.value,
+      )) {
+        throw new FreezeCreationError(
+          'The venue is fully booked at this time. Please choose a different slot.',
+          409,
+          'VENUE_FULL',
+        );
+      }
+
+      return tx.booking.create({
+        data: {
+          userId: session.user.id,
+          stationId,
+          date,
+          startTime,
+          endTime,
+          duration,
+          totalPrice: 0,
+          status: 'BLOCKED',
+          notes: reason
+            ? `[Walk-in] ${reason}`
+            : '[Walk-in] Reserved for offline customer',
+        },
+        include: { station: { select: { id: true, name: true } } },
+      });
     });
 
     return NextResponse.json({ frozen }, { status: 201 });
   } catch (error) {
+    if (error instanceof FreezeCreationError) {
+      return NextResponse.json(
+        { error: error.message, ...(error.code ? { code: error.code } : {}) },
+        { status: error.status },
+      );
+    }
     console.error('Freeze error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
