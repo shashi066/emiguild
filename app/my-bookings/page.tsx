@@ -98,12 +98,15 @@ export default function MyBookingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'CANCELLED' }),
       });
+      const data = await res.json();
       if (res.ok) {
         setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'CANCELLED' } : b)));
         // Refresh pass in case hours were restored
         const pRes = await fetch('/api/user/pass?history=1');
         const pData = await pRes.json();
         setUserPasses(pData.passes ?? []);
+      } else {
+        setError(data.error ?? 'This booking could not be cancelled.');
       }
     } finally {
       setCancellingId(null);
@@ -113,7 +116,10 @@ export default function MyBookingsPage() {
   const today = getTodayString();
   const upcoming = bookings.filter((b) => b.date >= today && b.status !== 'CANCELLED' && b.status !== 'CHECKED_IN');
   const past     = bookings.filter((b) => b.date < today  || b.status === 'CANCELLED'  || b.status === 'CHECKED_IN');
-  const canCancel = (b: Booking) => b.status === 'PENDING';
+  const canCancel = (b: Booking) => (
+    (b.status === 'PENDING' || b.status === 'CONFIRMED')
+    && b.date >= today
+  );
   const displayList = activeTab === 'upcoming' ? upcoming : past;
 
   const TabBtn = ({ tab, label, count }: { tab: 'upcoming' | 'past' | 'pass'; label: string; count?: number }) => (

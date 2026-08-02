@@ -13,6 +13,7 @@ import {
 import type { LiveAvailability } from '@/lib/station-availability';
 import {
   getStationStatusCopy,
+  shouldDisplayAvailabilityClosed,
   type StationDisplayState,
 } from '@/components/stationAvailabilityCopy';
 
@@ -81,15 +82,22 @@ export function StationAvailabilityBoard({
       }
       startPolling();
     };
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void loadAvailability();
+      }
+    };
 
     void loadAvailability();
     startPolling();
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       disposed = true;
       if (timer !== undefined) window.clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -111,9 +119,14 @@ export function StationAvailabilityBoard({
       );
     }
 
-    const publicClosed = !availability.publicOpen;
+    const boardClosed = shouldDisplayAvailabilityClosed({
+      mode,
+      publicOpen: availability.publicOpen,
+      currentTime: availability.currentTime,
+      closesAt: availability.publicHours.closesAt,
+    });
     const openingLabel = nextOpeningLabel(availability.nextPublicOpenAt);
-    const venueLabel = publicClosed
+    const venueLabel = boardClosed
       ? `Closed now · Opens ${openingLabel}`
       : availability.venue.freeScreens === 0
         ? `All ${availability.venue.capacity} screens occupied`
@@ -170,7 +183,7 @@ export function StationAvailabilityBoard({
         ) : (
           <div className="station-availability-list">
             {availability.stations.map((station) => {
-              const displayState: StationDisplayState = publicClosed
+              const displayState: StationDisplayState = boardClosed
                 ? 'CLOSED'
                 : station.state;
               const copy = getStationStatusCopy(

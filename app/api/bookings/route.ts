@@ -14,6 +14,12 @@ import {
   isBookingStartPastInIndia,
   validatePublicBookingTime,
 } from '@/lib/public-booking-time';
+import {
+  hasBookingConflict,
+  isVenueAtCapacityDuring,
+  meetsStationMinimumDuration,
+} from '@/lib/booking-availability';
+import { runSerializableTransaction } from '@/lib/prisma-transaction';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -22,6 +28,16 @@ function isPassTypeAllowedForStation(passType: string, hasControllers: boolean) 
   return hasControllers
     ? CONTROLLER_PASS_TYPES.has(passType)
     : SIMULATOR_PASS_TYPES.has(passType);
+}
+
+class BookingCreationError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -133,7 +149,10 @@ export async function POST(req: NextRequest) {
 
     const requestTime = new Date();
     const endTime = addHours(startTime, duration);
-    const extraControllers = Math.min(3, Math.max(0, parseInt(String(body.extraControllers ?? 0))));
+    const requestedControllers = Number(body.extraControllers ?? 0);
+    const extraControllers = Number.isFinite(requestedControllers)
+      ? Math.min(3, Math.max(0, Math.trunc(requestedControllers)))
+      : 0;
     const usePass: boolean = body.usePass === true;
     const passId: string | null = typeof body.passId === 'string' ? body.passId : null;
 
@@ -142,7 +161,8 @@ export async function POST(req: NextRequest) {
       prisma.station.findUnique({ 
         where: { id: stationId },
         select: { 
-          id: true, name: true, hourlyRate: true, isActive: true, hasControllers: true,
+          id: true, name: true, hourlyRate: true, minDuration: true,
+          isActive: true, hasControllers: true,
         }
       }),
       prisma.user.findUnique({
@@ -171,6 +191,15 @@ export async function POST(req: NextRequest) {
     if (!station || !station.isActive) {
       return NextResponse.json({ error: 'Station not found or inactive' }, { status: 404 });
     }
+    if (!meetsStationMinimumDuration(duration, station.minDuration)) {
+      return NextResponse.json(
+        {
+          error: `This station requires a minimum ${station.minDuration}-hour session.`,
+          code: 'MINIMUM_DURATION',
+        },
+        { status: 400 },
+      );
+    }
     const activeMembership = selectPreferredGuildMembership(
       bookingUser?.passes ?? [],
       requestTime,
@@ -190,49 +219,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check for conflicts on this specific station
-    const conflictingBookings = await prisma.booking.findMany({
-      where: { stationId, date, status: { not: 'CANCELLED' } },
-    });
-
-    const toMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-    const startMins = toMins(startTime);
-    const endMins   = toMins(endTime);
-
-    for (const existing of conflictingBookings) {
-      const exStartMins = toMins(existing.startTime);
-      const exEndMins   = toMins(existing.endTime);
-      if (startMins < exEndMins && endMins > exStartMins) {
-        return NextResponse.json(
-          { error: 'This time slot is already booked. Please choose a different time.' },
-          { status: 409 }
-        );
-      }
-    }
-
-    // ── Venue Capacity Check ──────────────────────────────────────────────
-    // Count all active bookings overlapping this slot across ALL stations.
-    // If count >= venue_capacity, the venue is full — reject regardless of station.
-    const capacitySetting = await prisma.setting.findUnique({ where: { key: 'venue_capacity' } });
-    const venueCapacity   = parseInt(capacitySetting?.value ?? '2');
-
-    const overlappingAllStations = await prisma.booking.findMany({
-      where: { date, status: { not: 'CANCELLED' } },
-      select: { startTime: true, endTime: true },
-    });
-
-    const overlappingCount = overlappingAllStations.filter(b => {
-      const bStart = toMins(b.startTime);
-      const bEnd   = toMins(b.endTime);
-      return startMins < bEnd && endMins > bStart;
-    }).length;
-
-    if (overlappingCount >= venueCapacity) {
-      return NextResponse.json(
-        { error: 'The venue is fully booked at this time. Please choose a different slot.' },
-        { status: 409 }
-      );
-    }
+    const requestedInterval = { startTime, endTime };
 
     // Controller price from settings
     let controllerUnitPrice = 0;
@@ -242,12 +229,6 @@ export async function POST(req: NextRequest) {
     }
     const controllerCharge = safeExtraControllers * controllerUnitPrice * duration;
 
-    // ── Pass logic ────────────────────────────────────────────────────────
-    let userPassId: string | null = null;
-    let passHoursDeducted = 0;
-    let usedPassType: string | null = null;
-    let sessionPrice = station.hourlyRate * duration;
-
     if (usePass) {
       if (!isPassDateEligible(date)) {
         return NextResponse.json(
@@ -256,83 +237,129 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const now = new Date();
-      const pass = passId
-        ? await prisma.userPass.findFirst({
-            where: {
-              id: passId,
-              userId: session.user.id!,
-              status: 'ACTIVE',
-              expiresAt: { gte: now },
-            },
-          })
-        : (await prisma.userPass.findMany({
-            where: {
-              userId: session.user.id!,
-              status: 'ACTIVE',
-              expiresAt: { gte: now },
-            },
-            orderBy: { purchasedAt: 'desc' },
-          })).find((candidate) => isPassTypeAllowedForStation(candidate.passType, station.hasControllers)) ?? null;
+    }
 
-      if (!pass) {
-        return NextResponse.json({ error: 'No active pass found.' }, { status: 400 });
+    const outcome = await runSerializableTransaction(async (tx) => {
+      const [capacitySetting, allBookingsToday] = await Promise.all([
+        tx.setting.findUnique({ where: { key: 'venue_capacity' } }),
+        tx.booking.findMany({
+          where: { date, status: { not: 'CANCELLED' } },
+          select: { stationId: true, startTime: true, endTime: true },
+        }),
+      ]);
+
+      if (hasBookingConflict(
+        requestedInterval,
+        allBookingsToday.filter((booking) => booking.stationId === stationId),
+      )) {
+        throw new BookingCreationError(
+          'This time slot is already booked. Please choose a different time.',
+          409,
+          'STATION_CONFLICT',
+        );
       }
-
-      if (!isPassTypeAllowedForStation(pass.passType, station.hasControllers)) {
-        return NextResponse.json({ error: 'This pass cannot be used on the selected station.' }, { status: 400 });
-      }
-
-      const remaining = pass.totalHours - pass.usedHours;
-      if (remaining < duration) {
-        return NextResponse.json(
-          { error: `Not enough pass hours. You have ${remaining} hr(s) remaining but need ${duration} hr(s).` },
-          { status: 400 }
+      if (isVenueAtCapacityDuring(
+        requestedInterval,
+        allBookingsToday,
+        capacitySetting?.value,
+      )) {
+        throw new BookingCreationError(
+          'The venue is fully booked at this time. Please choose a different slot.',
+          409,
+          'VENUE_FULL',
         );
       }
 
-      const newUsedHours = pass.usedHours + duration;
-      const newStatus = newUsedHours >= pass.totalHours ? 'EXHAUSTED' : 'ACTIVE';
-      await prisma.userPass.update({
-        where: { id: pass.id },
-        data: { usedHours: newUsedHours, status: newStatus },
+      let userPassId: string | null = null;
+      let passHoursDeducted = 0;
+      let usedPassType: string | null = null;
+      let sessionPrice = station.hourlyRate * duration;
+
+      if (usePass) {
+        const pass = passId
+          ? await tx.userPass.findFirst({
+              where: {
+                id: passId,
+                userId: session.user.id!,
+                status: 'ACTIVE',
+                expiresAt: { gte: requestTime },
+              },
+            })
+          : (await tx.userPass.findMany({
+              where: {
+                userId: session.user.id!,
+                status: 'ACTIVE',
+                expiresAt: { gte: requestTime },
+              },
+              orderBy: { purchasedAt: 'desc' },
+            })).find((candidate) => (
+              isPassTypeAllowedForStation(candidate.passType, station.hasControllers)
+            )) ?? null;
+
+        if (!pass) {
+          throw new BookingCreationError('No active pass found.', 400, 'PASS_NOT_FOUND');
+        }
+        if (!isPassTypeAllowedForStation(pass.passType, station.hasControllers)) {
+          throw new BookingCreationError(
+            'This pass cannot be used on the selected station.',
+            400,
+            'PASS_STATION_MISMATCH',
+          );
+        }
+
+        const remaining = pass.totalHours - pass.usedHours;
+        if (remaining + Number.EPSILON < duration) {
+          throw new BookingCreationError(
+            `Not enough pass hours. You have ${remaining} hr(s) remaining but need ${duration} hr(s).`,
+            400,
+            'PASS_HOURS_INSUFFICIENT',
+          );
+        }
+
+        const newUsedHours = pass.usedHours + duration;
+        await tx.userPass.update({
+          where: { id: pass.id },
+          data: {
+            usedHours: newUsedHours,
+            status: newUsedHours >= pass.totalHours ? 'EXHAUSTED' : 'ACTIVE',
+          },
+        });
+        userPassId = pass.id;
+        passHoursDeducted = duration;
+        usedPassType = pass.passType;
+        sessionPrice = 0;
+      }
+
+      const booking = await tx.booking.create({
+        data: {
+          userId: session.user.id,
+          stationId,
+          date,
+          startTime,
+          endTime,
+          duration,
+          totalPrice: sessionPrice + controllerCharge,
+          discount: 0,
+          notes: notes || null,
+          status: 'CONFIRMED',
+          bookingType: 'ONLINE',
+          paymentStatus: usePass ? 'PAID' : 'UNPAID',
+          extraControllers: safeExtraControllers,
+          controllerCharge,
+          userPassId,
+          passHoursDeducted,
+          customerName: bookingUser?.name ?? null,
+          customerPhone: bookingUser?.phone ?? null,
+        },
+        include: {
+          station: true,
+          user: { select: { name: true, email: true } },
+        },
       });
 
-      userPassId        = pass.id;
-      passHoursDeducted = duration;
-      usedPassType      = pass.passType;
-      sessionPrice      = 0; // covered by pass
-    }
-
-    const totalPrice = sessionPrice + controllerCharge;
-    // discount is always 0 for regular users — admin-only feature
-
-    const booking = await prisma.booking.create({
-      data: {
-        userId:           session.user.id,
-        stationId,
-        date,
-        startTime,
-        endTime,
-        duration,
-        totalPrice,
-        discount:         0,
-        notes:            notes || null,
-        status:           'CONFIRMED',
-        bookingType:      'ONLINE',
-        paymentStatus:    usePass ? 'PAID' : 'UNPAID',
-        extraControllers: safeExtraControllers,
-        controllerCharge,
-        userPassId,
-        passHoursDeducted,
-        customerName:     bookingUser?.name ?? null,
-        customerPhone:    bookingUser?.phone ?? null,
-      },
-      include: {
-        station: true,
-        user: { select: { name: true, email: true } },
-      },
+      return { booking, passHoursDeducted, usedPassType };
     });
+    const { booking, passHoursDeducted, usedPassType } = outcome;
 
     const notificationPayload = {
       bookingId:        booking.id,
@@ -375,6 +402,12 @@ export async function POST(req: NextRequest) {
       booking: { ...booking, customerPhone: encryptPhone(booking.customerPhone) },
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof BookingCreationError) {
+      return NextResponse.json(
+        { error: error.message, ...(error.code ? { code: error.code } : {}) },
+        { status: error.status },
+      );
+    }
     console.error('Booking error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

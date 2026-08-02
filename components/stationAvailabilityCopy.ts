@@ -19,6 +19,36 @@ function timeInMinutes(time: string) {
   return hours * 60 + minutes;
 }
 
+export function shouldDisplayAvailabilityClosed({
+  mode,
+  publicOpen,
+  currentTime,
+  closesAt,
+}: {
+  mode: 'public' | 'admin';
+  publicOpen: boolean;
+  currentTime: string;
+  closesAt: string;
+}) {
+  if (mode === 'public') return !publicOpen;
+
+  const currentMinutes = timeInMinutes(currentTime);
+  const closingMinutes = timeInMinutes(closesAt);
+  return currentMinutes !== null
+    && closingMinutes !== null
+    && currentMinutes >= closingMinutes;
+}
+
+function availableWindowCopy(
+  window: NonNullable<LiveStationStatus['nextAvailableWindow']>,
+  closesAt: string,
+) {
+  const startsAt = formatTime(window.startTime);
+  return window.endTime === closesAt
+    ? `from ${startsAt}`
+    : `${startsAt} to ${formatTime(window.endTime)}`;
+}
+
 export function getStationStatusCopy(
   station: LiveStationStatus,
   state: StationDisplayState,
@@ -35,8 +65,8 @@ export function getStationStatusCopy(
   if (state === 'OCCUPIED') {
     return {
       label: 'In session',
-      detail: station.availableAt
-        ? `Free at ${formatTime(station.availableAt)}`
+      detail: station.nextAvailableWindow
+        ? `Free ${availableWindowCopy(station.nextAvailableWindow, closesAt)}`
         : 'Booked through closing',
     };
   }
@@ -44,8 +74,8 @@ export function getStationStatusCopy(
   if (state === 'VENUE_FULL') {
     return {
       label: 'Venue full',
-      detail: station.availableAt
-        ? `Capacity opens at ${formatTime(station.availableAt)}`
+      detail: station.nextAvailableWindow
+        ? `Opening ${availableWindowCopy(station.nextAvailableWindow, closesAt)}`
         : 'No opening before close',
     };
   }
@@ -64,10 +94,12 @@ export function getStationStatusCopy(
   if (hasEarlierRestriction && station.availableUntil) {
     const restrictionTime = formatTime(station.availableUntil);
     return {
-      label: `Available until ${restrictionTime}`,
-      detail: station.availableUntil === station.nextBookingAt
-        ? `Reserved from ${restrictionTime}`
-        : `Venue full from ${restrictionTime}`,
+      label: 'Available now',
+      detail: station.nextAvailableWindow
+        ? `Free until ${restrictionTime}; again ${availableWindowCopy(station.nextAvailableWindow, closesAt)}`
+        : station.availableUntil === station.nextBookingAt
+          ? `Free until ${restrictionTime}; then reserved`
+          : `Free until ${restrictionTime}; then venue full`,
     };
   }
 

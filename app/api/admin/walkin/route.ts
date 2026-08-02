@@ -13,6 +13,12 @@ import {
 import { findActiveGuildMembership } from '@/lib/guild-membership-server';
 import { validateAdminWalkinTime } from '@/lib/admin-walkin-time';
 import { adminGameRequestSchema } from '@/lib/game-request';
+import {
+  hasBookingConflict,
+  isVenueAtCapacityDuring,
+  meetsStationMinimumDuration,
+} from '@/lib/booking-availability';
+import { runSerializableTransaction } from '@/lib/prisma-transaction';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -21,6 +27,16 @@ function isPassTypeAllowedForStation(passType: string, hasControllers: boolean) 
   return hasControllers
     ? CONTROLLER_PASS_TYPES.has(passType)
     : SIMULATOR_PASS_TYPES.has(passType);
+}
+
+class WalkinCreationError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
 }
 
 const walkinSchema = z.object({
@@ -104,54 +120,20 @@ export async function POST(req: NextRequest) {
     if (!station || !station.isActive) {
       return NextResponse.json({ error: 'Station not found or inactive' }, { status: 404 });
     }
+    if (!meetsStationMinimumDuration(duration, station.minDuration)) {
+      return NextResponse.json(
+        {
+          error: `This station requires a minimum ${station.minDuration}-hour session.`,
+          code: 'MINIMUM_DURATION',
+        },
+        { status: 400 },
+      );
+    }
 
     // Server-side guard: ignore controllers for stations that don't support them
     const safeExtraControllers = station.hasControllers ? extraControllers : 0;
 
-    // Conflict detection (same as regular bookings)
-    const conflicts = await prisma.booking.findMany({
-      where: { stationId, date, status: { not: 'CANCELLED' } },
-    });
-
-    const toMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-    const startMins = toMins(startTime);
-    const endMins   = toMins(endTime);
-
-    for (const b of conflicts) {
-      const bStartMins = toMins(b.startTime);
-      const bEndMins   = toMins(b.endTime);
-      if (startMins < bEndMins && endMins > bStartMins) {
-        const who = b.bookingType === 'OFFLINE' ? 'another walk-in customer' : 'an online customer';
-        return NextResponse.json(
-          { error: `This slot is already booked by ${who}. Please choose a different time.` },
-          { status: 409 }
-        );
-      }
-    }
-
-    // ── Venue Capacity Check ──────────────────────────────────────────────
-    // Count all active bookings across ALL stations that overlap this window.
-    // If count >= venue_capacity, the venue is full.
-    const capacitySetting = await prisma.setting.findUnique({ where: { key: 'venue_capacity' } });
-    const venueCapacity   = parseInt(capacitySetting?.value ?? '2');
-
-    const allOverlapping = await prisma.booking.findMany({
-      where: { date, status: { not: 'CANCELLED' } },
-      select: { startTime: true, endTime: true },
-    });
-
-    const overlapCount = allOverlapping.filter(b => {
-      const bStart = toMins(b.startTime);
-      const bEnd   = toMins(b.endTime);
-      return startMins < bEnd && endMins > bStart;
-    }).length;
-
-    if (overlapCount >= venueCapacity) {
-      return NextResponse.json(
-        { error: 'The venue is fully booked at this time. Please choose a different slot.' },
-        { status: 409 }
-      );
-    }
+    const requestedInterval = { startTime, endTime };
 
     const { usePass, linkedUserId } = result.data;
     const discount: number = Math.min(100, Math.max(0, parseInt(String(body.discount ?? 0)) || 0));
@@ -206,11 +188,6 @@ export async function POST(req: NextRequest) {
     }
     const controllerCharge = safeExtraControllers * controllerUnitPrice * duration;
 
-    // ── Pass logic ─────────────────────────────────────────────────────────
-    let userPassId: string | null = null;
-    let passHoursDeducted = 0;
-    let sessionPrice = station.hourlyRate * duration;
-
     if (usePass && !isPassDateEligible(date)) {
       return NextResponse.json(
         { error: PASS_WEEKDAY_ONLY_ERROR, code: 'PASS_WEEKDAY_ONLY' },
@@ -218,78 +195,136 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (usePass && linkedUserId) {
-      const now = new Date();
-      const pass = passId
-        ? await prisma.userPass.findFirst({
-            where: {
-              id: passId,
-              userId: linkedUserId,
-              status: 'ACTIVE',
-              expiresAt: { gte: now },
-            },
-          })
-        : (await prisma.userPass.findMany({
-            where: {
-              userId: linkedUserId,
-              status: 'ACTIVE',
-              expiresAt: { gte: now },
-            },
-            orderBy: { purchasedAt: 'desc' },
-          })).find((candidate) => isPassTypeAllowedForStation(candidate.passType, station.hasControllers)) ?? null;
-
-      if (!pass) {
-        return NextResponse.json({ error: 'No active pass found for this user.' }, { status: 400 });
+    const booking = await runSerializableTransaction(async (tx) => {
+      const [capacitySetting, allBookingsToday] = await Promise.all([
+        tx.setting.findUnique({ where: { key: 'venue_capacity' } }),
+        tx.booking.findMany({
+          where: { date, status: { not: 'CANCELLED' } },
+          select: {
+            stationId: true,
+            startTime: true,
+            endTime: true,
+            bookingType: true,
+          },
+        }),
+      ]);
+      const stationConflict = allBookingsToday.find((existing) => (
+        existing.stationId === stationId
+        && hasBookingConflict(requestedInterval, [existing])
+      ));
+      if (stationConflict) {
+        const who = stationConflict.bookingType === 'OFFLINE'
+          ? 'another walk-in customer'
+          : 'an online customer';
+        throw new WalkinCreationError(
+          `This slot is already booked by ${who}. Please choose a different time.`,
+          409,
+          'STATION_CONFLICT',
+        );
       }
-      if (!isPassTypeAllowedForStation(pass.passType, station.hasControllers)) {
-        return NextResponse.json({ error: 'This pass cannot be used on the selected station.' }, { status: 400 });
-      }
-      const remaining = pass.totalHours - pass.usedHours;
-      if (remaining < duration) {
-        return NextResponse.json(
-          { error: `Not enough pass hours. ${remaining} hr(s) remaining, need ${duration}.` },
-          { status: 400 }
+      if (isVenueAtCapacityDuring(
+        requestedInterval,
+        allBookingsToday,
+        capacitySetting?.value,
+      )) {
+        throw new WalkinCreationError(
+          'The venue is fully booked at this time. Please choose a different slot.',
+          409,
+          'VENUE_FULL',
         );
       }
 
-      const newUsed = pass.usedHours + duration;
-      await prisma.userPass.update({
-        where: { id: pass.id },
-        data: { usedHours: newUsed, status: newUsed >= pass.totalHours ? 'EXHAUSTED' : 'ACTIVE' },
+      let userPassId: string | null = null;
+      let passHoursDeducted = 0;
+      let sessionPrice = station.hourlyRate * duration;
+
+      if (usePass && linkedUserId) {
+        const now = new Date();
+        const pass = passId
+          ? await tx.userPass.findFirst({
+              where: {
+                id: passId,
+                userId: linkedUserId,
+                status: 'ACTIVE',
+                expiresAt: { gte: now },
+              },
+            })
+          : (await tx.userPass.findMany({
+              where: {
+                userId: linkedUserId,
+                status: 'ACTIVE',
+                expiresAt: { gte: now },
+              },
+              orderBy: { purchasedAt: 'desc' },
+            })).find((candidate) => (
+              isPassTypeAllowedForStation(candidate.passType, station.hasControllers)
+            )) ?? null;
+
+        if (!pass) {
+          throw new WalkinCreationError(
+            'No active pass found for this user.',
+            400,
+            'PASS_NOT_FOUND',
+          );
+        }
+        if (!isPassTypeAllowedForStation(pass.passType, station.hasControllers)) {
+          throw new WalkinCreationError(
+            'This pass cannot be used on the selected station.',
+            400,
+            'PASS_STATION_MISMATCH',
+          );
+        }
+        const remaining = pass.totalHours - pass.usedHours;
+        if (remaining + Number.EPSILON < duration) {
+          throw new WalkinCreationError(
+            `Not enough pass hours. ${remaining} hr(s) remaining, need ${duration}.`,
+            400,
+            'PASS_HOURS_INSUFFICIENT',
+          );
+        }
+
+        const newUsed = pass.usedHours + duration;
+        await tx.userPass.update({
+          where: { id: pass.id },
+          data: {
+            usedHours: newUsed,
+            status: newUsed >= pass.totalHours ? 'EXHAUSTED' : 'ACTIVE',
+          },
+        });
+        userPassId = pass.id;
+        passHoursDeducted = duration;
+        sessionPrice = 0;
+      }
+
+      const totalPrice = Math.round(
+        (sessionPrice + controllerCharge) * (1 - discount / 100),
+      );
+      return tx.booking.create({
+        data: {
+          userId: linkedUserId ?? null,
+          stationId,
+          date,
+          startTime,
+          endTime,
+          duration,
+          totalPrice,
+          status: status ?? 'CONFIRMED',
+          bookingType: 'OFFLINE',
+          customerName,
+          customerPhone: customerPhone ?? null,
+          paymentStatus: usePass ? 'PAID' : 'UNPAID',
+          extraControllers: safeExtraControllers,
+          controllerCharge,
+          discount,
+          notes: notes || null,
+          userPassId,
+          passHoursDeducted,
+          appliedBenefitType,
+        },
+        include: {
+          station: { select: { id: true, name: true } },
+        },
       });
-
-      userPassId        = pass.id;
-      passHoursDeducted = duration;
-      sessionPrice      = 0;
-    }
-
-    const totalPrice = Math.round((sessionPrice + controllerCharge) * (1 - discount / 100));
-
-    const booking = await prisma.booking.create({
-      data: {
-        userId:           linkedUserId ?? null,
-        stationId,
-        date,
-        startTime,
-        endTime,
-        duration,
-        totalPrice,
-        status:           status ?? 'CONFIRMED',
-        bookingType:      'OFFLINE',
-        customerName,
-        customerPhone:    customerPhone ?? null,
-        paymentStatus:    usePass ? 'PAID' : 'UNPAID',
-        extraControllers: safeExtraControllers,
-        controllerCharge,
-        discount,
-        notes:            notes || null,
-        userPassId,
-        passHoursDeducted,
-        appliedBenefitType,
-      },
-      include: {
-        station: { select: { id: true, name: true } },
-      },
     });
 
     // Fire-and-forget admin notification
@@ -318,6 +353,12 @@ export async function POST(req: NextRequest) {
       booking: { ...booking, customerPhone: encryptPhone(booking.customerPhone) },
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof WalkinCreationError) {
+      return NextResponse.json(
+        { error: error.message, ...(error.code ? { code: error.code } : {}) },
+        { status: error.status },
+      );
+    }
     console.error('Walk-in booking error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

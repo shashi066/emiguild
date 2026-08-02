@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Shuffle, Trash2, Edit3, X, Check, Search, User } from 'lucide-react';
+import { Plus, Shuffle, Trash2, Edit3, X, Check, Search, User, Phone } from 'lucide-react';
 import { decryptPhone } from '@/lib/crypto';
 
 interface Player {
@@ -12,6 +12,20 @@ interface Player {
 }
 
 type UserItem = { id: string; name: string; email: string; phone: string | null };
+
+function getPhoneCallHref(phone?: string | null) {
+  const value = phone?.trim();
+  if (!value) return null;
+
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 7 || digits.length > 15) return null;
+
+  if (digits.length === 10) {
+    return `tel:+91${digits}`;
+  }
+
+  return `tel:${value.startsWith('+') ? '+' : ''}${digits}`;
+}
 
 export default function PlayersTab({ tournament, players, fetchPlayers }: { tournament: any, players: Player[], fetchPlayers: () => void }) {
   const [addName, setAddName] = useState('');
@@ -175,8 +189,11 @@ export default function PlayersTab({ tournament, players, fetchPlayers }: { tour
                 <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No players joined yet.</td>
               </tr>
             ) : (
-              players.sort((a, b) => a.seed - b.seed).map(p => (
-                <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              players.sort((a, b) => a.seed - b.seed).map(p => {
+                const callHref = getPhoneCallHref(p.phone);
+
+                return (
+                  <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                   <td style={{ padding: '1rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>#{p.seed}</td>
                   
                   {editingId === p.id ? (
@@ -195,7 +212,21 @@ export default function PlayersTab({ tournament, players, fetchPlayers }: { tour
                     </td>
                   ) : (
                     <td style={{ padding: '1rem', color: p.phone ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-                      {p.phone || '—'}
+                      {p.phone ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>{p.phone}</span>
+                          {callHref && (
+                            <a
+                              href={callHref}
+                              className="tourn-participant-call"
+                              aria-label={`Call ${p.name}`}
+                              title={`Call ${p.name}`}
+                            >
+                              <Phone size={15} aria-hidden="true" />
+                            </a>
+                          )}
+                        </span>
+                      ) : '—'}
                     </td>
                   )}
 
@@ -216,8 +247,9 @@ export default function PlayersTab({ tournament, players, fetchPlayers }: { tour
                       </div>
                     )}
                   </td>
-                </tr>
-              ))
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
