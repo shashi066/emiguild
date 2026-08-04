@@ -1,5 +1,6 @@
 import {
   PUBLIC_BOOKING_CLOSE_MINUTES,
+  type ActiveSpecialOpening,
   getPublicTimeSlotsForDay,
   getPublicTimeSlotsForDate,
 } from './public-booking-time';
@@ -9,8 +10,12 @@ export const CLOSING_HOUR = PUBLIC_BOOKING_CLOSE_MINUTES / 60;
 // Kept for existing callers that expect the default weekday schedule.
 export const TIME_SLOTS = getPublicTimeSlotsForDay('WEEKDAY');
 
-export function getTimeSlotsForDate(dateStr: string, stepMins: 30 | 60 = 30): string[] {
-  return getPublicTimeSlotsForDate(dateStr, stepMins);
+export function getTimeSlotsForDate(
+  dateStr: string,
+  stepMins: 30 | 60 = 30,
+  specialOpening?: ActiveSpecialOpening | null,
+): string[] {
+  return getPublicTimeSlotsForDate(dateStr, stepMins, specialOpening);
 }
 
 /** Returns duration options (in hours) for a given minDuration.

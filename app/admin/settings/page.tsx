@@ -3,8 +3,16 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Save, CheckCircle, AlertCircle,
-  Gamepad2, IndianRupee, RefreshCw,
+  Gamepad2, IndianRupee, RefreshCw, CalendarDays, Clock,
 } from 'lucide-react';
+import {
+  SPECIAL_OPENING_DATE_KEY,
+  SPECIAL_OPENING_ENABLED_KEY,
+  SPECIAL_OPENING_TIME_KEY,
+  formatPublicTimeLabel,
+  getActiveSpecialOpening,
+  getIndiaClock,
+} from '@/lib/public-booking-time';
 
 type Setting = { id: string; key: string; value: string; label: string | null };
 
@@ -49,11 +57,28 @@ export default function AdminSettingsPage() {
     setSuccess('');
     setSaving(true);
     try {
-      const payload = SETTING_DEFS.map((d) => ({
-        key:   d.key,
-        value: settings[d.key] ?? '0',
-        label: d.label,
-      }));
+      const payload = [
+        ...SETTING_DEFS.map((d) => ({
+          key:   d.key,
+          value: settings[d.key] ?? '0',
+          label: d.label,
+        })),
+        {
+          key: SPECIAL_OPENING_ENABLED_KEY,
+          value: settings[SPECIAL_OPENING_ENABLED_KEY] === 'true' ? 'true' : 'false',
+          label: 'Today Opening Boost',
+        },
+        {
+          key: SPECIAL_OPENING_DATE_KEY,
+          value: settings[SPECIAL_OPENING_DATE_KEY] ?? getIndiaClock().date,
+          label: 'Opening Boost Date',
+        },
+        {
+          key: SPECIAL_OPENING_TIME_KEY,
+          value: settings[SPECIAL_OPENING_TIME_KEY] ?? '11:00',
+          label: 'Opening Boost Time',
+        },
+      ];
       const res = await fetch('/api/admin/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -72,6 +97,26 @@ export default function AdminSettingsPage() {
       setSaving(false);
     }
   };
+
+  const indiaClock = getIndiaClock();
+  const specialEnabled = settings[SPECIAL_OPENING_ENABLED_KEY] === 'true';
+  const specialDate = settings[SPECIAL_OPENING_DATE_KEY] ?? indiaClock.date;
+  const specialTime = settings[SPECIAL_OPENING_TIME_KEY] ?? '11:00';
+  const activeSpecialOpening = getActiveSpecialOpening(
+    {
+      [SPECIAL_OPENING_ENABLED_KEY]: specialEnabled,
+      [SPECIAL_OPENING_DATE_KEY]: specialDate,
+      [SPECIAL_OPENING_TIME_KEY]: specialTime,
+    },
+    indiaClock.date,
+  );
+  const specialPreview = specialEnabled
+    ? activeSpecialOpening
+      ? `Early access starts at ${formatPublicTimeLabel(activeSpecialOpening.opensAt)} today.`
+      : specialDate !== indiaClock.date
+        ? 'Only today’s date is active. This saved date will be ignored.'
+        : 'Choose a valid 30-minute time earlier than normal opening.'
+    : 'Normal public opening hours remain active.';
 
   return (
     <div>
@@ -178,6 +223,79 @@ export default function AdminSettingsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-xl)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarDays size={18} style={{ color: 'var(--color-accent-primary)' }} />
+              Today Opening Boost
+            </h2>
+
+            <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                minHeight: 44,
+                color: 'var(--color-text-secondary)',
+                fontWeight: 700,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={specialEnabled}
+                  onChange={(e) => setSettings((prev) => ({
+                    ...prev,
+                    [SPECIAL_OPENING_ENABLED_KEY]: e.target.checked ? 'true' : 'false',
+                    [SPECIAL_OPENING_DATE_KEY]: prev[SPECIAL_OPENING_DATE_KEY] ?? indiaClock.date,
+                    [SPECIAL_OPENING_TIME_KEY]: prev[SPECIAL_OPENING_TIME_KEY] ?? '11:00',
+                  }))}
+                  style={{ width: 18, height: 18 }}
+                />
+                Open earlier than usual today
+              </label>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-md)' }}>
+                <div>
+                  <label className="form-label" htmlFor="special-opening-date" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <CalendarDays size={14} />
+                    Date
+                  </label>
+                  <input
+                    id="special-opening-date"
+                    type="date"
+                    className="form-input"
+                    value={specialDate}
+                    onChange={(e) => setSettings((prev) => ({
+                      ...prev,
+                      [SPECIAL_OPENING_DATE_KEY]: e.target.value,
+                    }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" htmlFor="special-opening-time" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Clock size={14} />
+                    Opens From
+                  </label>
+                  <input
+                    id="special-opening-time"
+                    type="time"
+                    className="form-input"
+                    step={1800}
+                    value={specialTime}
+                    onChange={(e) => setSettings((prev) => ({
+                      ...prev,
+                      [SPECIAL_OPENING_TIME_KEY]: e.target.value,
+                    }))}
+                  />
+                </div>
+              </div>
+
+              <div className={specialEnabled && activeSpecialOpening ? 'alert alert-success' : 'alert alert-info'}>
+                <Clock size={16} style={{ flexShrink: 0 }} />
+                <span>{specialPreview}</span>
+              </div>
             </div>
           </div>
 
