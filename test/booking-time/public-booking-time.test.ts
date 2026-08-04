@@ -5,6 +5,7 @@ import {
   PUBLIC_WEEKDAY_OPEN_MINUTES,
   PUBLIC_WEEKEND_OPEN_MINUTES,
   addIndiaCalendarDays,
+  getActiveSpecialOpening,
   getIndiaClock,
   getPublicBookingHoursForDate,
   getPublicTimeSlotsForDate,
@@ -82,6 +83,85 @@ test('uses the centralized public schedule for booking slot lists', () => {
   assert.equal(weekendSlots.length, 24);
   assert.equal(weekendSlots[0], '11:00');
   assert.equal(weekendSlots.at(-1), '22:30');
+});
+
+test('applies a valid same-day early opening override to slots and validation', () => {
+  const specialOpening = getActiveSpecialOpening(
+    {
+      special_opening_enabled: 'true',
+      special_opening_date: '2026-07-27',
+      special_opening_time: '11:00',
+    },
+    '2026-07-27',
+  );
+
+  assert.ok(specialOpening);
+  assert.deepEqual(getPublicBookingHoursForDate('2026-07-27', specialOpening), {
+    dayKind: 'WEEKDAY',
+    openMinutes: PUBLIC_WEEKEND_OPEN_MINUTES,
+    closeMinutes: PUBLIC_BOOKING_CLOSE_MINUTES,
+  });
+
+  const slots = getPublicTimeSlotsForDate('2026-07-27', 30, specialOpening);
+  assert.equal(slots.length, 24);
+  assert.equal(slots[0], '11:00');
+  assert.equal(slots.at(-1), '22:30');
+  assert.equal(
+    validatePublicBookingTime('2026-07-27', '11:00', 1, specialOpening).valid,
+    true,
+  );
+
+  assertRejectedWith(
+    validatePublicBookingTime('2026-07-28', '11:00', 1, specialOpening),
+    'OUTSIDE_PUBLIC_HOURS',
+  );
+});
+
+test('ignores disabled, expired, invalid, and non-early opening overrides', () => {
+  assert.equal(
+    getActiveSpecialOpening(
+      {
+        special_opening_enabled: 'false',
+        special_opening_date: '2026-07-27',
+        special_opening_time: '11:00',
+      },
+      '2026-07-27',
+    ),
+    null,
+  );
+  assert.equal(
+    getActiveSpecialOpening(
+      {
+        special_opening_enabled: 'true',
+        special_opening_date: '2026-07-26',
+        special_opening_time: '11:00',
+      },
+      '2026-07-27',
+    ),
+    null,
+  );
+  assert.equal(
+    getActiveSpecialOpening(
+      {
+        special_opening_enabled: 'true',
+        special_opening_date: '2026-07-27',
+        special_opening_time: '11:15',
+      },
+      '2026-07-27',
+    ),
+    null,
+  );
+  assert.equal(
+    getActiveSpecialOpening(
+      {
+        special_opening_enabled: 'true',
+        special_opening_date: '2026-07-27',
+        special_opening_time: '16:00',
+      },
+      '2026-07-27',
+    ),
+    null,
+  );
 });
 
 test('accepts public-hour boundaries and sessions ending exactly at 11 PM', () => {

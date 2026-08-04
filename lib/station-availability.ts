@@ -1,6 +1,7 @@
 import {
   PUBLIC_BOOKING_CLOSE_MINUTES,
   PUBLIC_WEEKDAY_OPEN_MINUTES,
+  type ActiveSpecialOpening,
   getIndiaClock,
   getPublicBookingHoursForDate,
 } from '@/lib/public-booking-time';
@@ -47,6 +48,7 @@ export type LiveAvailability = {
     closesAt: string;
   };
   nextPublicOpenAt: string;
+  specialOpening: ActiveSpecialOpening | null;
   venue: {
     capacity: number;
     occupiedScreens: number;
@@ -94,8 +96,11 @@ function addDays(date: string, days: number) {
   ].join('-');
 }
 
-function publicOpeningMinutes(date: string) {
-  return getPublicBookingHoursForDate(date)?.openMinutes
+function publicOpeningMinutes(
+  date: string,
+  specialOpening?: ActiveSpecialOpening | null,
+) {
+  return getPublicBookingHoursForDate(date, specialOpening)?.openMinutes
     ?? PUBLIC_WEEKDAY_OPEN_MINUTES;
 }
 
@@ -186,12 +191,14 @@ export function buildLiveStationAvailability({
   venueCapacity,
   date,
   currentTime,
+  specialOpening = null,
 }: {
   stations: AvailabilityStation[];
   bookings: AvailabilityBooking[];
   venueCapacity: number;
   date: string;
   currentTime: string;
+  specialOpening?: ActiveSpecialOpening | null;
 }): LiveAvailability {
   const currentMinutes = parseTime(currentTime) ?? 0;
   const capacity = normalizeVenueCapacity(venueCapacity);
@@ -199,13 +206,13 @@ export function buildLiveStationAvailability({
   const activeNow = parsedBookings.filter((booking) =>
     isActiveAt(booking, currentMinutes)
   );
-  const opensAtMinutes = publicOpeningMinutes(date);
+  const opensAtMinutes = publicOpeningMinutes(date, specialOpening);
   const publicOpen = (
     currentMinutes >= opensAtMinutes
     && currentMinutes < CLOSING_MINUTES
   );
   const nextOpenDate = currentMinutes < opensAtMinutes ? date : addDays(date, 1);
-  const nextOpenMinutes = publicOpeningMinutes(nextOpenDate);
+  const nextOpenMinutes = publicOpeningMinutes(nextOpenDate, specialOpening);
 
   const stationStatuses = stations
     .filter((station) => station.isActive !== false)
@@ -267,6 +274,7 @@ export function buildLiveStationAvailability({
     },
     nextPublicOpenAt:
       `${nextOpenDate}T${formatTime(nextOpenMinutes)}:00+05:30`,
+    specialOpening: specialOpening?.date === date ? specialOpening : null,
     venue: {
       capacity,
       occupiedScreens,

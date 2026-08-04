@@ -4,11 +4,36 @@ export const PUBLIC_WEEKDAY_OPEN_MINUTES = 16 * 60;
 export const PUBLIC_WEEKEND_OPEN_MINUTES = 11 * 60;
 export const PUBLIC_BOOKING_CLOSE_MINUTES = 23 * 60;
 export const PUBLIC_BOOKING_SLOT_STEP_MINUTES = 30;
+export const SPECIAL_OPENING_ENABLED_KEY = 'special_opening_enabled';
+export const SPECIAL_OPENING_DATE_KEY = 'special_opening_date';
+export const SPECIAL_OPENING_TIME_KEY = 'special_opening_time';
 
 export type PublicBookingHours = {
   dayKind: 'WEEKDAY' | 'WEEKEND';
   openMinutes: number;
   closeMinutes: number;
+};
+
+export type SpecialOpeningSettings = {
+  [SPECIAL_OPENING_ENABLED_KEY]?: string | boolean | null;
+  [SPECIAL_OPENING_DATE_KEY]?: string | null;
+  [SPECIAL_OPENING_TIME_KEY]?: string | null;
+};
+
+export type ActiveSpecialOpening = {
+  date: string;
+  opensAt: string;
+  openMinutes: number;
+  standardOpensAt: string;
+  standardOpenMinutes: number;
+  closeMinutes: number;
+};
+
+export type SpecialOpeningNotice = {
+  title: string;
+  detail: string;
+  timeLabel: string;
+  state: 'upcoming' | 'open-now';
 };
 
 export type PublicBookingTimeValidation =
@@ -69,18 +94,109 @@ function formatMinutes(totalMinutes: number) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+function isEnabled(value: SpecialOpeningSettings[typeof SPECIAL_OPENING_ENABLED_KEY]) {
+  return value === true
+    || value === 'true'
+    || value === '1'
+    || value === 'on';
+}
+
+export function formatPublicTimeLabel(time: string) {
+  const minutes = parseTime(time);
+  if (minutes == null) return time;
+  const hour24 = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const period = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
+export function getActiveSpecialOpening(
+  settings: SpecialOpeningSettings | null | undefined,
+  todayDate: string,
+): ActiveSpecialOpening | null {
+  if (!settings || !isEnabled(settings[SPECIAL_OPENING_ENABLED_KEY])) {
+    return null;
+  }
+
+  const date = settings[SPECIAL_OPENING_DATE_KEY];
+  const time = settings[SPECIAL_OPENING_TIME_KEY];
+  if (
+    typeof date !== 'string'
+    || typeof time !== 'string'
+    || date !== todayDate
+    || !parseCalendarDate(date)
+  ) {
+    return null;
+  }
+
+  const openMinutes = parseTime(time);
+  const standardHours = getPublicBookingHoursForDate(date);
+  if (
+    openMinutes == null
+    || standardHours == null
+    || openMinutes % PUBLIC_BOOKING_SLOT_STEP_MINUTES !== 0
+    || openMinutes >= standardHours.openMinutes
+    || openMinutes >= standardHours.closeMinutes
+  ) {
+    return null;
+  }
+
+  return {
+    date,
+    opensAt: formatMinutes(openMinutes),
+    openMinutes,
+    standardOpensAt: formatMinutes(standardHours.openMinutes),
+    standardOpenMinutes: standardHours.openMinutes,
+    closeMinutes: standardHours.closeMinutes,
+  };
+}
+
+export function getSpecialOpeningNotice(
+  specialOpening: ActiveSpecialOpening | null | undefined,
+  currentMinutes: number,
+): SpecialOpeningNotice | null {
+  if (!specialOpening) return null;
+
+  const timeLabel = formatPublicTimeLabel(specialOpening.opensAt);
+  if (currentMinutes < specialOpening.openMinutes) {
+    return {
+      title: 'Bonus Play Hours',
+      detail: `Slots unlock at ${timeLabel} today`,
+      timeLabel,
+      state: 'upcoming',
+    };
+  }
+
+  if (currentMinutes < specialOpening.standardOpenMinutes) {
+    return {
+      title: 'Bonus Play Hours Live',
+      detail: `Stations are ready from ${timeLabel} today`,
+      timeLabel,
+      state: 'open-now',
+    };
+  }
+
+  return null;
+}
+
 export function getPublicBookingHoursForDate(
   date: string,
+  specialOpening?: ActiveSpecialOpening | null,
 ): PublicBookingHours | null {
   const parsed = parseCalendarDate(date);
   if (!parsed) return null;
 
   const isWeekend = parsed.dayOfWeek === 0 || parsed.dayOfWeek === 6;
+  const standardOpenMinutes = isWeekend
+    ? PUBLIC_WEEKEND_OPEN_MINUTES
+    : PUBLIC_WEEKDAY_OPEN_MINUTES;
   return {
     dayKind: isWeekend ? 'WEEKEND' : 'WEEKDAY',
-    openMinutes: isWeekend
-      ? PUBLIC_WEEKEND_OPEN_MINUTES
-      : PUBLIC_WEEKDAY_OPEN_MINUTES,
+    openMinutes: specialOpening?.date === date
+      && specialOpening.openMinutes < standardOpenMinutes
+      ? specialOpening.openMinutes
+      : standardOpenMinutes,
     closeMinutes: PUBLIC_BOOKING_CLOSE_MINUTES,
   };
 }
@@ -100,11 +216,12 @@ export function addIndiaCalendarDays(date: string, days: number): string | null 
 export function getPublicTimeSlotsForDate(
   date: string,
   stepMinutes: 30 | 60 = PUBLIC_BOOKING_SLOT_STEP_MINUTES,
+  specialOpening?: ActiveSpecialOpening | null,
 ): string[] {
-  const hours = getPublicBookingHoursForDate(date);
+  const hours = getPublicBookingHoursForDate(date, specialOpening);
   if (!hours) return [];
 
-  return getPublicTimeSlotsForDay(hours.dayKind, stepMinutes);
+  return getPublicTimeSlotsForHours(hours.openMinutes, stepMinutes);
 }
 
 export function getPublicTimeSlotsForDay(
@@ -114,6 +231,13 @@ export function getPublicTimeSlotsForDay(
   const openMinutes = dayKind === 'WEEKEND'
     ? PUBLIC_WEEKEND_OPEN_MINUTES
     : PUBLIC_WEEKDAY_OPEN_MINUTES;
+  return getPublicTimeSlotsForHours(openMinutes, stepMinutes);
+}
+
+export function getPublicTimeSlotsForHours(
+  openMinutes: number,
+  stepMinutes: 30 | 60 = PUBLIC_BOOKING_SLOT_STEP_MINUTES,
+): string[] {
   const slots: string[] = [];
   for (
     let minutes = openMinutes;
@@ -129,8 +253,9 @@ export function validatePublicBookingTime(
   date: string,
   startTime: string,
   duration: number,
+  specialOpening?: ActiveSpecialOpening | null,
 ): PublicBookingTimeValidation {
-  const hours = getPublicBookingHoursForDate(date);
+  const hours = getPublicBookingHoursForDate(date, specialOpening);
   if (!hours) {
     return {
       valid: false,
@@ -168,8 +293,10 @@ export function validatePublicBookingTime(
     || startMinutes >= hours.closeMinutes
     || endMinutes > hours.closeMinutes
   ) {
-    const openingTime = hours.dayKind === 'WEEKEND' ? '11:00 AM' : '4:00 PM';
-    const dayLabel = hours.dayKind === 'WEEKEND' ? 'weekends' : 'weekdays';
+    const openingTime = formatPublicTimeLabel(formatMinutes(hours.openMinutes));
+    const dayLabel = specialOpening?.date === date
+      ? 'today'
+      : hours.dayKind === 'WEEKEND' ? 'weekends' : 'weekdays';
     return {
       valid: false,
       code: 'OUTSIDE_PUBLIC_HOURS',

@@ -5,6 +5,8 @@ import { StationAvailabilityBoard } from '@/components/StationAvailabilityBoard'
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { formatCurrency } from '@/lib/utils';
+import { getIndiaClock, getSpecialOpeningNotice } from '@/lib/public-booking-time';
+import { loadActiveSpecialOpening } from '@/lib/special-opening-server';
 import {
   Gamepad2,
   Calendar,
@@ -174,7 +176,18 @@ const AVAILABLE_GAMES = [
 ];
 
 export default async function HomePage() {
-  const [stations, stats, session] = await Promise.all([getStations(), getStats(), auth()]);
+  const now = new Date();
+  const [stations, stats, session, specialOpening] = await Promise.all([
+    getStations(),
+    getStats(),
+    auth(),
+    loadActiveSpecialOpening(now),
+  ]);
+  const indiaClock = getIndiaClock(now);
+  const specialOpeningNotice = getSpecialOpeningNotice(
+    specialOpening,
+    indiaClock.minutes,
+  );
 
   return (
     <>
@@ -187,9 +200,21 @@ export default async function HomePage() {
 
         <div className="container">
           <div className="hero-content animate-fade-in-up" style={{ maxWidth: 680 }}>
-            <div className="hero-eyebrow">
-              <Zap size={14} />
-              Premium Gaming Experience
+            <div className="hero-eyebrow-row">
+              <div className="hero-eyebrow">
+                <Zap size={14} />
+                Premium Gaming Experience
+              </div>
+
+              {specialOpeningNotice && (
+                <div className={`hero-opening-pill ${specialOpeningNotice.state}`}>
+                  <Clock size={14} />
+                  <span className="hero-opening-pill-copy">
+                    <strong>{specialOpeningNotice.title}</strong>
+                    <span>{specialOpeningNotice.detail}</span>
+                  </span>
+                </div>
+              )}
             </div>
 
             <h1 className="hero-title">

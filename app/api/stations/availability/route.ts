@@ -4,6 +4,7 @@ import {
   buildLiveStationAvailability,
   getISTClock,
 } from '@/lib/station-availability';
+import { loadActiveSpecialOpening } from '@/lib/special-opening-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,7 @@ export async function GET() {
   try {
     const now = new Date();
     const clock = getISTClock(now);
-    const [stations, bookings, capacitySetting] = await Promise.all([
+    const [stations, bookings, capacitySetting, specialOpening] = await Promise.all([
       prisma.station.findMany({
         where: { isActive: true },
         select: {
@@ -39,6 +40,7 @@ export async function GET() {
         where: { key: 'venue_capacity' },
         select: { value: true },
       }),
+      loadActiveSpecialOpening(now),
     ]);
 
     const availability = buildLiveStationAvailability({
@@ -47,6 +49,7 @@ export async function GET() {
       venueCapacity: Number(capacitySetting?.value ?? 2),
       date: clock.date,
       currentTime: clock.time,
+      specialOpening,
     });
 
     return NextResponse.json(

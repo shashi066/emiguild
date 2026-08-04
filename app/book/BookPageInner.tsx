@@ -15,7 +15,9 @@ import {
 } from '@/lib/utils';
 import {
   addIndiaCalendarDays,
+  getActiveSpecialOpening,
   getIndiaClock,
+  getSpecialOpeningNotice,
 } from '@/lib/public-booking-time';
 import { isPassDateEligible } from '@/lib/pass-rules';
 import {
@@ -71,6 +73,7 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
   const [selectedDuration, setSelectedDuration] = useState<number>(1);
   const [extraControllers, setExtraControllers] = useState(0);
   const [controllerPrice, setControllerPrice]   = useState(0);
+  const [settingsMap, setSettingsMap]           = useState<Record<string, string>>({});
   const [notes, setNotes]                       = useState('');
   const [usePass, setUsePass]                   = useState(false);
   const [activePasses, setActivePasses]         = useState<Array<{
@@ -128,7 +131,10 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
   useEffect(() => {
     fetch('/api/settings')
       .then((r) => r.json())
-      .then((d) => setControllerPrice(parseFloat(d.controller_price ?? '0')));
+      .then((d) => {
+        setSettingsMap(d);
+        setControllerPrice(parseFloat(d.controller_price ?? '0'));
+      });
   }, []);
 
   // Fetch active pass when session is available
@@ -258,6 +264,11 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
 
   const today = bookingClock.date;
   const maxDateStr = addIndiaCalendarDays(today, 30) ?? today;
+  const specialOpening = getActiveSpecialOpening(settingsMap, today);
+  const specialOpeningNotice = getSpecialOpeningNotice(
+    specialOpening,
+    bookingClock.minutes,
+  );
 
   return (
     <div className="page-wrapper">
@@ -276,6 +287,16 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
             Reserve your gaming station in a few easy steps
           </p>
         </div>
+
+        {specialOpeningNotice && (
+          <div className={`special-opening-banner ${specialOpeningNotice.state}`}>
+            <Clock size={18} />
+            <div>
+              <strong>{specialOpeningNotice.title}</strong>
+              <span>{specialOpeningNotice.detail}</span>
+            </div>
+          </div>
+        )}
 
         {/* Step Indicators */}
         <div className="booking-steps" style={{ marginBottom: 'var(--space-2xl)' }}>
@@ -553,7 +574,7 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
                   Available Start Times
                 </div>
                 <div className="time-slots-grid">
-                  {getTimeSlotsForDate(selectedDate, 30).map((time) => {
+                  {getTimeSlotsForDate(selectedDate, 30, specialOpening).map((time) => {
                     const [slotH, slotM] = time.split(':').map(Number);
                     const slotStartMinsVal = slotH * 60 + slotM;
                     const slotEndMinsVal = slotStartMinsVal + Math.round(selectedDuration * 60);

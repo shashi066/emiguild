@@ -14,6 +14,7 @@ import {
   isBookingStartPastInIndia,
   validatePublicBookingTime,
 } from '@/lib/public-booking-time';
+import { loadActiveSpecialOpening } from '@/lib/special-opening-server';
 import {
   hasBookingConflict,
   isVenueAtCapacityDuring,
@@ -139,7 +140,9 @@ export async function POST(req: NextRequest) {
     }
 
     const { stationId, date, startTime, duration, notes } = result.data;
-    const timeValidation = validatePublicBookingTime(date, startTime, duration);
+    const requestTime = new Date();
+    const specialOpening = await loadActiveSpecialOpening(requestTime);
+    const timeValidation = validatePublicBookingTime(date, startTime, duration, specialOpening);
     if (!timeValidation.valid) {
       return NextResponse.json(
         { error: timeValidation.reason, code: timeValidation.code },
@@ -147,7 +150,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const requestTime = new Date();
     const endTime = addHours(startTime, duration);
     const requestedControllers = Number(body.extraControllers ?? 0);
     const extraControllers = Number.isFinite(requestedControllers)

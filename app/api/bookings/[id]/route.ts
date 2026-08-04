@@ -23,6 +23,7 @@ import {
   isBookingStartPastInIndia,
   validatePublicBookingTime,
 } from '@/lib/public-booking-time';
+import { loadActiveSpecialOpening } from '@/lib/special-opening-server';
 import {
   hasBookingConflict,
   isVenueAtCapacityDuring,
@@ -296,9 +297,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'date, stationId, startTime and duration are required' }, { status: 400 });
   }
 
+  const specialOpening = booking.bookingType === 'OFFLINE'
+    ? null
+    : await loadActiveSpecialOpening(new Date());
   const timeValidation = booking.bookingType === 'OFFLINE'
     ? validateAdminWalkinTime(startTime, duration)
-    : validatePublicBookingTime(date, startTime, duration);
+    : validatePublicBookingTime(date, startTime, duration, specialOpening);
   if (!timeValidation.valid) {
     return NextResponse.json(
       { error: timeValidation.reason, code: timeValidation.code },

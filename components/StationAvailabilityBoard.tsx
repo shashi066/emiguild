@@ -11,6 +11,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import type { LiveAvailability } from '@/lib/station-availability';
+import { getSpecialOpeningNotice } from '@/lib/public-booking-time';
 import {
   getStationStatusCopy,
   shouldDisplayAvailabilityClosed,
@@ -30,6 +31,15 @@ function nextOpeningLabel(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function minutesFromTime(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 24 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
 }
 
 export function StationAvailabilityBoard({
@@ -126,7 +136,13 @@ export function StationAvailabilityBoard({
       closesAt: availability.publicHours.closesAt,
     });
     const openingLabel = nextOpeningLabel(availability.nextPublicOpenAt);
-    const venueLabel = boardClosed
+    const specialOpeningNotice = getSpecialOpeningNotice(
+      availability.specialOpening,
+      minutesFromTime(availability.currentTime) ?? 0,
+    );
+    const venueLabel = specialOpeningNotice
+      ? `${specialOpeningNotice.title} · ${specialOpeningNotice.detail}`
+      : boardClosed
       ? `Closed now · Opens ${openingLabel}`
       : availability.venue.freeScreens === 0
         ? `All ${availability.venue.capacity} screens occupied`

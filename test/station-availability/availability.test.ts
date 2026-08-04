@@ -4,6 +4,7 @@ import {
   buildLiveStationAvailability,
   getISTClock,
 } from '../../lib/station-availability';
+import { getActiveSpecialOpening } from '../../lib/public-booking-time';
 
 const stations = [
   {
@@ -34,6 +35,44 @@ test('uses IST for the endpoint clock', () => {
     getISTClock(new Date('2026-07-28T12:30:15.000Z')),
     { date: '2026-07-28', time: '18:00' },
   );
+});
+
+test('reports same-day early opening in live availability', () => {
+  const specialOpening = getActiveSpecialOpening(
+    {
+      special_opening_enabled: 'true',
+      special_opening_date: '2026-07-28',
+      special_opening_time: '11:00',
+    },
+    '2026-07-28',
+  );
+
+  assert.ok(specialOpening);
+  const beforeOpen = buildLiveStationAvailability({
+    stations,
+    bookings: [],
+    venueCapacity: 2,
+    date: '2026-07-28',
+    currentTime: '10:30',
+    specialOpening,
+  });
+
+  assert.equal(beforeOpen.publicOpen, false);
+  assert.equal(beforeOpen.publicHours.opensAt, '11:00');
+  assert.equal(beforeOpen.nextPublicOpenAt, '2026-07-28T11:00:00+05:30');
+  assert.equal(beforeOpen.specialOpening?.opensAt, '11:00');
+
+  const earlyOpen = buildLiveStationAvailability({
+    stations,
+    bookings: [],
+    venueCapacity: 2,
+    date: '2026-07-28',
+    currentTime: '11:30',
+    specialOpening,
+  });
+
+  assert.equal(earlyOpen.publicOpen, true);
+  assert.equal(earlyOpen.venue.freeScreens, 2);
 });
 
 test('marks the third station full only during the exact two-TV overlap', () => {
