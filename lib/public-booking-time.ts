@@ -161,7 +161,7 @@ export function getSpecialOpeningNotice(
   const timeLabel = formatPublicTimeLabel(specialOpening.opensAt);
   if (currentMinutes < specialOpening.openMinutes) {
     return {
-      title: 'Bonus Play Hours',
+      title: 'Early Access Drop',
       detail: `Slots unlock at ${timeLabel} today`,
       timeLabel,
       state: 'upcoming',
@@ -170,8 +170,8 @@ export function getSpecialOpeningNotice(
 
   if (currentMinutes < specialOpening.standardOpenMinutes) {
     return {
-      title: 'Bonus Play Hours Live',
-      detail: `Stations are ready from ${timeLabel} today`,
+      title: 'Early Access Live',
+      detail: `Stations unlocked from ${timeLabel} today`,
       timeLabel,
       state: 'open-now',
     };

@@ -112,7 +112,7 @@ export default function AdminSettingsPage() {
   );
   const specialPreview = specialEnabled
     ? activeSpecialOpening
-      ? `Bonus play hours start at ${formatPublicTimeLabel(activeSpecialOpening.opensAt)} today.`
+      ? `Early access starts at ${formatPublicTimeLabel(activeSpecialOpening.opensAt)} today.`
       : specialDate !== indiaClock.date
         ? 'Only today’s date is active. This saved date will be ignored.'
         : 'Choose a valid 30-minute time earlier than normal opening.'
