@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Save, CheckCircle, AlertCircle,
-  Gamepad2, IndianRupee, RefreshCw, CalendarDays, Clock,
+  Gamepad2, IndianRupee, RefreshCw, Clock,
 } from 'lucide-react';
 import {
   SPECIAL_OPENING_DATE_KEY,
@@ -70,7 +70,7 @@ export default function AdminSettingsPage() {
         },
         {
           key: SPECIAL_OPENING_DATE_KEY,
-          value: settings[SPECIAL_OPENING_DATE_KEY] ?? getIndiaClock().date,
+          value: getIndiaClock().date,
           label: 'Opening Boost Date',
         },
         {
@@ -100,7 +100,7 @@ export default function AdminSettingsPage() {
 
   const indiaClock = getIndiaClock();
   const specialEnabled = settings[SPECIAL_OPENING_ENABLED_KEY] === 'true';
-  const specialDate = settings[SPECIAL_OPENING_DATE_KEY] ?? indiaClock.date;
+  const specialDate = indiaClock.date;
   const specialTime = settings[SPECIAL_OPENING_TIME_KEY] ?? '11:00';
   const activeSpecialOpening = getActiveSpecialOpening(
     {
@@ -113,9 +113,7 @@ export default function AdminSettingsPage() {
   const specialPreview = specialEnabled
     ? activeSpecialOpening
       ? `Early access starts at ${formatPublicTimeLabel(activeSpecialOpening.opensAt)} today.`
-      : specialDate !== indiaClock.date
-        ? 'Only today’s date is active. This saved date will be ignored.'
-        : 'Choose a valid 30-minute time earlier than normal opening.'
+      : 'Choose a valid 30-minute time earlier than normal opening.'
     : 'Normal public opening hours remain active.';
 
   return (
@@ -228,7 +226,7 @@ export default function AdminSettingsPage() {
 
           <div className="card">
             <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-xl)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CalendarDays size={18} style={{ color: 'var(--color-accent-primary)' }} />
+              <Clock size={18} style={{ color: 'var(--color-accent-primary)' }} />
               Today Opening Boost
             </h2>
 
@@ -247,7 +245,7 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setSettings((prev) => ({
                     ...prev,
                     [SPECIAL_OPENING_ENABLED_KEY]: e.target.checked ? 'true' : 'false',
-                    [SPECIAL_OPENING_DATE_KEY]: prev[SPECIAL_OPENING_DATE_KEY] ?? indiaClock.date,
+                    [SPECIAL_OPENING_DATE_KEY]: indiaClock.date,
                     [SPECIAL_OPENING_TIME_KEY]: prev[SPECIAL_OPENING_TIME_KEY] ?? '11:00',
                   }))}
                   style={{ width: 18, height: 18 }}
@@ -255,24 +253,7 @@ export default function AdminSettingsPage() {
                 Open earlier than usual today
               </label>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-md)' }}>
-                <div>
-                  <label className="form-label" htmlFor="special-opening-date" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <CalendarDays size={14} />
-                    Date
-                  </label>
-                  <input
-                    id="special-opening-date"
-                    type="date"
-                    className="form-input"
-                    value={specialDate}
-                    onChange={(e) => setSettings((prev) => ({
-                      ...prev,
-                      [SPECIAL_OPENING_DATE_KEY]: e.target.value,
-                    }))}
-                  />
-                </div>
-
+              <div style={{ display: 'grid', gap: 'var(--space-md)' }}>
                 <div>
                   <label className="form-label" htmlFor="special-opening-time" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Clock size={14} />
