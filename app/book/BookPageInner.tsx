@@ -61,6 +61,7 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
 
   const [step, setStep] = useState(1);
   const [stations, setStations] = useState<Station[]>([]);
+  const [stationsLoading, setStationsLoading] = useState(true);
   const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -122,9 +123,11 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
 
   // Load stations
   useEffect(() => {
+    setStationsLoading(true);
     fetch('/api/stations')
       .then((r) => r.json())
-      .then((d) => setStations((d.stations ?? []).filter((s: { isActive: boolean }) => s.isActive)));
+      .then((d) => setStations((d.stations ?? []).filter((s: { isActive: boolean }) => s.isActive)))
+      .finally(() => setStationsLoading(false));
   }, []);
 
   // Load controller price from settings
@@ -402,7 +405,22 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
             </div>
 
             <div className="stations-grid booking-station-grid">
-              {stations.map((station) => (
+              {stationsLoading
+                ? /* ── Skeleton placeholder cards ── */
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="station-skeleton-card">
+                      <div className="skeleton station-skeleton-icon" />
+                      <div className="station-skeleton-details">
+                        <div className="skeleton" style={{ height: 13, width: '70%' }} />
+                        <div className="skeleton" style={{ height: 10, width: '45%' }} />
+                      </div>
+                      <div className="station-skeleton-rate">
+                        <div className="skeleton" style={{ height: 13, width: 44 }} />
+                        <div className="skeleton" style={{ height: 9,  width: 32 }} />
+                      </div>
+                    </div>
+                  ))
+                : stations.map((station) => (
                 <button
                   type="button"
                   key={station.id}
