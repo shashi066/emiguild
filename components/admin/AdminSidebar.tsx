@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Monitor, Users,
-  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield,
+  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { href: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { href: '/admin/users',    label: 'Users',          icon: Users },
   { href: '/admin/settings', label: 'Settings',       icon: Settings },
+  { href: '/admin/analytics', label: 'Analytics',     icon: Activity },
 ];
 
 export function AdminSidebar() {
@@ -62,7 +63,7 @@ export function AdminSidebar() {
 
       {/* Nav */}
       <div className="admin-sidebar-title">Navigation</div>
-      <nav>
+      <nav aria-label="Admin navigation">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href, item.exact);
@@ -72,6 +73,7 @@ export function AdminSidebar() {
               href={item.href}
               className={`admin-nav-item ${active ? 'active' : ''}`}
               id={`admin-nav-${item.label.toLowerCase().replace(' ', '-')}`}
+              aria-current={active ? 'page' : undefined}
             >
               <Icon size={18} />
               <span style={{ flex: 1 }}>{item.label}</span>

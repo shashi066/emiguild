@@ -25,7 +25,8 @@
     "test:booking-time": "tsx --test test/booking-time/public-booking-time.test.ts",
     "test:booking-flow": "tsx --test test/booking-availability/capacity.test.ts test/booking-time/public-booking-time.test.ts test/admin-walkin/time-slots.test.ts test/station-availability/availability.test.ts test/station-availability/display-copy.test.ts",
     "test:station-availability": "tsx --test test/station-availability/availability.test.ts test/station-availability/display-copy.test.ts",
-    "test:game-request": "tsx --test test/game-request/game-request.test.ts"
+    "test:game-request": "tsx --test test/game-request/game-request.test.ts",
+    "test:analytics": "tsx --test test/analytics/*.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
