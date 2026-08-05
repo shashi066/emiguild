@@ -37,6 +37,8 @@ export type LiveStationStatus = {
     startTime: string;
     endTime: string;
   } | null;
+  /** All confirmed bookings for this station today (for rendering timelines). */
+  todaySlots?: { startTime: string; endTime: string }[];
 };
 
 export type LiveAvailability = {
@@ -259,6 +261,10 @@ export function buildLiveStationAvailability({
               endTime: formatTime(nextWindow.end),
             }
           : null,
+        todaySlots: parsedBookings
+          .filter((b) => b.stationId === station.id)
+          .sort((a, b) => a.start - b.start)
+          .map((b) => ({ startTime: formatTime(b.start), endTime: formatTime(b.end) })),
       };
     });
 
