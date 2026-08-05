@@ -533,10 +533,23 @@ export default function WalkinBookingPage() {
       {/* ── Walk-in Booking Form Modal ── */}
       {showForm && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-xl)' }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            overflowY: 'auto',
+            padding: '24px 12px',
+            WebkitOverflowScrolling: 'touch',
+          }}
           onClick={(e) => e.target === e.currentTarget && setShowForm(false)}
         >
-          <div className="card" style={{ width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto' }}>
+          <div className="card" style={{ width: '100%', maxWidth: 540, margin: 'auto' }}>
+
             {/* Modal header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
               <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>
