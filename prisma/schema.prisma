@@ -438,3 +438,14 @@ model GuildGemLedger {
   @@index([reason, referenceId])
   @@map("guild_gem_ledger")
 }
+
+model WebsiteAnalytics {
+  date      DateTime
+  userKey   String
+  visits    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([date, userKey])
+  @@map("website_analytics")
+}
