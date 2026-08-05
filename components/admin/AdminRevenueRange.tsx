@@ -23,11 +23,22 @@ export function AdminRevenueRange({
   const [bookingCount, setBookingCount] = useState(initialBookingCount);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hideRevenue, setHideRevenue] = useState(true);
 
   const rangeLabel = useMemo(() => {
     if (from === initialFrom && to === initialTo) return 'This month';
     return 'Selected days';
   }, [from, initialFrom, initialTo, to]);
+
+  useEffect(() => {
+    const handleSync = () => {
+      const isHidden = (window as any).__hideDashboardRevenue !== false;
+      setHideRevenue(isHidden);
+    };
+    window.addEventListener('dashboard_revenue_visibility_changed', handleSync);
+    handleSync();
+    return () => window.removeEventListener('dashboard_revenue_visibility_changed', handleSync);
+  }, []);
 
   useEffect(() => {
     if (!from || !to || from > to) {
@@ -96,8 +107,12 @@ export function AdminRevenueRange({
       </div>
 
       <div className="admin-revenue-range-result" aria-live="polite">
-        <div className="admin-revenue-range-label">{rangeLabel} revenue</div>
-        <div className="admin-revenue-range-value">{loading ? '...' : formatCurrency(revenue)}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <div className="admin-revenue-range-label" style={{ margin: 0 }}>{rangeLabel} revenue</div>
+        </div>
+        <div className="admin-revenue-range-value">
+          {loading ? '...' : (hideRevenue ? '••••' : formatCurrency(revenue))}
+        </div>
         <div className={error ? 'admin-revenue-range-error' : 'admin-revenue-range-count'}>
           {error || `${bookingCount} booking${bookingCount === 1 ? '' : 's'} counted`}
         </div>
@@ -105,3 +120,5 @@ export function AdminRevenueRange({
     </section>
   );
 }
+
+

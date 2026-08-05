@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import BookPageInner from './BookPageInner';
+import { prisma } from '@/lib/prisma';
 
 export const metadata = {
   title: 'Book a Gaming Session',
@@ -9,8 +10,15 @@ export const metadata = {
 
 export const dynamic = 'force-dynamic';
 
-export default function BookPage() {
+export default async function BookPage() {
   const serverNow = new Date().toISOString();
+
+  // Fetch settings on the server side to prevent banner pop-in / late loading
+  const settings = await prisma.setting.findMany();
+  const initialSettings: Record<string, string> = {};
+  for (const s of settings) {
+    initialSettings[s.key] = s.value;
+  }
 
   return (
     <Suspense
@@ -25,7 +33,8 @@ export default function BookPage() {
         </div>
       }
     >
-      <BookPageInner serverNow={serverNow} />
+      <BookPageInner serverNow={serverNow} initialSettings={initialSettings} />
     </Suspense>
   );
 }
+

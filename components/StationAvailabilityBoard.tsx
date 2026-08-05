@@ -197,7 +197,7 @@ function GanttChart({
           {stations.map((station, idx) => {
             const venueLimited = computeVenueLimitedPeriods(
               station.id, allSlots, venueCapacity, opensAt, closesAt,
-            );
+            ).filter((slot) => toMins(slot.endTime) > startMins && toMins(slot.startTime) < closeMins);
 
             return (
               <div
@@ -223,7 +223,7 @@ function GanttChart({
                   </div>
                   <div style={{
                     fontSize:   '0.62rem',
-                    color:      station.hasControllers ? 'var(--color-accent-secondary)' : '#f59e0b',
+                    color:      station.hasControllers ? 'var(--color-accent-secondary)' : 'var(--color-accent-warning)',
                     display:    'flex',
                     alignItems: 'center',
                     gap:        3,
@@ -234,14 +234,14 @@ function GanttChart({
                   </div>
                 </div>
 
-                {/* Timeline bar — green background = available */}
+                {/* Timeline bar — plain background */}
                 <div style={{
                   flex:         1,
                   position:    'relative',
                   height:       32,
                   borderRadius: 5,
-                  background:  'rgba(34,197,94,0.12)',
-                  border:      '1px solid rgba(34,197,94,0.18)',
+                  background:  'rgba(255,255,255,0.04)',
+                  border:      '1px solid rgba(255,255,255,0.06)',
                 }}>
                   {/* Hour grid lines */}
                   {hourTicks.slice(1, -1).map((m) => (
@@ -264,9 +264,9 @@ function GanttChart({
                         left:         posPct(toMins(slot.startTime), startMins, closeMins),
                         width:        widthPct(toMins(slot.startTime), toMins(slot.endTime), startMins, closeMins),
                         top: 3, bottom: 3,
-                        background:   'rgba(245,158,11,0.28)',
+                        background:   'rgba(255,170,0,0.22)',
                         borderRadius: 4,
-                        border:       '1px solid rgba(245,158,11,0.4)',
+                        border:       '1px solid rgba(255,170,0,0.45)',
                         cursor:       'default',
                         display:      'flex',
                         alignItems:   'center',
@@ -274,17 +274,18 @@ function GanttChart({
                         overflow:     'hidden',
                       }}
                     >
-                      <span style={{ fontSize: '0.58rem', color: 'rgba(245,158,11,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ fontSize: '0.58rem', color: 'var(--color-accent-warning)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         Venue full
                       </span>
                     </div>
                   ))}
 
                   {/* Booked blocks (red) */}
-                  {(station.todaySlots ?? []).map((slot, i) => {
-                    const s      = toMins(slot.startTime);
-                    const e      = toMins(slot.endTime);
-                    const active = nowMins >= s && nowMins < e;
+                  {(station.todaySlots ?? [])
+                    .filter((slot) => toMins(slot.endTime) > startMins && toMins(slot.startTime) < closeMins)
+                    .map((slot, i) => {
+                      const s      = toMins(slot.startTime);
+                      const e      = toMins(slot.endTime);
                     return (
                       <div
                         key={i}
@@ -294,29 +295,24 @@ function GanttChart({
                           left:         posPct(s, startMins, closeMins),
                           width:        widthPct(s, e, startMins, closeMins),
                           top: 3, bottom: 3,
-                          background:   active
-                            ? 'linear-gradient(135deg, rgba(239,68,68,0.95), rgba(220,38,38,0.9))'
-                            : 'rgba(239,68,68,0.55)',
+                          background:   'rgba(255,64,64,0.18)',
                           borderRadius: 4,
-                          border:       active
-                            ? '1px solid rgba(239,68,68,0.9)'
-                            : '1px solid rgba(239,68,68,0.4)',
+                          border:       '1px solid rgba(255,64,64,0.25)',
                           display:      'flex',
                           alignItems:   'center',
                           paddingLeft:  6,
                           overflow:     'hidden',
                           cursor:       'default',
-                          boxShadow:    active ? '0 0 8px rgba(239,68,68,0.3)' : 'none',
                           zIndex:       1,
                         }}
                       >
                         <span style={{
                           fontSize:     '0.6rem',
-                          color:        active ? '#fff' : 'rgba(255,255,255,0.7)',
+                          color:        'rgba(255,255,255,0.7)',
                           whiteSpace:   'nowrap',
                           overflow:     'hidden',
                           textOverflow: 'ellipsis',
-                          fontWeight:   active ? 700 : 400,
+                          fontWeight:   400,
                         }}>
                           {fmtAmPm(slot.startTime)}–{fmtAmPm(slot.endTime)}
                         </span>
@@ -347,15 +343,11 @@ function GanttChart({
       {/* Legend */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-md)', marginTop: 'var(--space-md)', fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 12, height: 10, borderRadius: 2, background: 'rgba(34,197,94,0.45)', border: '1px solid rgba(34,197,94,0.3)', display: 'inline-block' }} />
-          Available
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 12, height: 10, borderRadius: 2, background: 'rgba(239,68,68,0.85)', display: 'inline-block' }} />
+          <span style={{ width: 12, height: 10, borderRadius: 2, background: 'rgba(255,64,64,0.18)', border: '1px solid rgba(255,64,64,0.25)', display: 'inline-block' }} />
           Booked
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 12, height: 10, borderRadius: 2, background: 'rgba(245,158,11,0.35)', border: '1px solid rgba(245,158,11,0.45)', display: 'inline-block' }} />
+          <span style={{ width: 12, height: 10, borderRadius: 2, background: 'rgba(255,170,0,0.22)', border: '1px solid rgba(255,170,0,0.45)', display: 'inline-block' }} />
           Venue at capacity
         </span>
         {showNow && (
@@ -365,6 +357,8 @@ function GanttChart({
           </span>
         )}
       </div>
+
+
     </div>
   );
 }

@@ -53,7 +53,13 @@ const STEPS = [
   { num: 4, label: 'Confirm', icon: CheckCircle },
 ];
 
-export default function BookPageInner({ serverNow }: { serverNow: string }) {
+export default function BookPageInner({
+  serverNow,
+  initialSettings,
+}: {
+  serverNow: string;
+  initialSettings?: Record<string, string>;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
@@ -73,9 +79,12 @@ export default function BookPageInner({ serverNow }: { serverNow: string }) {
   const [selectedTime, setSelectedTime]         = useState('');
   const [selectedDuration, setSelectedDuration] = useState<number>(1);
   const [extraControllers, setExtraControllers] = useState(0);
-  const [controllerPrice, setControllerPrice]   = useState(0);
-  const [settingsMap, setSettingsMap]           = useState<Record<string, string>>({});
+  const [controllerPrice, setControllerPrice]   = useState(
+    initialSettings ? parseFloat(initialSettings.controller_price ?? '0') : 0
+  );
+  const [settingsMap, setSettingsMap]           = useState<Record<string, string>>(initialSettings ?? {});
   const [notes, setNotes]                       = useState('');
+
   const [usePass, setUsePass]                   = useState(false);
   const [activePasses, setActivePasses]         = useState<Array<{
     id: string; passType: string; totalHours: number; usedHours: number;
