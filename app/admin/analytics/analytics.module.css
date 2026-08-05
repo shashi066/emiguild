@@ -1,0 +1,175 @@
+.statsGrid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.statCard {
+  min-width: 0;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.statIcon {
+  background: var(--analytics-icon-bg);
+  color: var(--analytics-accent);
+}
+
+.statValue {
+  color: var(--analytics-accent);
+  font-size: 1.8rem;
+}
+
+.violet {
+  --analytics-accent: #8b83ff;
+  --analytics-icon-bg: rgba(108, 99, 255, 0.12);
+}
+
+.cyan {
+  --analytics-accent: #00d4ff;
+  --analytics-icon-bg: rgba(0, 212, 255, 0.08);
+}
+
+.green {
+  --analytics-accent: #00e676;
+  --analytics-icon-bg: rgba(0, 230, 118, 0.1);
+}
+
+.amber {
+  --analytics-accent: #f59e0b;
+  --analytics-icon-bg: rgba(245, 158, 11, 0.1);
+}
+
+.tableHeading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.tableHeading h2 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.tableHeading svg {
+  color: var(--color-accent-primary);
+}
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.resultCount {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  transition: none;
+}
+
+.tableRegion:focus-visible {
+  outline: 2px solid var(--color-accent-secondary);
+  outline-offset: 2px;
+}
+
+.visitorTable {
+  min-width: 1220px;
+}
+
+.userColumn {
+  min-width: 230px;
+}
+
+.numberColumn {
+  text-align: right !important;
+}
+
+.numberValue {
+  color: var(--color-text-primary) !important;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.identityDetail {
+  max-width: 260px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.adminRole {
+  color: #a8a3ff;
+  background: rgba(108, 99, 255, 0.1);
+  border-color: rgba(108, 99, 255, 0.3);
+}
+
+.userRole {
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.07);
+  border-color: rgba(0, 212, 255, 0.24);
+}
+
+.anonymousRole {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--color-border);
+}
+
+.deletedRole {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.07);
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+.emptyRow {
+  padding: var(--space-2xl) !important;
+  color: var(--color-text-muted) !important;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statCard {
+    padding: var(--space-lg);
+  }
+
+  .statValue {
+    font-size: 1.5rem;
+  }
+
+  .searchBar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+}

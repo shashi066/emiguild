@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import ScrollToSection from '@/components/ScrollToSection';
 import HeroActions from '@/components/HeroActions';
+import HomepageVisitTracker from '@/components/HomepageVisitTracker';
 import { StationAvailabilityBoard } from '@/components/StationAvailabilityBoard';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
@@ -191,6 +192,8 @@ export default async function HomePage() {
 
   return (
     <>
+      <HomepageVisitTracker />
+
       {/* ── HERO ─────────────────────────────────────────── */}
       <section className="hero">
         <div className="hero-bg" />
