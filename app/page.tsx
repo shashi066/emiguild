@@ -178,12 +178,14 @@ const AVAILABLE_GAMES = [
 
 export default async function HomePage() {
   const now = new Date();
-  const [stations, stats, session, specialOpening] = await Promise.all([
+  const [stations, stats, session, specialOpening, showAvailabilitySetting] = await Promise.all([
     getStations(),
     getStats(),
     auth(),
     loadActiveSpecialOpening(now),
+    prisma.setting.findUnique({ where: { key: 'show_stations_availability' } }),
   ]);
+  const showStationsAvailability = showAvailabilitySetting?.value !== 'false';
   const indiaClock = getIndiaClock(now);
   const specialOpeningNotice = getSpecialOpeningNotice(
     specialOpening,
@@ -250,7 +252,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <StationAvailabilityBoard mode="public" />
+      {showStationsAvailability && <StationAvailabilityBoard mode="public" />}
 
       {/* ── FEATURES ─────────────────────────────────────── */}
       <section className="section" style={{ background: 'var(--color-bg-surface)' }}>

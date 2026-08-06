@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Search, Award, CheckCircle, AlertCircle, Calendar, User, X, ChevronDown, Ban,
-  Crown, Sword, Save, Clock3,
+  Crown, Sword, Save, Clock3, Edit2,
 } from 'lucide-react';
 import { decryptPhone } from '@/lib/crypto';
 import {
@@ -51,6 +51,13 @@ type ActivePass = {
   purchasedAt: string; expiresAt: string;
 };
 
+const getDaysLeft = (expiryDate: Date | string) => {
+  const diff = new Date(expiryDate).getTime() - new Date().getTime();
+  const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
+  if (days <= 0) return 'Expires today';
+  return `${days} day${days === 1 ? '' : 's'} left`;
+};
+
 export default function AdminPassesPage() {
   const [allUsers, setAllUsers]           = useState<UserItem[]>([]);
   const [loadingUsers, setLoadingUsers]   = useState(true);
@@ -69,8 +76,37 @@ export default function AdminPassesPage() {
   const [savingPlan, setSavingPlan] = useState<string | null>(null);
   const [success, setSuccess]             = useState('');
   const [error, setError]                 = useState('');
+  const [editingPlan, setEditingPlan]     = useState<GuildMembershipPlan | null>(null);
+  const [allActivePasses, setAllActivePasses]         = useState<any[]>([]);
+  const [loadingActivePasses, setLoadingActivePasses] = useState(true);
+  const [showAssignModal, setShowAssignModal]         = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const loadAllActivePasses = async () => {
+    setLoadingActivePasses(true);
+    try {
+      const res = await fetch('/api/admin/passes?all=1');
+      if (res.ok) {
+        const data = await res.json();
+        const decrypted = (data.passes ?? []).map((p: any) => {
+          if (p.user && p.user.phone) {
+            try {
+              p.user.phone = decryptPhone(p.user.phone);
+            } catch {
+              // ignore
+            }
+          }
+          return p;
+        });
+        setAllActivePasses(decrypted);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingActivePasses(false);
+    }
+  };
 
   // Load all users once
   useEffect(() => {
@@ -88,6 +124,7 @@ export default function AdminPassesPage() {
         if (data.plans?.length) setGuildPlans(data.plans);
       })
       .catch(() => {});
+    loadAllActivePasses();
   }, []);
 
   const passOptions = [
@@ -169,6 +206,8 @@ export default function AdminPassesPage() {
         const cfg = passOptions.find((p) => p.type === selectedPass)!;
         setSuccess(`${cfg.label} assigned to ${selectedUser.name}!`);
         fetchUserPasses(selectedUser.id);
+        loadAllActivePasses();
+        setShowAssignModal(false);
       }
     } catch {
       setError('Failed to assign pass. Please try again.');
@@ -177,8 +216,8 @@ export default function AdminPassesPage() {
     }
   };
 
-  const handleExtend = async (passId: string) => {
-    if (!selectedUser) return;
+  const handleExtend = async (passId: string, userName?: string, userId?: string) => {
+    const targetName = userName || selectedUser?.name || 'Customer';
     setExtendingPassId(passId);
     setError('');
     setSuccess('');
@@ -192,8 +231,11 @@ export default function AdminPassesPage() {
       if (!res.ok) {
         setError(data.error ?? 'Failed to extend membership.');
       } else {
-        setSuccess(`Membership extended by 30 days for ${selectedUser.name}.`);
-        fetchUserPasses(selectedUser.id);
+        setSuccess(`Membership extended by 30 days for ${targetName}.`);
+        if (selectedUser && selectedUser.id === userId) {
+          fetchUserPasses(selectedUser.id);
+        }
+        loadAllActivePasses();
       }
     } catch {
       setError('Failed to extend membership. Please try again.');
@@ -234,6 +276,7 @@ export default function AdminPassesPage() {
       } else {
         updatePlanState(plan.type, data.plan);
         setSuccess(`${plan.name} settings saved.`);
+        setEditingPlan(null);
       }
     } catch {
       setError('Failed to save membership plan. Please try again.');
@@ -242,9 +285,9 @@ export default function AdminPassesPage() {
     }
   };
 
-  const handleRevoke = async (passId: string, passType: string) => {
-    if (!selectedUser) return;
-    if (!confirm(`Revoke this ${passType} pass for ${selectedUser.name}?`)) return;
+  const handleRevoke = async (passId: string, passType: string, userName?: string, userId?: string) => {
+    const targetName = userName || selectedUser?.name || 'Customer';
+    if (!confirm(`Revoke this ${passType} pass for ${targetName}?`)) return;
 
     setRevokingPassId(passId);
     setError('');
@@ -259,8 +302,11 @@ export default function AdminPassesPage() {
       if (!res.ok) {
         setError(data.error ?? 'Failed to revoke pass.');
       } else {
-        setSuccess(`${passType} pass revoked for ${selectedUser.name}.`);
-        fetchUserPasses(selectedUser.id);
+        setSuccess(`${passType} pass revoked for ${targetName}.`);
+        if (selectedUser && selectedUser.id === userId) {
+          fetchUserPasses(selectedUser.id);
+        }
+        loadAllActivePasses();
       }
     } catch {
       setError('Failed to revoke pass. Please try again.');
@@ -417,6 +463,140 @@ export default function AdminPassesPage() {
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Award size={18} style={{ color: '#FFD700' }} />
+                Active Customer Passes
+              </div>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => { handleClear(); setShowAssignModal(true); }}
+                id="open-assign-modal-btn"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', height: 'auto', fontSize: '0.85rem' }}
+              >
+                <Award size={14} /> Assign a Pass
+              </button>
+            </div>
+
+            {loadingActivePasses ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                <div className="spinner" />
+              </div>
+            ) : allActivePasses.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 16px', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                No active passes found. Click "Assign a Pass" to get started.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {allActivePasses.map((p) => {
+                  const membership = isGuildMembershipType(p.passType);
+                  const color = PASS_COLOR[p.passType as PassType] ?? '#888';
+                  const remaining = Math.max(0, p.totalHours - p.usedHours);
+                  const pct = p.totalHours > 0 ? (p.usedHours / p.totalHours) * 100 : 0;
+                  const daysLeft = getDaysLeft(p.expiresAt);
+                  
+                  return (
+                    <div 
+                      key={p.id} 
+                      style={{ 
+                        padding: '14px 16px', 
+                        background: `${color}06`, 
+                        border: `1px solid ${color}25`, 
+                        borderRadius: 'var(--radius-md)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
+                            {p.user?.name ?? 'Unknown Customer'}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                            {p.user?.email} {p.user?.phone ? `· ${p.user.phone}` : ''}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          {membership && (
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              style={{ padding: '4px 8px', height: 'auto', fontSize: '0.75rem' }}
+                              onClick={() => handleExtend(p.id, p.user?.name, p.user?.id)}
+                              disabled={extendingPassId === p.id}
+                            >
+                              <Clock3 size={12} style={{ marginRight: 4 }} />
+                              {extendingPassId === p.id ? 'Extending...' : '+30 Days'}
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '4px 8px', height: 'auto', fontSize: '0.75rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)' }}
+                            onClick={() => handleRevoke(p.id, p.passType, p.user?.name, p.user?.id)}
+                            disabled={revokingPassId === p.id}
+                          >
+                            <Ban size={12} style={{ marginRight: 4 }} />
+                            {revokingPassId === p.id ? 'Cancelling...' : membership ? 'Cancel' : 'Revoke'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ 
+                            fontWeight: 700, 
+                            color, 
+                            fontSize: '0.75rem', 
+                            textTransform: 'uppercase',
+                            background: `${color}12`,
+                            padding: '3px 8px',
+                            borderRadius: 4,
+                            border: `1px solid ${color}25`
+                          }}>
+                            {membership ? guildMembershipName(p.passType) : `${p.passType} PASS`}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
+                            {membership ? (
+                              p.passType === 'GUILD_MASTER'
+                                ? '50% OFF solo/squad PS5 bookings'
+                                : '50% OFF solo PS5 bookings'
+                            ) : (
+                              `${remaining}/${p.totalHours} hours remaining`
+                            )}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Calendar size={11} />
+                          Expires {new Date(p.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                          <span style={{ 
+                            fontWeight: 700, 
+                            color: daysLeft.includes('day') ? 'var(--color-accent-secondary)' : 'var(--color-accent-danger)', 
+                            background: daysLeft.includes('day') ? 'rgba(0,212,255,0.06)' : 'rgba(239,68,68,0.06)',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            marginLeft: 4
+                          }}>
+                            {daysLeft}
+                          </span>
+                        </div>
+                      </div>
+
+                      {!membership && (
+                        <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginTop: 2 }}>
+                          <div style={{ width: `${100 - pct}%`, height: '100%', background: color, borderRadius: 2 }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Guild Membership Plans Card (moved to bottom) */}
+          <div className="card" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }}>
@@ -430,272 +610,370 @@ export default function AdminPassesPage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {guildPlans.map((plan) => (
-                <section
+                <div
                   key={plan.type}
                   style={{
-                    padding: 14,
-                    border: `1px solid ${PASS_COLOR[plan.type]}44`,
+                    padding: 16,
+                    border: `1px solid ${PASS_COLOR[plan.type]}33`,
                     borderRadius: 'var(--radius-md)',
-                    background: `${PASS_COLOR[plan.type]}08`,
+                    background: `${PASS_COLOR[plan.type]}06`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
-                    <strong style={{ display: 'flex', alignItems: 'center', gap: 7, color: PASS_COLOR[plan.type] }}>
-                      {plan.type === 'GUILD_MASTER' ? <Crown size={15} /> : <Sword size={15} />}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <strong style={{ display: 'flex', alignItems: 'center', gap: 8, color: PASS_COLOR[plan.type], fontSize: '0.95rem' }}>
+                      {plan.type === 'GUILD_MASTER' ? <Crown size={16} /> : <Sword size={16} />}
                       {plan.name}
                     </strong>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: '0.78rem', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={plan.isActive}
-                        onChange={(event) => updatePlanState(plan.type, { isActive: event.target.checked })}
-                      />
-                      Enabled
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {plan.isActive ? (
+                        <span style={{
+                          fontSize: '0.7rem', fontWeight: 700, color: '#10b981',
+                          background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)',
+                          borderRadius: 999, padding: '2px 8px',
+                        }}>
+                          Active
+                        </span>
+                      ) : (
+                        <span style={{
+                          fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)',
+                          background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)',
+                          borderRadius: 999, padding: '2px 8px',
+                        }}>
+                          Inactive
+                        </span>
+                      )}
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ padding: '4px 8px', height: 'auto' }}
+                        onClick={() => setEditingPlan({ ...plan })}
+                        id={`edit-guild-plan-${plan.type.toLowerCase()}`}
+                      >
+                        <Edit2 size={13} style={{ marginRight: 4 }} /> Edit
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 1fr) minmax(110px, 1fr)', gap: 10 }}>
-                    <label className="form-group">
-                      <span className="form-label">Price</span>
-                      <input
-                        className="form-input"
-                        type="number"
-                        min={1}
-                        max={100000}
-                        value={plan.price}
-                        onChange={(event) => updatePlanState(plan.type, { price: Number(event.target.value) })}
-                      />
-                    </label>
-                    <label className="form-group">
-                      <span className="form-label">Validity Days</span>
-                      <input
-                        className="form-input"
-                        type="number"
-                        min={1}
-                        max={365}
-                        value={plan.validityDays}
-                        onChange={(event) => updatePlanState(plan.type, { validityDays: Number(event.target.value) })}
-                      />
-                    </label>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <span style={{
+                      fontFamily: 'Orbitron, sans-serif',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      color: 'var(--color-text-primary)',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 6,
+                      padding: '3px 8px',
+                    }}>
+                      ₹{plan.price}
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                      Valid for <strong>{plan.validityDays} days</strong>
+                    </span>
                   </div>
-                  <label className="form-group" style={{ marginTop: 10 }}>
-                    <span className="form-label">Description</span>
-                    <input
-                      className="form-input"
-                      value={plan.description}
-                      maxLength={300}
-                      onChange={(event) => updatePlanState(plan.type, { description: event.target.value })}
-                    />
-                  </label>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ marginTop: 10 }}
-                    onClick={() => handleSavePlan(plan)}
-                    disabled={savingPlan === plan.type}
-                  >
-                    <Save size={13} />
-                    {savingPlan === plan.type ? 'Saving...' : `Save ${plan.name}`}
-                  </button>
-                </section>
+
+                  {plan.description && (
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                      {plan.description}
+                    </p>
+                  )}
+                </div>
               ))}
             </div>
           </div>
 
-          {/* Search card */}
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
-              Customer
-            </div>
-
-            <div className="pass-search-wrapper" ref={wrapperRef}>
-              <div className="pass-search-box" onClick={() => inputRef.current?.focus()}>
-                <Search size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-
-                {selectedUser ? (
-                  <span className="pass-search-chip">
-                    <User size={12} />
-                    <span className="chip-name">{selectedUser.name}{selectedUser.phone ? ` · ${selectedUser.phone}` : ''}</span>
-                    <button className="pass-chip-clear" onClick={(e) => { e.stopPropagation(); handleClear(); }}>
-                      <X size={12} />
-                    </button>
-                  </span>
-                ) : (
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    placeholder={loadingUsers ? 'Loading customers…' : 'Search by name, email or phone…'}
-                    value={query}
-                    disabled={loadingUsers}
-                    onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); }}
-                    onFocus={() => { if (query) setShowDropdown(true); }}
-                  />
-                )}
-
-                <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0, transform: showDropdown ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
-              </div>
-
-              {/* Dropdown list */}
-              {!selectedUser && showDropdown && (
-                <div className="pass-dropdown">
-                  {filtered.length > 0 ? filtered.map((u) => (
-                    <button key={u.id} className="pass-dropdown-item" onMouseDown={() => handleSelect(u)}>
-                      <div className="pass-dropdown-avatar">
-                        <User size={15} style={{ color: 'white' }} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text-primary)' }}>{u.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 1 }}>
-                          {u.phone ?? 'No phone'} · {u.email}
-                        </div>
-                      </div>
-                    </button>
-                  )) : (
-                    <div className="pass-dropdown-empty">
-                      {query.trim() ? `No customers matching "${query}"` : 'Start typing to search…'}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* User detail + assign — only when user selected */}
-          {selectedUser && (
-            <div className="card" style={{ marginBottom: 20 }}>
-
-              {/* Pass and membership history */}
-              {loadingPasses ? (
-                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: 20 }}>Checking active passes…</div>
-              ) : userPasses.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                    Pass &amp; Membership History
-                  </div>
-                  {userPasses.map((p) => {
-                    const membership = isGuildMembershipType(p.passType);
-                    const remaining = Math.max(0, p.totalHours - p.usedHours);
-                    const pct = p.totalHours > 0 ? (p.usedHours / p.totalHours) * 100 : 0;
-                    const color = PASS_COLOR[p.passType as PassType] ?? '#888';
-                    const active = p.status === 'ACTIVE' && new Date(p.expiresAt) >= new Date();
-                    const statusLabel = p.status === 'REVOKED' ? 'CANCELLED' : p.status;
-                    return (
-                      <div key={p.id} style={{ padding: '12px 16px', background: `${color}08`, border: `1px solid ${color}30`, borderRadius: 'var(--radius-md)', marginBottom: 8, opacity: active ? 1 : 0.72 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
-                          <div>
-                            <span style={{ fontWeight: 700, color, fontSize: '0.85rem' }}>
-                              {membership ? guildMembershipName(p.passType) : `${p.passType} PASS`}
-                            </span>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                              <Calendar size={11} />
-                              Activated {new Date(p.purchasedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                              {' · '}
-                              Expires {new Date(p.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                            </div>
-                            <div style={{ marginTop: 4, fontSize: '0.68rem', fontWeight: 800, color: active ? '#4ade80' : '#f59e0b' }}>{statusLabel}</div>
-                          </div>
-                          {active && (
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                              {membership && (
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => handleExtend(p.id)}
-                                  disabled={extendingPassId === p.id}
-                                >
-                                  <Clock3 size={13} />
-                                  {extendingPassId === p.id ? 'Extending...' : '+30 Days'}
-                                </button>
-                              )}
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)' }}
-                                onClick={() => handleRevoke(p.id, p.passType)}
-                                disabled={revokingPassId === p.id}
-                              >
-                                <Ban size={13} />
-                                {revokingPassId === p.id ? 'Cancelling...' : membership ? 'Cancel' : 'Revoke'}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        {membership ? (
-                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                            {p.passType === 'GUILD_MASTER'
-                              ? '50% OFF eligible solo and squad PS5 bookings every day'
-                              : '50% OFF eligible solo PS5 bookings every day'}
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                            <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
-                              <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
-                            </div>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{remaining}/{p.totalHours} hrs left</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Pass selector */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-                  Select Pass to Assign
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
-                  {passOptions.map((opt) => {
-                    const color = PASS_COLOR[opt.type];
-                    const active = selectedPass === opt.type;
-                    const membership = isGuildMembershipType(opt.type);
-                    return (
-                      <button
-                        key={opt.type}
-                        onClick={() => setSelectedPass(opt.type)}
-                        className={`pass-type-btn ${active ? `active-${opt.type.toLowerCase().replaceAll('_', '-')}` : ''}`}
-                        disabled={!opt.isActive}
-                      >
-                        <div style={{ fontSize: '1.8rem', marginBottom: 6 }}>{opt.icon}</div>
-                        <div style={{ fontWeight: 700, fontSize: '0.82rem', color: active ? color : 'var(--color-text-primary)', marginBottom: 2 }}>
-                          {opt.label}
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                          {membership
-                            ? `${opt.validityDays} days · ₹${opt.price.toLocaleString('en-IN')}`
-                            : `${opt.hours} hrs · ₹${opt.price.toLocaleString('en-IN')}`}
-                        </div>
-                        {!opt.isActive && <div style={{ marginTop: 3, fontSize: '0.65rem', color: '#f59e0b' }}>Disabled</div>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%', justifyContent: 'center' }}
-                onClick={handleAssign}
-                disabled={assigning || !passOptions.find((option) => option.type === selectedPass)?.isActive}
-              >
-                <Award size={16} />
-                {assigning
-                  ? 'Assigning…'
-                  : `Assign ${passOptions.find((p) => p.type === selectedPass)?.label} to ${selectedUser.name}`}
-              </button>
-            </div>
-          )}
-
           {success && (
-            <div className="alert alert-success">
+            <div className="alert alert-success" style={{ marginBottom: 16 }}>
               <CheckCircle size={16} /> {success}
             </div>
           )}
           {error && (
-            <div className="alert alert-error">
+            <div className="alert alert-error" style={{ marginBottom: 16 }}>
               <AlertCircle size={16} /> {error}
             </div>
           )}
 
         </div>
       </div>
+
+      {/* ══ Assign Pass Modal ════════════════════════════════ */}
+      {showAssignModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 'var(--space-xl)',
+          }}
+          onClick={(e) => e.target === e.currentTarget && setShowAssignModal(false)}
+        >
+          <div className="card" style={{ width: '100%', maxWidth: 500, overflow: 'visible' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-accent-primary)' }}>
+                <Award size={18} />
+                Assign New Pass
+              </h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowAssignModal(false)} id="modal-close-btn" aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Search input inside modal */}
+            <div className="form-group" style={{ position: 'relative', zIndex: 1001 }}>
+              <label className="form-label">Search Customer</label>
+              <div className="pass-search-wrapper" ref={wrapperRef}>
+                <div className="pass-search-box" onClick={() => inputRef.current?.focus()}>
+                  <Search size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+
+                  {selectedUser ? (
+                    <span className="pass-search-chip">
+                      <User size={12} />
+                      <span className="chip-name">{selectedUser.name}{selectedUser.phone ? ` · ${selectedUser.phone}` : ''}</span>
+                      <button className="pass-chip-clear" onClick={(e) => { e.stopPropagation(); handleClear(); }}>
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ) : (
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      placeholder={loadingUsers ? 'Loading customers…' : 'Search by name, email or phone…'}
+                      value={query}
+                      disabled={loadingUsers}
+                      onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); }}
+                      onFocus={() => { if (query) setShowDropdown(true); }}
+                      autoFocus
+                    />
+                  )}
+
+                  <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0, transform: showDropdown ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+                </div>
+
+                {/* Dropdown list */}
+                {!selectedUser && showDropdown && (
+                  <div className="pass-dropdown" style={{ zIndex: 1002, position: 'absolute', width: '100%' }}>
+                    {filtered.length > 0 ? filtered.map((u) => (
+                      <button key={u.id} className="pass-dropdown-item" onMouseDown={() => handleSelect(u)}>
+                        <div className="pass-dropdown-avatar">
+                          <User size={15} style={{ color: 'white' }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text-primary)' }}>{u.name}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 1 }}>
+                            {u.phone ?? 'No phone'} · {u.email}
+                          </div>
+                        </div>
+                      </button>
+                    )) : (
+                      <div className="pass-dropdown-empty">
+                        {query.trim() ? `No customers matching "${query}"` : 'Start typing to search…'}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Pass selector & details inside modal (visible only when user selected) */}
+            {selectedUser && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
+                {userPasses.length > 0 && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', background: 'rgba(255,255,255,0.02)', padding: 10, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                    <strong>Note:</strong> Customer already has <strong>{userPasses.filter(p => p.status === 'ACTIVE').length} active</strong> pass(es).
+                  </div>
+                )}
+
+                {/* Pass options selector */}
+                <div>
+                  <label className="form-label">Select Pass to Assign</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
+                    {passOptions.map((opt) => {
+                      const isGuild = isGuildMembershipType(opt.type);
+                      const actCls = `active-${opt.type.toLowerCase()}`;
+                      const active = selectedPass === opt.type;
+                      return (
+                        <button
+                          key={opt.type}
+                          type="button"
+                          className={`pass-type-btn ${active ? actCls : ''}`}
+                          onClick={() => setSelectedPass(opt.type)}
+                          disabled={!opt.isActive}
+                          style={{
+                            padding: '12px 8px', fontSize: '0.8rem',
+                            borderWidth: '2px', borderColor: active ? undefined : 'var(--color-border)',
+                          }}
+                        >
+                          <div style={{ fontSize: '1.2rem', marginBottom: 4 }}>{opt.icon}</div>
+                          <div style={{ fontWeight: 700, color: active ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', fontSize: '0.75rem', lineHeight: 1.2 }}>
+                            {opt.label}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: 4, fontFamily: 'Orbitron, sans-serif' }}>
+                            ₹{opt.price}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Assign button */}
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    className="btn btn-primary"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={handleAssign}
+                    disabled={assigning || !passOptions.find((option) => option.type === selectedPass)?.isActive}
+                  >
+                    <Award size={16} />
+                    {assigning
+                      ? 'Assigning…'
+                      : `Assign ${passOptions.find((p) => p.type === selectedPass)?.label} to ${selectedUser.name}`}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Footer / Cancel when no user or simple cancel */}
+            <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: selectedUser ? 10 : 20 }}>
+              <button
+                className="btn btn-ghost"
+                style={{ flex: 1, justifyContent: 'center' }}
+                onClick={() => { handleClear(); setShowAssignModal(false); }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Edit Guild Membership Plan Modal ════════════════════════════════ */}
+      {editingPlan && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 'var(--space-xl)',
+          }}
+          onClick={(e) => e.target === e.currentTarget && setEditingPlan(null)}
+        >
+          <div className="card" style={{ width: '100%', maxWidth: 480 }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, color: PASS_COLOR[editingPlan.type] }}>
+                {editingPlan.type === 'GUILD_MASTER' ? <Crown size={18} /> : <Sword size={18} />}
+                Edit {editingPlan.name}
+              </h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditingPlan(null)} id="modal-close-btn" aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Active Toggle switch */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'rgba(255,255,255,0.02)', padding: '12px var(--space-md)',
+                borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
+              }}>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Enable Membership Plan</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                    Available for customers to purchase
+                  </div>
+                </div>
+                <label style={{ cursor: 'pointer', display: 'inline-block' }}>
+                  <input
+                    type="checkbox"
+                    checked={editingPlan.isActive}
+                    onChange={(e) => setEditingPlan(p => p ? { ...p, isActive: e.target.checked } : null)}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{
+                    width: 44, height: 22,
+                    background: editingPlan.isActive ? 'var(--color-accent-success)' : 'rgba(255,255,255,0.1)',
+                    borderRadius: 99, position: 'relative', transition: 'background 0.2s',
+                  }}>
+                    <div style={{
+                      width: 16, height: 16, background: '#fff', borderRadius: '50%',
+                      position: 'absolute', top: 3,
+                      left: editingPlan.isActive ? 25 : 3,
+                      transition: 'left 0.2s',
+                    }} />
+                  </div>
+                </label>
+              </div>
+
+              {/* Price & Validity row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="edit-plan-price">Price (₹)</label>
+                  <input
+                    id="edit-plan-price"
+                    type="number"
+                    min={0}
+                    className="form-input"
+                    value={editingPlan.price}
+                    onChange={(e) => setEditingPlan(p => p ? { ...p, price: Number(e.target.value) } : null)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="edit-plan-validity">Validity (Days)</label>
+                  <input
+                    id="edit-plan-validity"
+                    type="number"
+                    min={1}
+                    className="form-input"
+                    value={editingPlan.validityDays}
+                    onChange={(e) => setEditingPlan(p => p ? { ...p, validityDays: Number(e.target.value) } : null)}
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-plan-desc">Description</label>
+                <textarea
+                  id="edit-plan-desc"
+                  className="form-input"
+                  rows={3}
+                  maxLength={300}
+                  value={editingPlan.description ?? ''}
+                  onChange={(e) => setEditingPlan(p => p ? { ...p, description: e.target.value } : null)}
+                  style={{ resize: 'none', width: '100%' }}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 'var(--space-xl)' }}>
+              <button
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => setEditingPlan(null)}
+                disabled={savingPlan === editingPlan.type}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={() => handleSavePlan(editingPlan)}
+                disabled={savingPlan === editingPlan.type}
+                id="save-guild-plan-btn"
+              >
+                <Save size={15} />
+                {savingPlan === editingPlan.type ? 'Saving…' : 'Save Plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
