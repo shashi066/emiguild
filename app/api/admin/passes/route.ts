@@ -29,6 +29,41 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ plans: await loadGuildMembershipPlans() });
   }
 
+  if (req.nextUrl.searchParams.get('all') === '1') {
+    try {
+      const now = new Date();
+      // First auto-expire any active passes that are past their expiry date
+      try {
+        await prisma.userPass.updateMany({
+          where: { status: 'ACTIVE', expiresAt: { lt: now } },
+          data: { status: 'EXPIRED' },
+        });
+      } catch {
+        // Table may not exist yet in local database dev environment
+      }
+
+      let activePasses: any[] = [];
+      try {
+        activePasses = await prisma.userPass.findMany({
+          where: { status: 'ACTIVE' },
+          include: {
+            user: {
+              select: { id: true, name: true, email: true, phone: true }
+            }
+          },
+          orderBy: { purchasedAt: 'desc' },
+        });
+      } catch {
+        activePasses = [];
+      }
+
+      return NextResponse.json({ passes: activePasses });
+    } catch (err) {
+      console.error('[/api/admin/passes GET?all=1] error:', err);
+      return NextResponse.json({ error: 'Failed to fetch active passes.' }, { status: 500 });
+    }
+  }
+
   const userId = req.nextUrl.searchParams.get('userId')?.trim();
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
   const includeHistory = req.nextUrl.searchParams.get('history') === '1';

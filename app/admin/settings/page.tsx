@@ -15,7 +15,7 @@ import {
 } from '@/lib/public-booking-time';
 
 type Setting = { id: string; key: string; value: string; label: string | null };
-type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | null;
+type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | null;
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AdminSettingsPage() {
@@ -97,6 +97,7 @@ export default function AdminSettingsPage() {
     },
     indiaClock.date,
   );
+  const showStationsAvailability = settings['show_stations_availability'] !== 'false';
 
   // Draft variants (inside modal)
   const draftSpecialEnabled = draft[SPECIAL_OPENING_ENABLED_KEY] === 'true';
@@ -123,6 +124,9 @@ export default function AdminSettingsPage() {
       { key: SPECIAL_OPENING_DATE_KEY,    value: indiaClock.date,                         label: 'Early Hours Override Date' },
       { key: SPECIAL_OPENING_TIME_KEY,    value: draftSpecialTime,                         label: 'Early Hours Override Time' },
     ]);
+
+  const saveStationsAvailability = () =>
+    persist([{ key: 'show_stations_availability', value: draft['show_stations_availability'] ?? 'true', label: 'User Live Station Availability' }]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -193,6 +197,16 @@ export default function AdminSettingsPage() {
               : undefined
             }
             onEdit={() => openModal('opening_boost')}
+          />
+
+          {/* ── Show Stations Availability ── */}
+          <SettingCard
+            icon={<Monitor size={20} />}
+            title="User Live Station Availability"
+            description="Enable or disable showing the Live Station Availability timeline block on the user home page."
+            value={showStationsAvailability ? 'Enabled — Visible to users' : 'Disabled — Hidden from users'}
+            badge={showStationsAvailability ? 'active' : undefined}
+            onEdit={() => openModal('stations_availability')}
           />
 
         </div>
@@ -406,6 +420,52 @@ export default function AdminSettingsPage() {
                     : 'Choose a valid 30-minute time earlier than normal opening.'
                   : 'Normal public opening hours remain active.'}
               </span>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ Modal: User Live Station Availability ════════════════════════════════ */}
+      {modalId === 'stations_availability' && (
+        <Modal
+          title="User Live Station Availability"
+          icon={<Monitor size={18} />}
+          onClose={closeModal}
+          onSave={saveStationsAvailability}
+          saving={saving}
+        >
+          <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'rgba(255,255,255,0.02)', padding: '12px var(--space-md)',
+              borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
+            }}>
+              <div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Show Timeline on Home Page</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                  Visible to public customers on home page
+                </div>
+              </div>
+              <label style={{ cursor: 'pointer', display: 'inline-block' }}>
+                <input
+                  type="checkbox"
+                  checked={draft['show_stations_availability'] !== 'false'}
+                  onChange={(e) => setDraft((p) => ({ ...p, show_stations_availability: e.target.checked ? 'true' : 'false' }))}
+                  style={{ display: 'none' }}
+                />
+                <div style={{
+                  width: 44, height: 22,
+                  background: draft['show_stations_availability'] !== 'false' ? 'var(--color-accent-success)' : 'rgba(255,255,255,0.1)',
+                  borderRadius: 99, position: 'relative', transition: 'background 0.2s',
+                }}>
+                  <div style={{
+                    width: 16, height: 16, background: '#fff', borderRadius: '50%',
+                    position: 'absolute', top: 3,
+                    left: draft['show_stations_availability'] !== 'false' ? 25 : 3,
+                    transition: 'left 0.2s',
+                  }} />
+                </div>
+              </label>
             </div>
           </div>
         </Modal>
