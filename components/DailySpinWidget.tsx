@@ -380,7 +380,7 @@ export function DailySpinWidget() {
                       fontWeight: 700,
                     }}
                   >
-                    {finalDay ? 'EPIC' : day}
+                    {finalDay ? '💜' : day}
                   </div>
                 );
               })}
