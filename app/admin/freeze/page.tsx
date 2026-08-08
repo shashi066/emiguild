@@ -360,7 +360,7 @@ export default function FreezeSlotPage() {
           }}
           onClick={(e) => e.target === e.currentTarget && setShowForm(false)}
         >
-          <div className="card" style={{ width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="card scrollbar-colored-y" style={{ width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto' }}>
             {/* Modal header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
               <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>

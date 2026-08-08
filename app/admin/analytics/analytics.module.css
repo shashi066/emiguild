@@ -59,11 +59,32 @@
   color: var(--color-accent-primary);
 }
 
-.searchBar {
+.controlBar {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.searchControl {
+  width: 100%;
+  max-width: 420px;
+}
+
+.selectControl {
+  width: auto;
+  min-width: 174px;
+}
+
+.typeControl {
+  width: auto;
+  min-width: 150px;
+}
+
+.sortButton {
+  min-width: 132px;
+  justify-content: center;
 }
 
 .resultCount {
@@ -168,8 +189,15 @@
     font-size: 1.5rem;
   }
 
-  .searchBar {
+  .controlBar {
     align-items: stretch;
-    flex-wrap: wrap;
+  }
+
+  .searchControl,
+  .selectControl,
+  .typeControl,
+  .sortButton {
+    width: 100%;
+    max-width: none;
   }
 }

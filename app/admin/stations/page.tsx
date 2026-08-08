@@ -243,7 +243,7 @@ export default function AdminStationsPage() {
           onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
         >
           <div
-            className="card"
+            className="card scrollbar-colored-y"
             style={{ width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>

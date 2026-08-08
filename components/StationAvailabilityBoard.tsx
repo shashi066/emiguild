@@ -169,7 +169,7 @@ function GanttChart({
 
   return (
     <div className="gantt-wrap">
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div className="scrollbar-colored-x" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ minWidth: ganttMinWidth }}>
 
           {/* ── Header tick labels ── */}

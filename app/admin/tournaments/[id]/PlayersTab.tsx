@@ -135,7 +135,7 @@ export default function PlayersTab({ tournament, players, fetchPlayers }: { tour
             </div>
 
             {showDropdown && filteredUsers.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: '6px', zIndex: 50, maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+              <div className="scrollbar-colored-y" style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: '6px', zIndex: 50, maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
                 {filteredUsers.map((u) => (
                   <div
                     key={u.id}

@@ -319,7 +319,7 @@ export function AdminDailySpin() {
               </div>
             )}
 
-            <div style={{ overflowX: 'auto' }}>
+            <div className="scrollbar-colored-x" style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -386,7 +386,7 @@ export function AdminDailySpin() {
             ) : history.length === 0 ? (
               <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: 'var(--space-lg)' }}>No spins recorded for this date.</p>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div className="scrollbar-colored-x" style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--color-border)' }}>

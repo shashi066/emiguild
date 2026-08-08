@@ -85,6 +85,11 @@ body {
 }
 
 /* Scrollbar */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-accent-primary) var(--color-bg-surface);
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -93,6 +98,54 @@ body {
   background: var(--color-bg-surface);
 }
 ::-webkit-scrollbar-thumb {
+  background: var(--color-accent-primary);
+  border-radius: var(--radius-full);
+}
+
+.scrollbar-colored,
+.scrollbar-colored-x,
+.scrollbar-colored-y,
+.admin-sidebar,
+.mobile-drawer-inner,
+.modal-content,
+.table-wrapper,
+.booking-steps {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-accent-primary) var(--color-bg-surface);
+  -webkit-overflow-scrolling: touch;
+}
+
+.scrollbar-colored::-webkit-scrollbar,
+.scrollbar-colored-x::-webkit-scrollbar,
+.scrollbar-colored-y::-webkit-scrollbar,
+.admin-sidebar::-webkit-scrollbar,
+.mobile-drawer-inner::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar,
+.table-wrapper::-webkit-scrollbar,
+.booking-steps::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-colored::-webkit-scrollbar-track,
+.scrollbar-colored-x::-webkit-scrollbar-track,
+.scrollbar-colored-y::-webkit-scrollbar-track,
+.admin-sidebar::-webkit-scrollbar-track,
+.mobile-drawer-inner::-webkit-scrollbar-track,
+.modal-content::-webkit-scrollbar-track,
+.table-wrapper::-webkit-scrollbar-track,
+.booking-steps::-webkit-scrollbar-track {
+  background: var(--color-bg-surface);
+}
+
+.scrollbar-colored::-webkit-scrollbar-thumb,
+.scrollbar-colored-x::-webkit-scrollbar-thumb,
+.scrollbar-colored-y::-webkit-scrollbar-thumb,
+.admin-sidebar::-webkit-scrollbar-thumb,
+.mobile-drawer-inner::-webkit-scrollbar-thumb,
+.modal-content::-webkit-scrollbar-thumb,
+.table-wrapper::-webkit-scrollbar-thumb,
+.booking-steps::-webkit-scrollbar-thumb {
   background: var(--color-accent-primary);
   border-radius: var(--radius-full);
 }

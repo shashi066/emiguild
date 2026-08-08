@@ -355,6 +355,23 @@
   padding: 1.5rem;
   animation: slideUp 200ms ease;
   position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-accent-primary) var(--color-bg-surface);
+  -webkit-overflow-scrolling: touch;
+}
+
+.tourn-modal::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.tourn-modal::-webkit-scrollbar-track {
+  background: var(--color-bg-surface);
+}
+
+.tourn-modal::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-full);
+  background: var(--color-accent-primary);
 }
 
 .tourn-modal-header {
@@ -779,6 +796,22 @@
   overflow-y: visible;
   padding: 1.5rem 1.5rem 2rem;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-accent-primary) var(--color-bg-surface);
+}
+
+.bracket-scroll-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.bracket-scroll-container::-webkit-scrollbar-track {
+  background: var(--color-bg-surface);
+}
+
+.bracket-scroll-container::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-full);
+  background: var(--color-accent-primary);
 }
 
 .bracket-wrapper {

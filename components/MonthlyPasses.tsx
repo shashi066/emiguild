@@ -159,6 +159,7 @@ export default function MonthlyPasses() {
       {/* Modal */}
       {open && (
         <div
+          className="scrollbar-colored-y"
           style={{
             position: 'fixed', inset: 0, zIndex: 2000,
             background: 'rgba(0,0,0,0.82)',

@@ -816,7 +816,10 @@ function AdminMarketplaceStyles() {
       .admin-market-summary span { font-size: 0.68rem; text-transform: uppercase; }
       .admin-market-toolbar { display: grid; grid-template-columns: 170px minmax(260px, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 12px; }
       .admin-market-toolbar form { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 6px; }
-      .admin-market-table-wrap { width: 100%; min-width: 0; overflow-x: auto; padding-bottom: 6px; }
+      .admin-market-table-wrap { width: 100%; min-width: 0; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; scrollbar-color: var(--color-accent-primary) var(--color-bg-surface); -webkit-overflow-scrolling: touch; }
+      .admin-market-table-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+      .admin-market-table-wrap::-webkit-scrollbar-track { background: var(--color-bg-surface); }
+      .admin-market-table-wrap::-webkit-scrollbar-thumb { border-radius: var(--radius-full); background: var(--color-accent-primary); }
       .admin-market-table { width: 1100px; border-collapse: collapse; text-align: left; font-size: 0.78rem; }
       .admin-market-table th, .admin-market-table td { padding: 9px 7px; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
       .admin-market-table th { color: var(--color-text-muted); font-size: 0.68rem; text-transform: uppercase; }

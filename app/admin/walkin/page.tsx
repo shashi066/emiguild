@@ -533,6 +533,7 @@ export default function WalkinBookingPage() {
       {/* ── Walk-in Booking Form Modal ── */}
       {showForm && (
         <div
+          className="scrollbar-colored-y"
           style={{
             position: 'fixed',
             inset: 0,
