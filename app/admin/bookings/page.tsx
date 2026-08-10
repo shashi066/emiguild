@@ -30,6 +30,7 @@ import {
   validateAdminWalkinTime,
 } from '@/lib/admin-walkin-time';
 import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
+import AdminBookingModalShell from '@/components/admin/AdminBookingModalShell';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 
@@ -130,32 +131,6 @@ function EditModal({
   const [membershipLoaded, setMembershipLoaded] = useState(!booking.user?.id);
 
   const isOffline = booking.bookingType === 'OFFLINE';
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const body = document.body;
-    const scrollY = window.scrollY;
-    const previousRootOverflow = root.style.overflow;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyPosition = body.style.position;
-    const previousBodyTop = body.style.top;
-    const previousBodyWidth = body.style.width;
-
-    root.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    body.style.position = 'fixed';
-    body.style.top = `-${scrollY}px`;
-    body.style.width = '100%';
-
-    return () => {
-      root.style.overflow = previousRootOverflow;
-      body.style.overflow = previousBodyOverflow;
-      body.style.position = previousBodyPosition;
-      body.style.top = previousBodyTop;
-      body.style.width = previousBodyWidth;
-      window.scrollTo(0, scrollY);
-    };
-  }, []);
 
   // Fetch controller unit price from settings
   useEffect(() => {
@@ -319,35 +294,17 @@ function EditModal({
   };
 
   return (
-    <div
-      className="scrollbar-colored-y"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1000,
-        background: 'rgba(0,0,0,0.75)',
-        backdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'center',
-        overflowY: 'auto',
-        overscrollBehavior: 'contain',
-        padding: '24px 12px',
-        WebkitOverflowScrolling: 'touch',
-      }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="card" style={{ width: '100%', maxWidth: 540, margin: 'auto', position: 'relative', animation: 'fadeInUp 0.2s ease' }}>
+    <AdminBookingModalShell onClose={onClose} labelledBy="edit-booking-title">
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-xl)' }}>
           <div>
-            <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>Edit Booking</h2>
+            <h2 id="edit-booking-title" style={{ fontSize: '1rem', fontWeight: 700 }}>Edit Booking</h2>
             <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
               #{booking.id.slice(-8).toUpperCase()} · {booking.user?.name ?? booking.customerName ?? 'Walk-in'}
             </p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+          <button aria-label="Close edit booking" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>
             <X size={18} />
           </button>
         </div>
@@ -686,8 +643,7 @@ function EditModal({
             {loading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
-      </div>
-    </div>
+    </AdminBookingModalShell>
   );
 }
 

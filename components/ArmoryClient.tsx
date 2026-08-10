@@ -1190,10 +1190,7 @@ function ArmoryStyles() {
       .forge-action { display: grid; gap: 8px; justify-items: stretch; min-width: 180px; }
       .forge-locked { background: rgba(255,255,255,0.04); color: var(--color-text-secondary); border-color: rgba(255,255,255,0.14); }
       .forge-locked svg { color: var(--color-accent-warning); }
-      .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; scrollbar-width: thin; scrollbar-color: #61e8ff #050b14; -webkit-overflow-scrolling: touch; }
-      .forge-reveal-layer::-webkit-scrollbar { width: 6px; height: 6px; }
-      .forge-reveal-layer::-webkit-scrollbar-track { background: #050b14; }
-      .forge-reveal-layer::-webkit-scrollbar-thumb { border-radius: 999px; background: #61e8ff; }
+      .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }
       .forge-reveal-scene { width: min(440px, 100%); min-height: min(640px, calc(100vh - 36px)); display: grid; grid-template-rows: auto 1fr auto auto; align-items: center; justify-items: center; gap: 14px; margin: auto; text-align: center; color: var(--color-text-primary); }
       .forge-reveal-layer:not(.reveal-ready) .forge-reveal-scene { grid-template-rows: 1fr; }
       .forge-charge { align-self: center; min-height: 150px; display: inline-grid; justify-items: center; align-content: center; gap: 14px; color: #dff8ff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.88rem; animation: revealFade 120ms ease both; }
@@ -1269,10 +1266,7 @@ function ArmoryStyles() {
       .reward-strip { min-height: 48px; border: 1px dashed rgba(255,214,110,0.28); border-radius: 8px; padding: 10px; display: flex; align-items: center; gap: 9px; color: #ffe7a3; background: rgba(255,214,110,0.07); }
       .claim-button { justify-self: start; }
       .filters-wrap { display: grid; gap: 8px; }
-      .filter-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; scrollbar-color: #61e8ff #0b111a; -webkit-overflow-scrolling: touch; }
-      .filter-row::-webkit-scrollbar { width: 6px; height: 6px; }
-      .filter-row::-webkit-scrollbar-track { background: #0b111a; }
-      .filter-row::-webkit-scrollbar-thumb { border-radius: 999px; background: #61e8ff; }
+      .filter-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
       .filter { flex: 0 0 auto; min-height: 38px; font-size: 0.8rem; color: var(--color-text-secondary); }
       .filter.active { color: #061018; background: #61e8ff; border-color: rgba(97,232,255,0.55); }
       .rarity-groups { display: grid; gap: var(--space-md); }

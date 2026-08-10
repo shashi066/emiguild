@@ -336,7 +336,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
 
         <div className="card" style={tableCardStyle}>
           <h2 style={{ fontSize: '1.2rem', marginBottom: 'var(--space-md)' }}>Set Rewards</h2>
-          <div className="scrollbar-colored-x" style={tableScrollStyle}>
+          <div style={tableScrollStyle}>
             <table style={{ width: 820, maxWidth: 'none', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -401,7 +401,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
             <History size={18} style={{ display: 'inline', marginRight: 8 }} />
             Artifacts Activity
           </h2>
-          <div role="tablist" aria-label="Artifacts history type" className="scrollbar-colored-x" style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-md)', borderBottom: '1px solid var(--color-border)', overflowX: 'auto' }}>
+          <div role="tablist" aria-label="Artifacts history type" style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-md)', borderBottom: '1px solid var(--color-border)', overflowX: 'auto' }}>
             {([
               ['drops', 'Daily Drops'],
               ['sets', 'Consumed Sets'],
@@ -447,7 +447,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
               {historyType === 'drops' ? 'No artifacts collected for this date.' : 'No sets consumed for this date.'}
             </p>
           ) : (
-            <div className="scrollbar-colored-x" style={tableScrollStyle}>
+            <div style={tableScrollStyle}>
               <table style={{ width: historyType === 'drops' ? 600 : 720, maxWidth: 'none', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -769,7 +769,7 @@ function UserInventoryHistory({ sets, artifacts }: { sets: any[]; artifacts: any
           {items.length === 0 ? (
             <p style={{ color: 'var(--color-text-muted)', padding: 'var(--space-sm) 0' }}>This user has no artifacts.</p>
           ) : null}
-          <div className="scrollbar-colored-x" style={{ width: '100%', overflowX: 'auto' }}>
+          <div style={{ width: '100%', overflowX: 'auto' }}>
               <table style={{ width: 640, maxWidth: 'none', tableLayout: 'fixed', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <colgroup>
                   <col style={{ width: 220 }} />

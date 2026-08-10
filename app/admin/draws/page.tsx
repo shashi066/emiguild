@@ -343,7 +343,7 @@ export default function AdminDrawsPage() {
           onClick={() => setShowModal(false)}
         >
           <div
-            className="card scrollbar-colored-y"
+            className="card"
             style={{ width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >

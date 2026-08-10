@@ -85,11 +85,6 @@ body {
 }
 
 /* Scrollbar */
-html {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-accent-primary) var(--color-bg-surface);
-}
-
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -98,54 +93,6 @@ html {
   background: var(--color-bg-surface);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-accent-primary);
-  border-radius: var(--radius-full);
-}
-
-.scrollbar-colored,
-.scrollbar-colored-x,
-.scrollbar-colored-y,
-.admin-sidebar,
-.mobile-drawer-inner,
-.modal-content,
-.table-wrapper,
-.booking-steps {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-accent-primary) var(--color-bg-surface);
-  -webkit-overflow-scrolling: touch;
-}
-
-.scrollbar-colored::-webkit-scrollbar,
-.scrollbar-colored-x::-webkit-scrollbar,
-.scrollbar-colored-y::-webkit-scrollbar,
-.admin-sidebar::-webkit-scrollbar,
-.mobile-drawer-inner::-webkit-scrollbar,
-.modal-content::-webkit-scrollbar,
-.table-wrapper::-webkit-scrollbar,
-.booking-steps::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.scrollbar-colored::-webkit-scrollbar-track,
-.scrollbar-colored-x::-webkit-scrollbar-track,
-.scrollbar-colored-y::-webkit-scrollbar-track,
-.admin-sidebar::-webkit-scrollbar-track,
-.mobile-drawer-inner::-webkit-scrollbar-track,
-.modal-content::-webkit-scrollbar-track,
-.table-wrapper::-webkit-scrollbar-track,
-.booking-steps::-webkit-scrollbar-track {
-  background: var(--color-bg-surface);
-}
-
-.scrollbar-colored::-webkit-scrollbar-thumb,
-.scrollbar-colored-x::-webkit-scrollbar-thumb,
-.scrollbar-colored-y::-webkit-scrollbar-thumb,
-.admin-sidebar::-webkit-scrollbar-thumb,
-.mobile-drawer-inner::-webkit-scrollbar-thumb,
-.modal-content::-webkit-scrollbar-thumb,
-.table-wrapper::-webkit-scrollbar-thumb,
-.booking-steps::-webkit-scrollbar-thumb {
   background: var(--color-accent-primary);
   border-radius: var(--radius-full);
 }
@@ -3012,6 +2959,47 @@ select.form-input option {
 /* ============================================================
    MODAL STYLES
    ============================================================ */
+.admin-booking-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.admin-booking-modal-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 540px;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: fadeInUp 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .admin-booking-modal-overlay {
+    align-items: flex-start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .admin-booking-modal-dialog {
+    max-height: none;
+    margin: auto;
+    overflow: visible;
+    overscroll-behavior: auto;
+  }
+}
+
 .modal-overlay {
   position: fixed;
   top: 0;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Award, CheckCircle2, Clock, Coffee, Crown, Lock, LogIn, RefreshCw, ShoppingBag, Sparkles, TicketCheck, Tv, X } from 'lucide-react';
+import { Award, CheckCircle2, Clock, Coffee, Crown, Lock, LogIn, Phone, RefreshCw, ShoppingBag, Sparkles, TicketCheck, Tv, X } from 'lucide-react';
 import { readApiResponse } from '@/lib/read-api-response';
 
 type WatchPartyState = {
@@ -205,7 +205,10 @@ export function WatchPartyClient({
             return (
               <article className="watch-card" key={party.id}>
                 <div className="watch-card-head">
-                  <span className={`watch-chip ${status.tone}`}>{status.label}</span>
+                  <span className={`watch-chip ${status.tone}`}>
+                    {signedIn && !party.invite.invited && <Lock size={12} aria-hidden="true" />}
+                    {status.label}
+                  </span>
                   <span className="watch-meta"><Clock size={13} />{formatKickoff(party.kickoffAt)}</span>
                 </div>
                 <h2>{party.homeTeam}</h2>
@@ -217,29 +220,41 @@ export function WatchPartyClient({
                   <strong>◈ {party.entryCoins}</strong>
                 </div>
                 {signedIn && !party.invite.invited && (
-                  <div className="watch-invite-note"><Lock size={14} /> Contact EmiGuild for invite</div>
+                  <a
+                    className="watch-invite-note"
+                    href="tel:+919989562474"
+                    aria-label="Call EmiGuild to request a watch party invite"
+                  >
+                    <Phone size={14} />
+                    Contact EmiGuild for invite
+                  </a>
                 )}
-                <div className="watch-actions-row">
-                  <Link className="btn btn-ghost btn-sm" href={`/watch-party/${party.id}`}>
-                    View
-                  </Link>
-                  {!signedIn ? (
-                    <Link className="btn btn-primary btn-sm" href="/login">
-                      <LogIn size={15} />
-                      Login
-                    </Link>
-                  ) : party.invite.canEnter && !party.invite.entered ? (
-                    <button className="btn btn-primary btn-sm" type="button" onClick={() => setEnteringParty(party)}>
-                      <TicketCheck size={15} />
-                      Enter
-                    </button>
-                  ) : party.invite.invited && !party.invite.checkedIn ? (
-                    <button className="btn btn-ghost btn-sm" type="button" disabled>
-                      <Lock size={15} />
-                      Check-in
-                    </button>
-                  ) : null}
-                </div>
+                {(!signedIn || party.invite.invited) && (
+                  <div className="watch-actions-row">
+                    {signedIn && party.invite.invited && (
+                      <Link className="btn btn-ghost btn-sm" href={`/watch-party/${party.id}`}>
+                        <Sparkles size={15} />
+                        Predict Now
+                      </Link>
+                    )}
+                    {!signedIn ? (
+                      <Link className="btn btn-primary btn-sm" href="/login">
+                        <LogIn size={15} />
+                        Login
+                      </Link>
+                    ) : party.invite.canEnter && !party.invite.entered ? (
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => setEnteringParty(party)}>
+                        <TicketCheck size={15} />
+                        Enter
+                      </button>
+                    ) : party.invite.invited && !party.invite.checkedIn ? (
+                      <button className="btn btn-ghost btn-sm" type="button" disabled>
+                        <Lock size={15} />
+                        Check-in
+                      </button>
+                    ) : null}
+                  </div>
+                )}
               </article>
             );
           })}
@@ -485,10 +500,11 @@ export function WatchPartyClient({
         .watch-venue { min-height: 20px; margin: 9px 0 12px; color: var(--color-text-muted); font-size: 0.82rem; }
         .watch-card-foot { min-height: 34px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); color: var(--color-text-secondary); font-size: 0.84rem; }
         .watch-card-foot strong { color: #22d3ee; }
-        .watch-invite-note { min-height: 32px; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; padding: 7px 9px; border: 1px dashed rgba(251,191,36,0.34); border-radius: 8px; color: #fbbf24; background: rgba(251,191,36,0.07); font-size: 0.78rem; font-weight: 800; }
+        .watch-invite-note { min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 10px; padding: 8px 10px; border: 1px dashed rgba(251,191,36,0.34); border-radius: 8px; color: #fbbf24; background: rgba(251,191,36,0.07); font-size: 0.78rem; font-weight: 800; text-decoration: none; transition: background var(--transition-fast), border-color var(--transition-fast); }
+        .watch-invite-note:hover { border-color: rgba(251,191,36,0.62); background: rgba(251,191,36,0.12); }
         .watch-actions-row { margin-top: 12px; }
         .watch-meta { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-muted); font-size: 0.72rem; }
-        .watch-chip { min-width: 66px; text-align: center; padding: 5px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+        .watch-chip { min-width: 66px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; text-align: center; padding: 5px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
         .watch-chip.muted { color: #aeb8c7; background: rgba(148,163,184,0.13); }
         .watch-chip.warn { color: #fbbf24; background: rgba(251,191,36,0.13); }
         .watch-chip.cyan { color: #22d3ee; background: rgba(34,211,238,0.13); }

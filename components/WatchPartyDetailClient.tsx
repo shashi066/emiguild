@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle2, Clock, Lock, Trophy, Tv } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Lock, Phone, Trophy, Tv } from 'lucide-react';
 import { readApiResponse } from '@/lib/read-api-response';
 
 type WatchPartyDetail = {
@@ -132,7 +132,7 @@ export function WatchPartyDetailClient({
   const predictionLockedCopy = !signedIn
     ? 'Login to enter this watch party.'
     : !party.invite.invited
-      ? 'Contact EmiGuild for invite.'
+      ? 'An EmiGuild invite is required before predictions.'
       : !party.invite.checkedIn
         ? 'Counter check-in required before predictions.'
         : !party.invite.entered
@@ -179,7 +179,14 @@ export function WatchPartyDetailClient({
           <div className="watch-entry-credit">Counter check-in credited ◈ {party.entryCoins}. Entering unlocks predictions.</div>
         </>
       ) : !party.invite.invited ? (
-        <div className="watch-locked"><Lock size={17} /> Contact EmiGuild for invite</div>
+        <a
+          className="watch-locked watch-invite-locked"
+          href="tel:+919989562474"
+          aria-label="Call EmiGuild to request a watch party invite"
+        >
+          <Phone size={15} />
+          Contact EmiGuild for invite
+        </a>
       ) : !party.invite.checkedIn ? (
         <div className="watch-locked"><Lock size={17} /> Counter check-in required</div>
       ) : null}
@@ -322,6 +329,8 @@ export function WatchPartyDetailClient({
         .watch-full { width: 100%; justify-content: center; margin-bottom: 12px; }
         .watch-entry-credit { margin: -4px 0 12px; padding: 9px 10px; border: 1px solid rgba(34,211,238,0.22); border-radius: 8px; color: #bff7ff; background: rgba(34,211,238,0.08); font-size: 0.78rem; text-align: center; }
         .watch-locked { min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; border: 1px dashed rgba(251,191,36,0.36); border-radius: 8px; color: #fbbf24; background: rgba(251,191,36,0.08); }
+        .watch-invite-locked { padding: 8px 10px; text-decoration: none; transition: background var(--transition-fast), border-color var(--transition-fast); }
+        .watch-invite-locked:hover { border-color: rgba(251,191,36,0.62); background: rgba(251,191,36,0.13); }
         .watch-alert, .watch-ok { display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 12px; border-radius: 8px; font-size: 0.83rem; }
         .watch-alert { border: 1px solid rgba(255,107,107,0.4); color: #ffb4b4; background: rgba(255,107,107,0.1); }
         .watch-ok { border: 1px solid rgba(0,230,118,0.34); color: #b9ffd0; background: rgba(0,230,118,0.09); }

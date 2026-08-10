@@ -508,10 +508,7 @@ export function UserDetailsModal({
         .user-detail-close { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid rgba(124, 150, 190, 0.12); border-radius: 6px; background: rgba(255, 255, 255, 0.025); color: #74829a; cursor: pointer; }
         .user-detail-close:hover { border-color: rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: white; }
         .user-detail-close:focus-visible { outline: 2px solid var(--color-accent-secondary); outline-offset: 2px; }
-        .user-detail-scroll { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--color-accent-primary) #101a29; -webkit-overflow-scrolling: touch; }
-        .user-detail-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-        .user-detail-scroll::-webkit-scrollbar-track { background: #101a29; }
-        .user-detail-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--color-accent-primary); }
+        .user-detail-scroll { overflow-y: auto; overscroll-behavior: contain; }
         .user-detail-state { min-height: 320px; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--color-text-muted); }
         .user-detail-state.error { color: var(--color-accent-error); }
         .user-detail-contact { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(160px, 0.8fr) minmax(170px, 0.75fr); border-bottom: 1px solid rgba(124, 150, 190, 0.12); background: rgba(5, 10, 18, 0.18); }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   BadgeCheck,
@@ -18,9 +18,11 @@ import {
   Undo2,
   UserMinus,
   UserPlus,
+  X,
   XCircle,
 } from 'lucide-react';
 import { readApiResponse } from '@/lib/read-api-response';
+import AdminBookingModalShell from '@/components/admin/AdminBookingModalShell';
 
 type WatchControlTab = 'live' | 'needs-result' | 'settled';
 
@@ -196,15 +198,314 @@ function needsResultParty(party: AdminParty, nowMs: number) {
   return party.predictionStatus === 'CLOSED' || new Date(party.kickoffAt).getTime() <= nowMs;
 }
 
+type WatchPartyCreateModalProps = {
+  onClose: () => void;
+  onCreated: (party: AdminParty) => void;
+};
+
+function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProps) {
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [matches, setMatches] = useState<ProviderMatch[]>([]);
+  const [fixtureTeams, setFixtureTeams] = useState<string[]>([]);
+  const [matchDateFrom, setMatchDateFrom] = useState('');
+  const [matchDateTo, setMatchDateTo] = useState('');
+  const [matchday, setMatchday] = useState('');
+  const [fixtureSearchMode, setFixtureSearchMode] = useState<'date' | 'team'>('date');
+  const [teamSearch, setTeamSearch] = useState('');
+  const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
+  const [busy, setBusy] = useState<'' | 'matches' | 'create'>('');
+  const [loadingTeams, setLoadingTeams] = useState(true);
+  const [error, setError] = useState('');
+  const [fixtureNotice, setFixtureNotice] = useState('');
+  const matchRequestRef = useRef<AbortController | null>(null);
+  const teamBlurTimeoutRef = useRef<number | null>(null);
+
+  const canCreateParty = Boolean(form.homeTeam.trim() && form.awayTeam.trim() && form.kickoffAt);
+  const isSubmitting = busy === 'create';
+  const teamSuggestions = useMemo(() => {
+    const query = teamSearch.trim().toLowerCase();
+    if (!query) return [];
+    return fixtureTeams
+      .filter((team) => team.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [fixtureTeams, teamSearch]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch('/api/admin/watch-parties/matches?teamsOnly=true', {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await readApiResponse<{ teams?: string[]; error?: string }>(response, 'Failed to load teams.');
+        if (!response.ok) throw new Error(readError(data, 'Failed to load teams.'));
+        return data;
+      })
+      .then((data) => setFixtureTeams(Array.isArray(data.teams) ? data.teams : []))
+      .catch((cause) => {
+        if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+          setError(cause instanceof Error ? cause.message : 'Failed to load teams.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingTeams(false);
+      });
+
+    return () => {
+      controller.abort();
+      matchRequestRef.current?.abort();
+      if (teamBlurTimeoutRef.current != null) window.clearTimeout(teamBlurTimeoutRef.current);
+    };
+  }, []);
+
+  const requestClose = () => {
+    if (!isSubmitting) onClose();
+  };
+
+  const fetchMatches = async (teamOverride?: string) => {
+    matchRequestRef.current?.abort();
+    const controller = new AbortController();
+    matchRequestRef.current = controller;
+    setBusy('matches');
+    setError('');
+    setFixtureNotice('');
+
+    try {
+      const params = new URLSearchParams();
+      if (fixtureSearchMode === 'team') {
+        const team = (teamOverride ?? teamSearch).trim();
+        if (team) params.set('team', team);
+      } else {
+        if (matchDateFrom) params.set('dateFrom', matchDateFrom);
+        if (matchDateTo) params.set('dateTo', matchDateTo);
+        if (matchday) params.set('matchday', matchday);
+      }
+
+      const response = await fetch(`/api/admin/watch-parties/matches?${params.toString()}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      const data = await readApiResponse<{ matches?: ProviderMatch[]; error?: string }>(response, 'Failed to load Premier League fixtures.');
+      if (!response.ok) throw new Error(readError(data, 'Failed to load Premier League fixtures.'));
+      setMatches(data.matches ?? []);
+      setFixtureNotice(`${data.matches?.length ?? 0} Premier League fixtures loaded.`);
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+        setError(cause instanceof Error ? cause.message : 'Failed to load Premier League fixtures.');
+      }
+    } finally {
+      if (matchRequestRef.current === controller) {
+        matchRequestRef.current = null;
+        setBusy('');
+      }
+    }
+  };
+
+  const selectMatch = (match: ProviderMatch) => {
+    setForm((current) => ({
+      ...current,
+      title: match.title,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      kickoffAt: toIstInput(match.kickoffAt),
+      venue: match.venue ?? '',
+      source: match.source,
+      providerMatchId: match.providerMatchId,
+      providerCompetitionCode: match.providerCompetitionCode,
+      providerSeason: String(match.providerSeason),
+      providerPayload: match.providerPayload,
+    }));
+  };
+
+  const createParty = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canCreateParty || isSubmitting) return;
+    setBusy('create');
+    setError('');
+    setFixtureNotice('');
+
+    try {
+      const payload = {
+        ...form,
+        entryFeeRupees: Number(form.entryFeeRupees),
+        entryCoins: Number(form.entryCoins),
+        providerSeason: form.providerSeason ? Number(form.providerSeason) : undefined,
+      };
+      const response = await fetch('/api/admin/watch-parties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await readApiResponse<{ party: AdminParty; error?: string }>(response, 'Failed to create watch party.');
+      if (!response.ok) throw new Error(readError(data, 'Failed to create watch party.'));
+      onCreated(data.party);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to create watch party.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  return (
+    <>
+      <AdminBookingModalShell onClose={requestClose} labelledBy="create-watch-party-title">
+        <div className="watch-create-modal-head">
+          <div>
+            <div className="watch-create-kicker">Premier League 2026-27</div>
+            <h2 id="create-watch-party-title"><Tv size={18} /> Create Watch Party</h2>
+          </div>
+          <button
+            className="btn btn-ghost btn-sm watch-create-close"
+            type="button"
+            onClick={requestClose}
+            disabled={isSubmitting}
+            aria-label="Close create watch party"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {error && <div className="alert alert-error watch-create-alert">{error}</div>}
+        {fixtureNotice && <div className="alert alert-info watch-create-alert">{fixtureNotice}</div>}
+
+        <div className="watch-fixture-tabs" role="tablist" aria-label="Fixture search mode">
+          <button type="button" className={fixtureSearchMode === 'date' ? 'active' : ''} onClick={() => setFixtureSearchMode('date')}>
+            Date / Matchweek
+          </button>
+          <button type="button" className={fixtureSearchMode === 'team' ? 'active' : ''} onClick={() => setFixtureSearchMode('team')}>
+            Team Search
+          </button>
+        </div>
+
+        {fixtureSearchMode === 'team' ? (
+          <div className="watch-match-tools team">
+            <div className="watch-team-search">
+              <input
+                className="form-input"
+                type="search"
+                placeholder={loadingTeams ? 'Loading teams...' : 'Search team, e.g. Arsenal'}
+                value={teamSearch}
+                onBlur={() => {
+                  teamBlurTimeoutRef.current = window.setTimeout(() => setTeamDropdownOpen(false), 120);
+                }}
+                onChange={(event) => {
+                  setTeamSearch(event.target.value);
+                  setTeamDropdownOpen(true);
+                }}
+                onFocus={() => setTeamDropdownOpen(true)}
+                aria-label="Search Premier League team"
+              />
+              {teamDropdownOpen && teamSuggestions.length > 0 && (
+                <div className="watch-team-dropdown">
+                  {teamSuggestions.map((team) => (
+                    <button
+                      key={team}
+                      type="button"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        setTeamSearch(team);
+                        setTeamDropdownOpen(false);
+                        void fetchMatches(team);
+                      }}
+                    >
+                      {team}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => void fetchMatches()} disabled={busy === 'matches'}>
+              <Search size={15} />
+              {busy === 'matches' ? 'Loading' : 'Find Team'}
+            </button>
+          </div>
+        ) : (
+          <div className="watch-match-tools">
+            <input className="form-input" type="date" value={matchDateFrom} onChange={(event) => setMatchDateFrom(event.target.value)} aria-label="Fixture date from" />
+            <input className="form-input" type="date" value={matchDateTo} onChange={(event) => setMatchDateTo(event.target.value)} aria-label="Fixture date to" />
+            <input className="form-input" type="number" min={1} max={38} placeholder="Matchweek" value={matchday} onChange={(event) => setMatchday(event.target.value)} aria-label="Matchweek number" />
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => void fetchMatches()} disabled={busy === 'matches'}>
+              <Search size={15} />
+              {busy === 'matches' ? 'Loading' : 'Fixtures'}
+            </button>
+          </div>
+        )}
+
+        {matches.length > 0 && (
+          <div className="watch-match-list">
+            {matches.slice(0, 12).map((match) => (
+              <button key={match.providerMatchId} type="button" onClick={() => selectMatch(match)}>
+                <strong>{match.title}</strong>
+                <span>MW {match.matchday} · {formatTime(match.kickoffAt)}</span>
+                {!match.kickoffAt && <em>TBA - set kickoff before creating</em>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <form onSubmit={createParty}>
+          <div className="watch-form-grid">
+            <input className="form-input" placeholder="Title" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} aria-label="Watch party title" />
+            <input className="form-input" placeholder="Team A" value={form.homeTeam} onChange={(event) => setForm({ ...form, homeTeam: event.target.value })} aria-label="Home team" />
+            <input className="form-input" placeholder="Team B" value={form.awayTeam} onChange={(event) => setForm({ ...form, awayTeam: event.target.value })} aria-label="Away team" />
+            <input className="form-input" type="datetime-local" value={form.kickoffAt} onChange={(event) => setForm({ ...form, kickoffAt: event.target.value })} aria-label="Kickoff time" />
+            <input className="form-input" placeholder="Guild TV area" value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} aria-label="Venue" />
+            <input className="form-input" type="number" placeholder="Entry fee" value={form.entryFeeRupees} onChange={(event) => setForm({ ...form, entryFeeRupees: event.target.value })} aria-label="Entry fee in rupees" />
+            <input className="form-input" type="number" placeholder="Arena Tokens" value={form.entryCoins} onChange={(event) => setForm({ ...form, entryCoins: event.target.value })} aria-label="Arena token credit" />
+          </div>
+          <div className="watch-create-actions">
+            <button className="btn btn-ghost" type="button" onClick={requestClose} disabled={isSubmitting}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" type="submit" disabled={isSubmitting || !canCreateParty}>
+              {isSubmitting ? <Loader2 size={15} className="watch-spin" /> : <TicketCheck size={15} />}
+              {isSubmitting ? 'Creating...' : 'Create Watch Party'}
+            </button>
+          </div>
+        </form>
+      </AdminBookingModalShell>
+
+      <style jsx>{`
+        .watch-create-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: var(--space-md); }
+        .watch-create-modal-head h2 { display: flex; align-items: center; gap: 8px; margin: 2px 0 0; font-size: 1.08rem; }
+        .watch-create-kicker { color: #22d3ee; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+        .watch-create-close { flex: 0 0 auto; padding-inline: 9px; }
+        .watch-create-alert { margin-bottom: 10px; }
+        .watch-fixture-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; padding: 3px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(0,0,0,0.18); }
+        .watch-fixture-tabs button { min-height: 34px; padding: 0 8px; border: 0; border-radius: 6px; color: var(--color-text-muted); background: transparent; font-size: 0.75rem; font-weight: 800; }
+        .watch-fixture-tabs button.active { color: #061016; background: #22d3ee; }
+        .watch-match-tools { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
+        .watch-match-tools.team { grid-template-columns: minmax(0,1fr) auto; }
+        .watch-match-tools .form-input { min-width: 0; width: 100%; }
+        .watch-match-tools button { width: 100%; justify-content: center; }
+        .watch-team-search { position: relative; min-width: 0; }
+        .watch-team-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; display: grid; max-height: 220px; overflow: auto; border: 1px solid rgba(34,211,238,0.28); border-radius: 8px; background: #07111d; box-shadow: 0 16px 32px rgba(0,0,0,0.35); }
+        .watch-team-dropdown button { min-height: 36px; justify-content: flex-start; padding: 0 10px; border: 0; border-radius: 0; border-bottom: 1px solid rgba(255,255,255,0.07); color: var(--color-text-primary); background: transparent; text-align: left; font-size: 0.82rem; }
+        .watch-team-dropdown button:hover { color: #061016; background: #22d3ee; }
+        .watch-match-list { display: grid; gap: 6px; max-height: 210px; overflow: auto; margin-bottom: 12px; }
+        .watch-match-list button { display: grid; gap: 2px; padding: 9px 10px; text-align: left; border: 1px solid rgba(34,211,238,0.18); border-radius: 8px; color: var(--color-text-primary); background: rgba(34,211,238,0.06); }
+        .watch-match-list span { color: var(--color-text-muted); font-size: 0.76rem; }
+        .watch-match-list em { color: #fbbf24; font-size: 0.72rem; font-style: normal; font-weight: 800; }
+        .watch-form-grid { display: grid; gap: 8px; }
+        .watch-create-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+        .watch-create-actions .btn { width: 100%; justify-content: center; }
+        @keyframes watchSpin { to { transform: rotate(360deg); } }
+        @media (max-width: 560px) {
+          .watch-match-tools, .watch-match-tools.team { grid-template-columns: 1fr; }
+          .watch-create-actions { grid-template-columns: 1fr; }
+        }
+      `}</style>
+    </>
+  );
+}
+
 export default function AdminWatchPartiesPage() {
   const [parties, setParties] = useState<AdminParty[]>([]);
   const [shopOrders, setShopOrders] = useState<AdminShopOrder[]>([]);
   const [partyPageInfo, setPartyPageInfo] = useState<PageInfo | null>(null);
   const [orderPageInfo, setOrderPageInfo] = useState<PageInfo | null>(null);
   const [users, setUsers] = useState<UserOption[]>([]);
-  const [matches, setMatches] = useState<ProviderMatch[]>([]);
-  const [fixtureTeams, setFixtureTeams] = useState<string[]>([]);
-  const [form, setForm] = useState(EMPTY_FORM);
   const [inviteUserByParty, setInviteUserByParty] = useState<Record<string, string>>({});
   const [inviteUserSearchByParty, setInviteUserSearchByParty] = useState<Record<string, string>>({});
   const [inviteUserDropdownByParty, setInviteUserDropdownByParty] = useState<Record<string, boolean>>({});
@@ -212,17 +513,11 @@ export default function AdminWatchPartiesPage() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [matchDateFrom, setMatchDateFrom] = useState('');
-  const [matchDateTo, setMatchDateTo] = useState('');
-  const [matchday, setMatchday] = useState('');
-  const [fixtureSearchMode, setFixtureSearchMode] = useState<'date' | 'team'>('date');
-  const [teamSearch, setTeamSearch] = useState('');
-  const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [watchControlTab, setWatchControlTab] = useState<WatchControlTab>('live');
   const [expandedPartyIds, setExpandedPartyIds] = useState<Record<string, boolean>>({});
 
   const sortedUsers = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users]);
-  const canCreateParty = Boolean(form.homeTeam.trim() && form.awayTeam.trim() && form.kickoffAt);
   const controlBuckets = useMemo(() => {
     const nowMs = Date.now();
     const live: AdminParty[] = [];
@@ -255,14 +550,6 @@ export default function AdminWatchPartiesPage() {
     : watchControlTab === 'needs-result'
       ? 'No watch parties waiting for a result.'
       : 'No settled or void watch parties.';
-  const teamSuggestions = useMemo(() => {
-    const query = teamSearch.trim().toLowerCase();
-    if (!query) return [];
-    return fixtureTeams
-      .filter((team) => team.toLowerCase().includes(query))
-      .slice(0, 8);
-  }, [fixtureTeams, teamSearch]);
-
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -295,21 +582,6 @@ export default function AdminWatchPartiesPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    let active = true;
-    fetch('/api/admin/watch-parties/matches?teamsOnly=true', { cache: 'no-store' })
-      .then((res) => res.ok
-        ? readApiResponse<{ teams?: string[] }>(res, 'Failed to load teams.')
-        : Promise.reject())
-      .then((data) => {
-        if (active) setFixtureTeams(Array.isArray(data.teams) ? data.teams : []);
-      })
-      .catch(() => {
-        if (active) setFixtureTeams([]);
-      });
-    return () => { active = false; };
-  }, []);
 
   const loadMoreParties = async () => {
     if (!partyPageInfo?.hasMore || partyPageInfo.nextSkip == null) return;
@@ -361,75 +633,6 @@ export default function AdminWatchPartiesPage() {
         : [party, ...current];
       return sortLiveControlParties(next);
     });
-  };
-
-  const fetchMatches = async (teamOverride?: string) => {
-    setBusy('matches');
-    setError('');
-    try {
-      const params = new URLSearchParams();
-      if (fixtureSearchMode === 'team') {
-        const team = (teamOverride ?? teamSearch).trim();
-        if (team) params.set('team', team);
-      } else {
-        if (matchDateFrom) params.set('dateFrom', matchDateFrom);
-        if (matchDateTo) params.set('dateTo', matchDateTo);
-        if (matchday) params.set('matchday', matchday);
-      }
-      const res = await fetch(`/api/admin/watch-parties/matches?${params.toString()}`, { cache: 'no-store' });
-      const data = await readApiResponse<{ matches?: ProviderMatch[]; error?: string }>(res, 'Failed to load Premier League fixtures.');
-      if (!res.ok) throw new Error(readError(data, 'Failed to load Premier League fixtures.'));
-      setMatches(data.matches ?? []);
-      setNotice(`${data.matches?.length ?? 0} Premier League fixtures loaded.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Premier League fixtures.');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const selectMatch = (match: ProviderMatch) => {
-    setForm({
-      ...form,
-      title: match.title,
-      homeTeam: match.homeTeam,
-      awayTeam: match.awayTeam,
-      kickoffAt: toIstInput(match.kickoffAt),
-      venue: match.venue ?? '',
-      source: match.source,
-      providerMatchId: match.providerMatchId,
-      providerCompetitionCode: match.providerCompetitionCode,
-      providerSeason: String(match.providerSeason),
-      providerPayload: match.providerPayload,
-    });
-  };
-
-  const createParty = async () => {
-    setBusy('create');
-    setError('');
-    setNotice('');
-    try {
-      const payload = {
-        ...form,
-        entryFeeRupees: Number(form.entryFeeRupees),
-        entryCoins: Number(form.entryCoins),
-        providerSeason: form.providerSeason ? Number(form.providerSeason) : undefined,
-      };
-      const res = await fetch('/api/admin/watch-parties', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await readApiResponse<{ party: AdminParty; error?: string }>(res, 'Failed to create watch party.');
-      if (!res.ok) throw new Error(readError(data, 'Failed to create watch party.'));
-      replaceParty(data.party);
-      setForm(EMPTY_FORM);
-      setNotice('Watch party created.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create watch party.');
-    } finally {
-      setBusy('');
-    }
   };
 
   const invite = async (partyId: string) => {
@@ -631,104 +834,42 @@ export default function AdminWatchPartiesPage() {
           <h1 className="font-orbitron">PL Watch Party</h1>
           <p>Premier League 2026-27</p>
         </div>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={load} disabled={loading}>
-          <RefreshCw size={15} />
-          Refresh
-        </button>
+        <div className="watch-admin-header-actions">
+          <button
+            className="btn btn-primary btn-sm"
+            type="button"
+            onClick={() => {
+              setError('');
+              setNotice('');
+              setShowCreateModal(true);
+            }}
+          >
+            <TicketCheck size={15} />
+            Create Watch Party
+          </button>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={load} disabled={loading}>
+            <RefreshCw size={15} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert alert-error watch-admin-alert">{error}</div>}
       {notice && <div className="alert alert-info watch-admin-alert">{notice}</div>}
 
+      {showCreateModal && (
+        <WatchPartyCreateModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={(party) => {
+            replaceParty(party);
+            setShowCreateModal(false);
+            setError('');
+            setNotice('Watch party created.');
+          }}
+        />
+      )}
+
       <section className="watch-admin-grid">
-        <div className="watch-admin-panel">
-          <h2><Tv size={17} /> Premier League Fixture</h2>
-          <div className="watch-fixture-tabs" role="tablist" aria-label="Fixture search mode">
-            <button type="button" className={fixtureSearchMode === 'date' ? 'active' : ''} onClick={() => setFixtureSearchMode('date')}>
-              Date / Matchweek
-            </button>
-            <button type="button" className={fixtureSearchMode === 'team' ? 'active' : ''} onClick={() => setFixtureSearchMode('team')}>
-              Team Search
-            </button>
-          </div>
-          {fixtureSearchMode === 'team' ? (
-            <div className="watch-match-tools team">
-              <div className="watch-team-search">
-                <input
-                  className="form-input"
-                  type="search"
-                  placeholder="Search team, e.g. Arsenal"
-                  value={teamSearch}
-                  onBlur={() => window.setTimeout(() => setTeamDropdownOpen(false), 120)}
-                  onChange={(event) => {
-                    setTeamSearch(event.target.value);
-                    setTeamDropdownOpen(true);
-                  }}
-                  onFocus={() => setTeamDropdownOpen(true)}
-                />
-                {teamDropdownOpen && teamSuggestions.length > 0 && (
-                  <div className="watch-team-dropdown">
-                    {teamSuggestions.map((team) => (
-                      <button
-                        key={team}
-                        type="button"
-                        onMouseDown={(event) => {
-                          event.preventDefault();
-                          setTeamSearch(team);
-                          setTeamDropdownOpen(false);
-                          fetchMatches(team);
-                        }}
-                      >
-                        {team}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <button className="btn btn-ghost btn-sm" type="button" onClick={() => fetchMatches()} disabled={busy === 'matches'}>
-                <Search size={15} />
-                {busy === 'matches' ? 'Loading' : 'Find Team'}
-              </button>
-            </div>
-          ) : (
-            <div className="watch-match-tools">
-              <input className="form-input" type="date" value={matchDateFrom} onChange={(event) => setMatchDateFrom(event.target.value)} aria-label="Fixture date from" />
-              <input className="form-input" type="date" value={matchDateTo} onChange={(event) => setMatchDateTo(event.target.value)} aria-label="Fixture date to" />
-              <input className="form-input" type="number" min={1} max={38} placeholder="Matchweek" value={matchday} onChange={(event) => setMatchday(event.target.value)} aria-label="Matchweek number" />
-              <button className="btn btn-ghost btn-sm" type="button" onClick={() => fetchMatches()} disabled={busy === 'matches'}>
-                <Search size={15} />
-                {busy === 'matches' ? 'Loading' : 'Fixtures'}
-              </button>
-            </div>
-          )}
-
-          {matches.length > 0 && (
-            <div className="watch-match-list">
-              {matches.slice(0, 12).map((match) => (
-                <button key={match.providerMatchId} type="button" onClick={() => selectMatch(match)}>
-                  <strong>{match.title}</strong>
-                  <span>MW {match.matchday} · {formatTime(match.kickoffAt)}</span>
-                  {!match.kickoffAt && <em>TBA - set kickoff before creating</em>}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="watch-form-grid">
-            <input className="form-input" placeholder="Title" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-            <input className="form-input" placeholder="Team A" value={form.homeTeam} onChange={(event) => setForm({ ...form, homeTeam: event.target.value })} />
-            <input className="form-input" placeholder="Team B" value={form.awayTeam} onChange={(event) => setForm({ ...form, awayTeam: event.target.value })} />
-            <input className="form-input" type="datetime-local" value={form.kickoffAt} onChange={(event) => setForm({ ...form, kickoffAt: event.target.value })} />
-            <input className="form-input" placeholder="Guild TV area" value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} />
-            <input className="form-input" type="number" placeholder="Entry fee" value={form.entryFeeRupees} onChange={(event) => setForm({ ...form, entryFeeRupees: event.target.value })} />
-            <input className="form-input" type="number" placeholder="Arena Tokens" value={form.entryCoins} onChange={(event) => setForm({ ...form, entryCoins: event.target.value })} />
-          </div>
-          <button className="btn btn-primary watch-create" type="button" onClick={createParty} disabled={busy === 'create' || !canCreateParty}>
-            {busy === 'create' ? <Loader2 size={15} className="watch-spin" /> : <TicketCheck size={15} />}
-            Create Watch Party
-          </button>
-        </div>
-
         <div className="watch-admin-panel">
           <div className="watch-control-head">
             <h2><UserPlus size={17} /> Live Control</h2>
@@ -997,27 +1138,11 @@ export default function AdminWatchPartiesPage() {
         .watch-admin-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: var(--space-xl); }
         .watch-admin-header h1 { margin: 0 0 4px; font-size: 1.45rem; }
         .watch-admin-header p { margin: 0; color: var(--color-text-muted); font-size: 0.86rem; }
+        .watch-admin-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
         .watch-admin-alert { margin-bottom: var(--space-md); }
-        .watch-admin-grid { display: grid; grid-template-columns: minmax(280px, 430px) minmax(0, 1fr); gap: var(--space-lg); align-items: start; min-width: 0; }
+        .watch-admin-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-lg); align-items: start; min-width: 0; }
         .watch-admin-panel { min-width: 0; padding: var(--space-lg); border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-card); }
         .watch-admin-panel h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--space-md); font-size: 1rem; }
-        .watch-fixture-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; padding: 3px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(0,0,0,0.18); }
-        .watch-fixture-tabs button { min-height: 34px; padding: 0 8px; border: 0; border-radius: 6px; color: var(--color-text-muted); background: transparent; font-size: 0.75rem; font-weight: 800; }
-        .watch-fixture-tabs button.active { color: #061016; background: #22d3ee; }
-        .watch-match-tools { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
-        .watch-match-tools.team { grid-template-columns: minmax(0,1fr) auto; }
-        .watch-match-tools .form-input { min-width: 0; width: 100%; }
-        .watch-match-tools button { width: 100%; justify-content: center; }
-        .watch-team-search { position: relative; min-width: 0; }
-        .watch-team-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; display: grid; max-height: 220px; overflow: auto; border: 1px solid rgba(34,211,238,0.28); border-radius: 8px; background: #07111d; box-shadow: 0 16px 32px rgba(0,0,0,0.35); }
-        .watch-team-dropdown button { min-height: 36px; justify-content: flex-start; padding: 0 10px; border: 0; border-radius: 0; border-bottom: 1px solid rgba(255,255,255,0.07); color: var(--color-text-primary); background: transparent; text-align: left; font-size: 0.82rem; }
-        .watch-team-dropdown button:hover { color: #061016; background: #22d3ee; }
-        .watch-match-list { display: grid; gap: 6px; max-height: 210px; overflow: auto; margin-bottom: 12px; }
-        .watch-match-list button { display: grid; gap: 2px; padding: 9px 10px; text-align: left; border: 1px solid rgba(34,211,238,0.18); border-radius: 8px; color: var(--color-text-primary); background: rgba(34,211,238,0.06); }
-        .watch-match-list span { color: var(--color-text-muted); font-size: 0.76rem; }
-        .watch-match-list em { color: #fbbf24; font-size: 0.72rem; font-style: normal; font-weight: 800; }
-        .watch-form-grid { display: grid; gap: 8px; }
-        .watch-create { width: 100%; justify-content: center; margin-top: 10px; }
         .watch-spin { animation: watchSpin 0.8s linear infinite; }
         .watch-control-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
         .watch-control-head h2 { margin: 0; }
@@ -1076,14 +1201,14 @@ export default function AdminWatchPartiesPage() {
           .watch-card-details { display: none; }
           .watch-admin-card.open .watch-card-details { display: grid; }
           .watch-control-tabs button { flex-direction: column; gap: 2px; min-height: 44px; font-size: 0.68rem; }
-          .watch-match-tools { grid-template-columns: 1fr; }
-          .watch-match-tools.team { grid-template-columns: 1fr; }
           .watch-ticket-admin-card { grid-template-columns: 1fr; }
           .watch-invite-actions, .watch-ticket-admin-actions { flex-direction: column !important; justify-content: stretch !important; }
           .watch-invite-actions .btn, .watch-ticket-admin-actions .btn { width: 100%; justify-content: center; }
         }
         @media (max-width: 560px) {
           .watch-admin-header { align-items: stretch; flex-direction: column; }
+          .watch-admin-header-actions { align-items: stretch; flex-direction: column; }
+          .watch-admin-header-actions .btn { width: 100%; justify-content: center; }
           .watch-admin-panel { padding: 12px; }
           .watch-control-tabs { grid-template-columns: 1fr; }
           .watch-control-tabs button { flex-direction: row; justify-content: space-between; padding: 0 10px; }
