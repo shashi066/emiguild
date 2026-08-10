@@ -131,6 +131,32 @@ function EditModal({
 
   const isOffline = booking.bookingType === 'OFFLINE';
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const scrollY = window.scrollY;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyPosition = body.style.position;
+    const previousBodyTop = body.style.top;
+    const previousBodyWidth = body.style.width;
+
+    root.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+
+    return () => {
+      root.style.overflow = previousRootOverflow;
+      body.style.overflow = previousBodyOverflow;
+      body.style.position = previousBodyPosition;
+      body.style.top = previousBodyTop;
+      body.style.width = previousBodyWidth;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+
   // Fetch controller unit price from settings
   useEffect(() => {
     fetch('/api/settings')
@@ -294,10 +320,24 @@ function EditModal({
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      className="scrollbar-colored-y"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        background: 'rgba(0,0,0,0.75)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
+        padding: '24px 12px',
+        WebkitOverflowScrolling: 'touch',
+      }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="card scrollbar-colored-y" style={{ width: '100%', maxWidth: 540, maxHeight: '90vh', overflowY: 'auto', position: 'relative', animation: 'fadeInUp 0.2s ease' }}>
+      <div className="card" style={{ width: '100%', maxWidth: 540, margin: 'auto', position: 'relative', animation: 'fadeInUp 0.2s ease' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-xl)' }}>

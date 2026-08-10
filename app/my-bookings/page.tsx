@@ -282,7 +282,7 @@ export default function MyBookingsPage() {
               <div className="empty-state">
                 <div className="empty-state-icon"><Award size={32} style={{ color: '#FFD700' }} /></div>
                 <div className="empty-state-title">No Passes Yet</div>
-                <p className="empty-state-text">You don't have a pass or Guild Membership yet. Visit our guild to join!</p>
+                <p className="empty-state-text">You don&apos;t have a pass or Guild Membership yet. Visit our guild to join!</p>
                 <Link href="/passes" className="btn btn-primary" style={{ marginTop: 'var(--space-md)' }}>
                   View Pass Plans
                 </Link>

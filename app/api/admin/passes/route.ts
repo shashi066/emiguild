@@ -18,6 +18,8 @@ const PASS_CONFIG = {
   APEX:   { totalHours: 15, price: 3150, validityDays: 30 },
 } as const;
 
+const WATCH_PARTY_TICKET_STATUSES = ['WATCH_PARTY_TICKET', 'WATCH_PARTY_TICKET_GIVEN'];
+
 // GET /api/admin/passes?userId=xxx — get a specific user's active passes
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -86,7 +88,7 @@ export async function GET(req: NextRequest) {
       });
       const raw = await prisma.userPass.findMany({
         where: includeHistory
-          ? { userId }
+          ? { userId, status: { notIn: WATCH_PARTY_TICKET_STATUSES } }
           : { userId, status: 'ACTIVE', expiresAt: { gte: now } },
         orderBy: { purchasedAt: 'desc' },
       });

@@ -484,7 +484,7 @@ export default function AdminPassesPage() {
               </div>
             ) : allActivePasses.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px 16px', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                No active passes found. Click "Assign a Pass" to get started.
+                No active passes found. Click &quot;Assign a Pass&quot; to get started.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

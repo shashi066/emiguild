@@ -24,9 +24,9 @@ const PASSES = [
     hours: 10,
     price: 1300,
     pricePerHr: 130,
-    color: '#cd7f32',
-    borderColor: 'rgba(205,127,50,0.4)',
-    bgColor: 'rgba(205,127,50,0.07)',
+    color: '#d08a47',
+    borderColor: 'rgba(208,138,71,0.42)',
+    bgColor: 'linear-gradient(135deg, rgba(208,138,71,0.11), rgba(5,12,24,0.5))',
     featured: false,
   },
   {
@@ -37,9 +37,9 @@ const PASSES = [
     hours: 20,
     price: 2300,
     pricePerHr: 115,
-    color: '#c0c0c0',
-    borderColor: 'rgba(192,192,192,0.5)',
-    bgColor: 'rgba(192,192,192,0.07)',
+    color: '#cbd5e1',
+    borderColor: 'rgba(203,213,225,0.4)',
+    bgColor: 'linear-gradient(135deg, rgba(203,213,225,0.1), rgba(15,23,42,0.58))',
     featured: true,
   },
   {
@@ -50,9 +50,9 @@ const PASSES = [
     hours: 30,
     price: 3000,
     pricePerHr: 100,
-    color: '#FFD700',
-    borderColor: 'rgba(255,215,0,0.45)',
-    bgColor: 'rgba(255,215,0,0.07)',
+    color: '#facc15',
+    borderColor: 'rgba(250,204,21,0.42)',
+    bgColor: 'linear-gradient(135deg, rgba(250,204,21,0.11), rgba(42,28,8,0.35))',
     featured: false,
   },
 ] as const;
@@ -85,9 +85,9 @@ const RACING_PASSES = [
     pricePerHr: 210,
     savings: 1350,
     discount: '30% OFF',
-    color: '#67e8f9',
-    borderColor: 'rgba(34, 211, 238, 0.42)',
-    bgColor: 'linear-gradient(135deg, rgba(8,34,44,0.92), rgba(0,153,184,0.22))',
+    color: '#a78bfa',
+    borderColor: 'rgba(167,139,250,0.42)',
+    bgColor: 'linear-gradient(135deg, rgba(30,20,52,0.92), rgba(88,28,135,0.28))',
     featured: true,
   },
 ] as const;
@@ -542,9 +542,9 @@ export default async function PassesPage() {
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 14px', borderRadius: '999px',
-                background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.25)',
+                background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)',
                 fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
-                letterSpacing: '0.1em', color: '#38bdf8', marginBottom: 14,
+                letterSpacing: '0.1em', color: '#a78bfa', marginBottom: 14,
               }}>
                 <Award size={13} /> Simulator Plans
               </div>

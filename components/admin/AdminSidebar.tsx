@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Monitor, Users,
-  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity,
+  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity, Tv,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: '/admin/games',    label: 'Games',          icon: Gamepad2 },
   { href: '/admin/daily-spin', label: 'Guild Spin', icon: RotateCw },
   { href: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
+  { href: '/admin/watch-parties', label: 'PL Watch Party', icon: Tv },
   { href: '/admin/users',    label: 'Users',          icon: Users },
   { href: '/admin/settings', label: 'Settings',       icon: Settings },
   { href: '/admin/analytics', label: 'Analytics',     icon: Activity },
@@ -72,7 +73,7 @@ export function AdminSidebar() {
               key={item.href}
               href={item.href}
               className={`admin-nav-item ${active ? 'active' : ''}`}
-              id={`admin-nav-${item.label.toLowerCase().replace(' ', '-')}`}
+              id={`admin-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
               aria-current={active ? 'page' : undefined}
             >
               <Icon size={18} />

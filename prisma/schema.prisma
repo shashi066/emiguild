@@ -18,6 +18,7 @@ model User {
   phone     String?
   role      String   @default("USER")
   guildGems Int      @default(0)
+  watchPartyCoins Int @default(0)
   lastForgotPasswordDate String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -36,6 +37,16 @@ model User {
   armoryTradePurchases ArmoryTradeListing[] @relation("ArmoryTradeBuyer")
   guildGemLedger      GuildGemLedger[] @relation("GuildGemOwner")
   guildGemAdjustments GuildGemLedger[] @relation("GuildGemActor")
+  watchPartyInvites         WatchPartyInvite[]
+  watchPartyInvitesCreated  WatchPartyInvite[] @relation("WatchPartyInviteCreator")
+  watchPartyCheckins        WatchPartyInvite[] @relation("WatchPartyCheckinActor")
+  watchPartyPredictions     WatchPartyPrediction[]
+  watchPartyCoinLedger      WatchPartyCoinLedger[] @relation("WatchPartyCoinOwner")
+  watchPartyCoinAdjustments WatchPartyCoinLedger[] @relation("WatchPartyCoinActor")
+  watchPartySettlements     WatchParty[] @relation("WatchPartySettlementActor")
+  watchPartyShopOrders      WatchPartyShopOrder[] @relation("WatchPartyShopOrderOwner")
+  watchPartyShopOrdersGiven WatchPartyShopOrder[] @relation("WatchPartyShopOrderGivenActor")
+  watchPartyShopOrdersCancelled WatchPartyShopOrder[] @relation("WatchPartyShopOrderCancelActor")
 
   @@map("users")
 }
@@ -437,6 +448,143 @@ model GuildGemLedger {
   @@index([actorId, createdAt])
   @@index([reason, referenceId])
   @@map("guild_gem_ledger")
+}
+
+model WatchParty {
+  id                      String   @id @default(cuid())
+  title                   String
+  description             String?
+  status                  String   @default("DRAFT")
+  source                  String   @default("MANUAL")
+  providerMatchId         String?
+  providerCompetitionCode String?
+  providerSeason          Int?
+  providerPayload         String?
+  homeTeam                String
+  awayTeam                String
+  kickoffAt               DateTime
+  venue                   String?
+  entryFeeRupees          Int      @default(100)
+  entryCoins              Int      @default(100)
+  entryCoinUnits          Int      @default(1000)
+  predictionOptions       String?
+  predictionLockAt        DateTime?
+  predictionStatus        String   @default("OPEN")
+  settledOption           String?
+  settledAt               DateTime?
+  settledById             String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  invites     WatchPartyInvite[]
+  predictions WatchPartyPrediction[]
+  coinLedger  WatchPartyCoinLedger[]
+  settledBy   User? @relation("WatchPartySettlementActor", fields: [settledById], references: [id], onDelete: SetNull)
+
+  @@index([status, kickoffAt])
+  @@index([status, createdAt])
+  @@index([predictionStatus, kickoffAt])
+  @@index([providerCompetitionCode, providerSeason, kickoffAt])
+  @@map("watch_parties")
+}
+
+model WatchPartyInvite {
+  id              String    @id @default(cuid())
+  partyId         String
+  userId          String
+  invitedById     String?
+  invitedAt       DateTime  @default(now())
+  checkedInAt     DateTime?
+  checkedInById   String?
+  entryPaid       Boolean   @default(false)
+  entryCreditedAt DateTime?
+  enteredAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  party       WatchParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy   User?      @relation("WatchPartyInviteCreator", fields: [invitedById], references: [id], onDelete: SetNull)
+  checkedInBy User?      @relation("WatchPartyCheckinActor", fields: [checkedInById], references: [id], onDelete: SetNull)
+
+  @@unique([partyId, userId])
+  @@index([userId, checkedInAt])
+  @@index([partyId, checkedInAt])
+  @@map("watch_party_invites")
+}
+
+model WatchPartyPrediction {
+  id                    String   @id @default(cuid())
+  partyId               String
+  userId                String
+  marketLabel           String   @default("Match result")
+  optionKey             String
+  optionLabel           String
+  multiplierBasisPoints Int      @default(20000)
+  stakeUnits            Int
+  payoutUnits           Int?
+  status                String   @default("ACTIVE")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  party      WatchParty             @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coinLedger WatchPartyCoinLedger[]
+
+  @@unique([partyId, userId])
+  @@index([partyId, optionKey])
+  @@map("watch_party_predictions")
+}
+
+model WatchPartyCoinLedger {
+  id                String   @id @default(cuid())
+  userId            String
+  actorId           String?
+  amountUnits       Int
+  balanceAfterUnits Int
+  reason            String
+  partyId           String?
+  predictionId      String?
+  note              String?
+  createdAt         DateTime @default(now())
+
+  user       User                  @relation("WatchPartyCoinOwner", fields: [userId], references: [id], onDelete: Cascade)
+  actor      User?                 @relation("WatchPartyCoinActor", fields: [actorId], references: [id], onDelete: SetNull)
+  party      WatchParty?           @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  prediction WatchPartyPrediction? @relation(fields: [predictionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([reason, partyId])
+  @@index([predictionId])
+  @@map("watch_party_coin_ledger")
+}
+
+model WatchPartyShopOrder {
+  id             String   @id @default(cuid())
+  userId         String
+  itemKey        String
+  itemType       String
+  itemLabel      String
+  itemCategory   String
+  tokenCost      Int
+  tokenCostUnits Int
+  status         String   @default("PENDING")
+  givenAt        DateTime?
+  givenById      String?
+  cancelledAt    DateTime?
+  cancelledById  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user        User  @relation("WatchPartyShopOrderOwner", fields: [userId], references: [id], onDelete: Cascade)
+  givenBy     User? @relation("WatchPartyShopOrderGivenActor", fields: [givenById], references: [id], onDelete: SetNull)
+  cancelledBy User? @relation("WatchPartyShopOrderCancelActor", fields: [cancelledById], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([itemType, status])
+  @@map("watch_party_shop_orders")
 }
 
 model WebsiteAnalytics {

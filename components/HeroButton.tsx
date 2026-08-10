@@ -18,7 +18,7 @@ type ButtonVariant =
   | 'drop'
   | 'tournament'
   | 'armory'
-  | 'dungeon';
+  | 'watch';
 type AnimationVariant = 'none' | 'spin' | 'lucky' | 'tournament';
 
 interface HeroButtonProps {
@@ -91,10 +91,10 @@ const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
     border: '1px solid rgba(255, 255, 255, 0.55)',
     color: '#f8fafc',
   },
-  dungeon: {
-    background: '#02040a',
-    border: '1px solid rgba(0, 174, 255, 0.48)',
-    color: '#e8f7ff',
+  watch: {
+    background: 'rgba(34, 211, 238, 0.12)',
+    border: '1px solid rgba(34, 211, 238, 0.48)',
+    color: '#d8fbff',
   },
 };
 
