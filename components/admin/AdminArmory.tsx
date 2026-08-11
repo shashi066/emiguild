@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { CheckCircle, Shield, Save, AlertCircle, RefreshCw, History, Package, Search, Gift, X } from 'lucide-react';
+import { CheckCircle, Shield, Save, AlertCircle, RefreshCw, History, Package, Search, Gift, X, Pencil } from 'lucide-react';
+import { AdminModalShell } from '@/components/admin/AdminModalShell';
 import { decryptNumber } from '@/lib/crypto';
 
 const REWARD_TYPES = ['PERCENT_DISCOUNT', 'FIXED_DISCOUNT', 'GAMING_MINUTES', 'RACING_MINUTES', 'SQUAD_NIGHT', 'BRONZE_PASS'];
@@ -26,6 +27,112 @@ const ARMORY_RARITY_COLORS: Record<string, string> = {
   SILVER: '#8edbed',
   BRONZE: '#d58a52',
 };
+
+type ArmoryConfigEditor = 'forge' | 'drops' | 'artifacts' | 'rewards';
+
+type ArmoryConfigModalProps = {
+  title: string;
+  titleId: string;
+  saving: boolean;
+  error: string;
+  saveDisabled?: boolean;
+  size?: 'default' | 'wide';
+  onClose: () => void;
+  onSave: () => void;
+  children: ReactNode;
+};
+
+function ArmoryConfigModal({
+  title,
+  titleId,
+  saving,
+  error,
+  saveDisabled = false,
+  size = 'default',
+  onClose,
+  onSave,
+  children,
+}: ArmoryConfigModalProps) {
+  return (
+    <AdminModalShell onClose={onClose} labelledBy={titleId} size={size}>
+      <form
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!saving && !saveDisabled) onSave();
+        }}
+        style={{ display: 'grid', gap: 'var(--space-lg)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <h2 id={titleId} style={{ margin: 0, fontSize: '1.25rem' }}>{title}</h2>
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            aria-label={`Close ${title}`}
+            disabled={saving}
+            onClick={onClose}
+            style={{ flexShrink: 0, padding: 8 }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {children}
+
+        {error && (
+          <div className="alert alert-error" role="alert">
+            <AlertCircle size={16} /> {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost btn-sm" type="button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary btn-sm" type="submit" disabled={saving || saveDisabled}>
+            <Save size={16} /> {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </AdminModalShell>
+  );
+}
+
+function ArmorySummaryCard({ title, onEdit, children }: { title: string; onEdit: () => void; children: ReactNode }) {
+  return (
+    <section
+      className="card"
+      style={{
+        display: 'grid',
+        alignContent: 'start',
+        gap: 'var(--space-md)',
+        minWidth: 0,
+        border: '1px solid rgba(199, 183, 255, 0.28)',
+        borderRadius: 8,
+        boxShadow: 'inset 3px 0 0 rgba(139, 131, 255, 0.72)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{title}</h2>
+        <button
+          className="btn btn-ghost btn-sm"
+          type="button"
+          onClick={onEdit}
+          style={{
+            color: '#c7b7ff',
+            background: 'rgba(139, 131, 255, 0.12)',
+            border: '1px solid rgba(199, 183, 255, 0.34)',
+          }}
+        >
+          <Pencil size={14} /> Edit
+        </button>
+      </div>
+      <div style={{ display: 'grid', gap: 8, color: 'var(--color-text-secondary)', fontSize: '0.88rem' }}>
+        {children}
+      </div>
+    </section>
+  );
+}
 
 function slotTypeLabel(slotType: string) {
   return slotType.charAt(0) + slotType.slice(1).toLowerCase();
@@ -146,7 +253,13 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
   const [artifacts, setArtifacts] = useState<any[]>(decryptedInitialConfig?.artifacts ?? []);
   const [rewards, setRewards] = useState<any[]>(decryptedInitialConfig?.rewards ?? []);
   const [loading, setLoading] = useState(!initialConfig && !initialError);
-  const [saving, setSaving] = useState(false);
+  const [activeEditor, setActiveEditor] = useState<ArmoryConfigEditor | null>(null);
+  const [editorSaving, setEditorSaving] = useState(false);
+  const [editorError, setEditorError] = useState('');
+  const [settingsDraft, setSettingsDraft] = useState<any>({});
+  const [setsDraft, setSetsDraft] = useState<any[]>([]);
+  const [artifactsDraft, setArtifactsDraft] = useState<any[]>([]);
+  const [rewardsDraft, setRewardsDraft] = useState<any[]>([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState(initialError);
   const [historyDate, setHistoryDate] = useState(getTodayIST());
@@ -154,6 +267,14 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
   const [historyRows, setHistoryRows] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const historyRequestRef = useRef(0);
+  const editorSavingRef = useRef(false);
+
+  const applyConfig = (config: any) => {
+    setSettings(config.settings ?? {});
+    setSets(config.sets ?? []);
+    setArtifacts(config.artifacts ?? []);
+    setRewards(config.rewards ?? []);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -163,10 +284,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
       const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Failed to load Artifacts config.');
       const config = decryptArmoryAdminConfig(data);
-      setSettings(config.settings ?? {});
-      setSets(config.sets ?? []);
-      setArtifacts(config.artifacts ?? []);
-      setRewards(config.rewards ?? []);
+      applyConfig(config);
     } catch (err: any) {
       setError(err.message || 'Failed to load Artifacts config.');
     } finally {
@@ -204,41 +322,84 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
   }, {} as Record<string, number>);
   const slotWeightsOk = sets.every((set) => !set.active || slotTotals[set.id] === 100);
 
-  const save = async () => {
-    setSaving(true);
+  const draftTotalDrop = setsDraft
+    .filter((set) => set.active)
+    .reduce((sum, set) => sum + Number(set.dropPercentage || 0), 0);
+  const draftSlotTotals = sets.reduce((map, set) => {
+    map[set.id] = artifactsDraft
+      .filter((artifact) => artifact.setId === set.id && artifact.active)
+      .reduce((sum, artifact) => sum + Number(artifact.slotDropPercentage || 0), 0);
+    return map;
+  }, {} as Record<string, number>);
+  const draftSlotWeightsOk = sets.every((set) => !set.active || draftSlotTotals[set.id] === 100);
+
+  const openEditor = (editor: ArmoryConfigEditor) => {
+    if (editor === 'forge') setSettingsDraft({ ...settings });
+    if (editor === 'drops') setSetsDraft(sets.map((set) => ({ ...set })));
+    if (editor === 'artifacts') {
+      setArtifactsDraft(artifacts.map((artifact) => ({
+        ...artifact,
+        set: artifact.set ? { ...artifact.set } : artifact.set,
+      })));
+    }
+    if (editor === 'rewards') {
+      setRewardsDraft(rewards.map((reward) => ({
+        ...reward,
+        set: reward.set ? { ...reward.set } : reward.set,
+      })));
+    }
+    setEditorError('');
+    setActiveEditor(editor);
+  };
+
+  const closeEditor = () => {
+    if (editorSavingRef.current) return;
+    setActiveEditor(null);
+    setEditorError('');
+  };
+
+  const saveEditor = async (patch: Partial<{ settings: any; sets: any[]; artifacts: any[]; rewards: any[] }>) => {
+    if (editorSavingRef.current) return;
+    editorSavingRef.current = true;
+    setEditorSaving(true);
+    setEditorError('');
     setError('');
     setMessage('');
     try {
       const res = await fetch('/api/admin/armory/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings, sets, artifacts, rewards }),
+        body: JSON.stringify({
+          settings: patch.settings ?? settings,
+          sets: patch.sets ?? sets,
+          artifacts: patch.artifacts ?? artifacts,
+          rewards: patch.rewards ?? rewards,
+        }),
       });
       const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Failed to save Artifacts.');
       const config = decryptArmoryAdminConfig(data);
-      setSettings(config.settings ?? {});
-      setSets(config.sets ?? []);
-      setArtifacts(config.artifacts ?? []);
-      setRewards(config.rewards ?? []);
+      applyConfig(config);
       setMessage('Artifacts settings saved.');
+      setActiveEditor(null);
     } catch (err: any) {
-      setError(err.message || 'Failed to save Artifacts.');
+      setEditorError(err.message || 'Failed to save Artifacts.');
     } finally {
-      setSaving(false);
+      editorSavingRef.current = false;
+      setEditorSaving(false);
     }
   };
 
-  const updateSet = (id: string, patch: any) => {
-    setSets((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row));
+  const updateSetDraft = (id: string, patch: any) => {
+    setSetsDraft((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row));
   };
 
-  const updateArtifact = (id: string, patch: any) => {
-    setArtifacts((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row));
+  const updateArtifactDraft = (id: string, patch: any) => {
+    setArtifactsDraft((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row));
   };
 
-  const updateReward = (setId: string, patch: any) => {
-    setRewards((rows) => rows.map((row) => row.setId === setId ? { ...row, ...patch } : row));
+  const updateRewardDraft = (setId: string, patch: any) => {
+    setRewardsDraft((rows) => rows.map((row) => row.setId === setId ? { ...row, ...patch } : row));
   };
 
   if (loading) return <div className="loading-state"><div className="spinner" />Loading Artifacts admin...</div>;
@@ -275,67 +436,174 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
       {error && <div className="alert alert-error" style={{ marginBottom: 'var(--space-lg)' }}><AlertCircle size={16} /> {error}</div>}
 
       <div style={{ display: 'grid', gap: 'var(--space-xl)' }}>
-        <div className="card" style={{ borderRadius: 8 }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: 'var(--space-md)' }}>Forge Settings</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-md)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 'var(--space-md)' }}>
+          <ArmorySummaryCard title="Forge Settings" onEdit={() => openEditor('forge')}>
+            <span>Daily Forge</span>
+            <strong style={{ color: settings.armory_enabled !== 'false' ? 'var(--color-accent-success)' : 'var(--color-text-muted)' }}>
+              {settings.armory_enabled !== 'false' ? 'Enabled' : 'Disabled'}
+            </strong>
+          </ArmorySummaryCard>
+
+          <ArmorySummaryCard title="Drop Percentages" onEdit={() => openEditor('drops')}>
+            <strong style={{ color: totalDrop === 100 ? 'var(--color-accent-success)' : '#ff8a8a' }}>
+              Active total: {totalDrop}%
+            </strong>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {sets.map((set) => (
+                <span key={set.id} className="badge" style={{ opacity: set.active ? 1 : 0.55 }}>
+                  {set.shortLabel}: {set.active ? `${set.dropPercentage}%` : 'Off'}
+                </span>
+              ))}
+            </div>
+          </ArmorySummaryCard>
+
+          <ArmorySummaryCard title="Artifact Availability & Slot Weights" onEdit={() => openEditor('artifacts')}>
+            <span><strong>{artifacts.filter((artifact) => artifact.active).length}</strong> of {artifacts.length} artifacts active</span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {sets.map((set) => (
+                <span key={set.id} className="badge" style={{ color: slotTotals[set.id] === 100 ? 'var(--color-accent-success)' : '#ff8a8a' }}>
+                  {set.shortLabel}: {slotTotals[set.id] ?? 0}%
+                </span>
+              ))}
+            </div>
+            {!slotWeightsOk && <span style={{ color: '#ff8a8a' }}>One or more active sets need a 100% slot total.</span>}
+          </ArmorySummaryCard>
+
+          <ArmorySummaryCard title="Set Rewards" onEdit={() => openEditor('rewards')}>
+            <span><strong>{rewards.filter((reward) => reward.active).length}</strong> of {rewards.length} rewards active</span>
+            {rewards.map((reward) => (
+              <span key={reward.setId} style={{ opacity: reward.active ? 1 : 0.55 }}>
+                <strong>{reward.set.shortLabel ?? reward.set.name}:</strong>{' '}
+                {reward.active ? (reward.description || rewardDescription(reward.rewardType, rewardValue(reward))) : 'Off'}
+              </span>
+            ))}
+          </ArmorySummaryCard>
+        </div>
+
+        {activeEditor === 'forge' && (
+          <ArmoryConfigModal
+            title="Forge Settings"
+            titleId="armory-forge-editor-title"
+            saving={editorSaving}
+            error={editorError}
+            onClose={closeEditor}
+            onSave={() => saveEditor({ settings: settingsDraft })}
+          >
             <label>
               <span className="form-label">Daily Forge Enabled</span>
-              <select className="form-input" value={settings.armory_enabled ?? 'true'} onChange={(e) => setSettings((s: any) => ({ ...s, armory_enabled: e.target.value }))}>
+              <select
+                className="form-input"
+                value={settingsDraft.armory_enabled ?? 'true'}
+                onChange={(event) => setSettingsDraft((current: any) => ({ ...current, armory_enabled: event.target.value }))}
+              >
                 <option value="true">Enabled</option>
                 <option value="false">Disabled</option>
               </select>
             </label>
-          </div>
-        </div>
+          </ArmoryConfigModal>
+        )}
 
-        <div className="card" style={{ borderRadius: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 'var(--space-md)' }}>
-            <h2 style={{ fontSize: '1.2rem' }}>Drop Percentages</h2>
-            <strong style={{ color: totalDrop === 100 ? 'var(--color-accent-success)' : '#ff8a8a' }}>Active total: {totalDrop}%</strong>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-md)' }}>
-            {sets.map((set) => (
-              <div key={set.id} style={{ padding: 'var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <input type="checkbox" checked={set.active} onChange={(e) => updateSet(set.id, { active: e.target.checked })} />
-                  <strong>{set.name}</strong>
-                </label>
-                <input className="form-input" type="number" min="0" max="100" value={set.dropPercentage} onChange={(e) => updateSet(set.id, { dropPercentage: Number(e.target.value) })} />
-              </div>
-            ))}
-          </div>
-        </div>
+        {activeEditor === 'drops' && (
+          <ArmoryConfigModal
+            title="Drop Percentages"
+            titleId="armory-drops-editor-title"
+            size="wide"
+            saving={editorSaving}
+            error={editorError}
+            saveDisabled={draftTotalDrop !== 100}
+            onClose={closeEditor}
+            onSave={() => saveEditor({ sets: setsDraft })}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--color-text-secondary)' }}>Active set percentages must total 100%.</span>
+              <strong style={{ color: draftTotalDrop === 100 ? 'var(--color-accent-success)' : '#ff8a8a' }}>
+                Active total: {draftTotalDrop}%
+              </strong>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-md)' }}>
+              {setsDraft.map((set) => (
+                <div key={set.id} style={{ padding: 'var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <input type="checkbox" checked={set.active} onChange={(event) => updateSetDraft(set.id, { active: event.target.checked })} />
+                    <strong>{set.name}</strong>
+                  </label>
+                  <label>
+                    <span className="form-label">Drop percentage</span>
+                    <input
+                      className="form-input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={set.dropPercentage}
+                      onChange={(event) => updateSetDraft(set.id, { dropPercentage: Number(event.target.value) })}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          </ArmoryConfigModal>
+        )}
 
-        <div className="card" style={{ borderRadius: 8 }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: 'var(--space-md)' }}>Artifact Availability & Slot Weights</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
-            {artifacts.map((artifact) => (
-              <div key={artifact.id} style={{ display: 'grid', gap: 8, padding: 'var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'start' }}>
-                  <input type="checkbox" checked={artifact.active} onChange={(e) => updateArtifact(artifact.id, { active: e.target.checked })} />
-                  <span>
-                    <strong>{artifact.name}</strong>
-                    <span style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>{artifact.set.name} - {artifact.slotType}</span>
-                  </span>
-                </label>
-                <label>
-                  <span className="form-label">Slot weight %</span>
-                  <input className="form-input" type="number" min="0" max="100" value={artifact.slotDropPercentage ?? 0} onChange={(e) => updateArtifact(artifact.id, { slotDropPercentage: Number(e.target.value) })} />
-                </label>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 'var(--space-md)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {sets.map((set) => (
-              <span key={set.id} className="badge" style={{ color: slotTotals[set.id] === 100 ? 'var(--color-accent-success)' : '#ff8a8a' }}>
-                {set.shortLabel}: {slotTotals[set.id] ?? 0}%
-              </span>
-            ))}
-          </div>
-        </div>
+        {activeEditor === 'artifacts' && (
+          <ArmoryConfigModal
+            title="Artifact Availability & Slot Weights"
+            titleId="armory-artifacts-editor-title"
+            size="wide"
+            saving={editorSaving}
+            error={editorError}
+            saveDisabled={!draftSlotWeightsOk}
+            onClose={closeEditor}
+            onSave={() => saveEditor({ artifacts: artifactsDraft })}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+              {artifactsDraft.map((artifact) => (
+                <div key={artifact.id} style={{ display: 'grid', gap: 8, padding: 'var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'start' }}>
+                    <input type="checkbox" checked={artifact.active} onChange={(event) => updateArtifactDraft(artifact.id, { active: event.target.checked })} />
+                    <span>
+                      <strong>{artifact.name}</strong>
+                      <span style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>
+                        {artifact.set.name} - {slotTypeLabel(artifact.slotType)}
+                      </span>
+                    </span>
+                  </label>
+                  <label>
+                    <span className="form-label">Slot weight %</span>
+                    <input
+                      className="form-input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={artifact.slotDropPercentage ?? 0}
+                      onChange={(event) => updateArtifactDraft(artifact.id, { slotDropPercentage: Number(event.target.value) })}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {sets.map((set) => (
+                <span key={set.id} className="badge" style={{ color: draftSlotTotals[set.id] === 100 ? 'var(--color-accent-success)' : '#ff8a8a' }}>
+                  {set.shortLabel}: {draftSlotTotals[set.id] ?? 0}%
+                </span>
+              ))}
+            </div>
+            {!draftSlotWeightsOk && (
+              <span style={{ color: '#ff8a8a' }}>Every active set must have slot weights totaling 100%.</span>
+            )}
+          </ArmoryConfigModal>
+        )}
 
-        <div className="card" style={tableCardStyle}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: 'var(--space-md)' }}>Set Rewards</h2>
+        {activeEditor === 'rewards' && (
+          <ArmoryConfigModal
+            title="Set Rewards"
+            titleId="armory-rewards-editor-title"
+            size="wide"
+            saving={editorSaving}
+            error={editorError}
+            onClose={closeEditor}
+            onSave={() => saveEditor({ rewards: rewardsDraft })}
+          >
           <div style={tableScrollStyle}>
             <table style={{ width: 820, maxWidth: 'none', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
@@ -349,7 +617,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                 </tr>
               </thead>
               <tbody>
-                {rewards.map((reward) => {
+                {rewardsDraft.map((reward) => {
                   const value = rewardValue(reward);
                   const preview = reward.description || rewardDescription(reward.rewardType, value);
                   return (
@@ -359,13 +627,13 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                         <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>{reward.set.rarity}</div>
                       </td>
                       <td style={{ padding: 'var(--space-sm)' }}>
-                        <input type="checkbox" checked={reward.active} onChange={(e) => updateReward(reward.setId, { active: e.target.checked })} />
+                        <input type="checkbox" checked={reward.active} onChange={(e) => updateRewardDraft(reward.setId, { active: e.target.checked })} />
                       </td>
                       <td style={{ padding: 'var(--space-sm)', minWidth: 180 }}>
                         <select
                           className="form-input"
                           value={reward.rewardType}
-                          onChange={(e) => updateReward(reward.setId, rewardPatchFor(e.target.value, rewardValue(reward) || 0))}
+                          onChange={(e) => updateRewardDraft(reward.setId, rewardPatchFor(e.target.value, rewardValue(reward) || 0))}
                         >
                           {REWARD_TYPES.map((type) => <option key={type} value={type}>{rewardTypeLabel(type)}</option>)}
                         </select>
@@ -378,14 +646,14 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                             type="number"
                             min="0"
                             value={value}
-                            onChange={(e) => updateReward(reward.setId, rewardPatchFor(reward.rewardType, e.target.value))}
+                            onChange={(e) => updateRewardDraft(reward.setId, rewardPatchFor(reward.rewardType, e.target.value))}
                             style={{ minWidth: 86 }}
                           />
                           {rewardUnit(reward.rewardType) !== '₹' && <span style={{ color: 'var(--color-text-muted)' }}>{rewardUnit(reward.rewardType)}</span>}
                         </div>
                       </td>
                       <td style={{ padding: 'var(--space-sm)' }}>
-                        <input type="checkbox" checked={reward.weekdayOnly} onChange={(e) => updateReward(reward.setId, { weekdayOnly: e.target.checked })} />
+                        <input type="checkbox" checked={reward.weekdayOnly} onChange={(e) => updateRewardDraft(reward.setId, { weekdayOnly: e.target.checked })} />
                       </td>
                       <td style={{ padding: 'var(--space-sm)', color: 'var(--color-text-secondary)' }}>{preview}</td>
                     </tr>
@@ -394,7 +662,8 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
               </tbody>
             </table>
           </div>
-        </div>
+          </ArmoryConfigModal>
+        )}
 
         <div className="card" style={tableCardStyle}>
           <h2 style={{ fontSize: '1.2rem', marginBottom: 'var(--space-md)' }}>
@@ -523,9 +792,6 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
           )}
         </div>
 
-        <button className="btn btn-primary" type="button" disabled={saving || totalDrop !== 100 || !slotWeightsOk} onClick={save} style={{ justifySelf: 'start' }}>
-          <Save size={16} /> {saving ? 'Saving...' : 'Save Artifacts'}
-        </button>
       </div>
     </div>
   );

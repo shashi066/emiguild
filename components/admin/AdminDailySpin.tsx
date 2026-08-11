@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Gift, Save, Plus, Trash2, Edit, CheckCircle, AlertCircle, RefreshCw, History } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Gift, Save, Plus, Trash2, Edit, CheckCircle, AlertCircle, RefreshCw, History, X } from 'lucide-react';
+import { AdminModalShell } from '@/components/admin/AdminModalShell';
 import { decryptNumber } from '@/lib/crypto';
 
 type LootItem = {
@@ -21,6 +22,25 @@ type SpinRecord = {
   createdAt: string;
   user:     { name: string | null; email: string | null };
   lootItem: { name: string; rarity: string | null; description: string | null } | null;
+};
+
+type LootItemDraft = Pick<LootItem, 'name' | 'weight' | 'enabled'> & {
+  description: string;
+  iconUrl: string;
+  rarity: string;
+};
+
+type LootItemModal =
+  | { mode: 'add' }
+  | { mode: 'edit'; itemId: string };
+
+const DEFAULT_LOOT_ITEM_DRAFT: LootItemDraft = {
+  name: '',
+  description: '',
+  iconUrl: '',
+  weight: 10,
+  enabled: true,
+  rarity: 'COMMON',
 };
 
 const RARITY_COLORS: Record<string, string> = {
@@ -48,12 +68,12 @@ export function AdminDailySpin() {
   const [historyDate, setHistoryDate] = useState(getTodayIST());
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Item Form State
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<Partial<LootItem>>({
-    name: '', description: '', iconUrl: '', weight: 10, enabled: true, rarity: 'COMMON'
-  });
+  // Item popup state
+  const [itemModal, setItemModal] = useState<LootItemModal | null>(null);
+  const [itemDraft, setItemDraft] = useState<LootItemDraft>({ ...DEFAULT_LOOT_ITEM_DRAFT });
+  const [savingItem, setSavingItem] = useState(false);
+  const [itemError, setItemError] = useState('');
+  const savingItemRef = useRef(false);
 
   const loadHistory = async (date: string) => {
     setHistoryLoading(true);
@@ -123,28 +143,36 @@ export function AdminDailySpin() {
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    if (!itemModal || savingItemRef.current) return;
+
+    savingItemRef.current = true;
+    setSavingItem(true);
+    setItemError('');
     setSuccess('');
     try {
-      const method = editingId ? 'PATCH' : 'POST';
-      const url = editingId ? `/api/admin/daily-spin/items/${editingId}` : '/api/admin/daily-spin/items';
+      const isEdit = itemModal.mode === 'edit';
+      const method = isEdit ? 'PATCH' : 'POST';
+      const url = isEdit ? `/api/admin/daily-spin/items/${itemModal.itemId}` : '/api/admin/daily-spin/items';
       
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(itemDraft),
       });
       
       if (!res.ok) throw new Error('Failed to save item');
       
       setSuccess('Item saved successfully!');
       setTimeout(() => setSuccess(''), 3000);
-      setIsEditing(false);
-      setEditingId(null);
-      setFormData({ name: '', description: '', iconUrl: '', weight: 10, enabled: true, rarity: 'COMMON' });
-      loadData();
+      setItemModal(null);
+      setItemDraft({ ...DEFAULT_LOOT_ITEM_DRAFT });
+      setItemError('');
+      await loadData();
     } catch (err) {
-      setError('Error saving item.');
+      setItemError('Error saving item.');
+    } finally {
+      savingItemRef.current = false;
+      setSavingItem(false);
     }
   };
 
@@ -160,10 +188,30 @@ export function AdminDailySpin() {
     }
   };
 
-  const editItem = (item: LootItem) => {
-    setFormData(item);
-    setEditingId(item.id);
-    setIsEditing(true);
+  const openAddItem = () => {
+    setItemDraft({ ...DEFAULT_LOOT_ITEM_DRAFT });
+    setItemError('');
+    setItemModal({ mode: 'add' });
+  };
+
+  const openEditItem = (item: LootItem) => {
+    setItemDraft({
+      name: item.name,
+      description: item.description ?? '',
+      iconUrl: item.iconUrl ?? '',
+      weight: item.weight,
+      enabled: item.enabled,
+      rarity: item.rarity ?? 'COMMON',
+    });
+    setItemError('');
+    setItemModal({ mode: 'edit', itemId: item.id });
+  };
+
+  const closeItemModal = () => {
+    if (savingItemRef.current) return;
+    setItemModal(null);
+    setItemDraft({ ...DEFAULT_LOOT_ITEM_DRAFT });
+    setItemError('');
   };
 
   const totalWeight = items.reduce((sum, item) => sum + (item.enabled ? item.weight : 0), 0);
@@ -263,61 +311,10 @@ export function AdminDailySpin() {
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
               <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Loot Items</h2>
-              {!isEditing && (
-                <button className="btn btn-secondary btn-sm" onClick={() => setIsEditing(true)}>
-                  <Plus size={16} /> Add Item
-                </button>
-              )}
+              <button className="btn btn-secondary btn-sm" type="button" onClick={openAddItem}>
+                <Plus size={16} /> Add Item
+              </button>
             </div>
-
-            {isEditing && (
-              <div style={{ padding: 'var(--space-md)', background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-lg)' }}>
-                <h3 style={{ marginBottom: 'var(--space-md)' }}>{editingId ? 'Edit Item' : 'New Item'}</h3>
-                <form onSubmit={handleSaveItem} style={{ display: 'grid', gap: 'var(--space-sm)' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-sm)' }}>
-                    <div>
-                      <label className="form-label">Name</label>
-                      <input required className="form-input" value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="form-label">Rarity</label>
-                      <select className="form-input" value={formData.rarity || 'COMMON'} onChange={e => setFormData({ ...formData, rarity: e.target.value })}>
-                        <option value="COMMON">Common</option>
-                        <option value="UNCOMMON">Uncommon</option>
-                        <option value="RARE">Rare</option>
-                        <option value="EPIC">Epic</option>
-                        <option value="LEGENDARY">Legendary</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="form-label">Description</label>
-                    <input className="form-input" value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-sm)' }}>
-                    <div>
-                      <label className="form-label">Icon URL (optional)</label>
-                      <input className="form-input" value={formData.iconUrl || ''} onChange={e => setFormData({ ...formData, iconUrl: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="form-label">Weight</label>
-                      <input type="number" required min="1" className="form-input" value={formData.weight || 1} onChange={e => setFormData({ ...formData, weight: parseInt(e.target.value) })} />
-                    </div>
-                    <div>
-                      <label className="form-label">Enabled</label>
-                      <select className="form-input" value={formData.enabled ? 'true' : 'false'} onChange={e => setFormData({ ...formData, enabled: e.target.value === 'true' })}>
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)' }}>
-                    <button type="submit" className="btn btn-primary"><Save size={16} /> Save Item</button>
-                    <button type="button" className="btn btn-ghost" onClick={() => { setIsEditing(false); setEditingId(null); setFormData({ name: '', weight: 10, enabled: true, rarity: 'COMMON' }); }}>Cancel</button>
-                  </div>
-                </form>
-              </div>
-            )}
 
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -349,8 +346,8 @@ export function AdminDailySpin() {
                           {item.enabled ? <span style={{ color: 'var(--color-accent-success)' }}>Active</span> : <span style={{ color: 'var(--color-text-muted)' }}>Disabled</span>}
                         </td>
                         <td style={{ padding: 'var(--space-sm)', textAlign: 'right' }}>
-                          <button className="btn btn-ghost btn-sm" onClick={() => editItem(item)} style={{ display: 'inline-flex', padding: 4 }}><Edit size={16} /></button>
-                          <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteItem(item.id)} style={{ display: 'inline-flex', padding: 4, color: 'var(--color-accent-danger)' }}><Trash2 size={16} /></button>
+                          <button className="btn btn-ghost btn-sm" type="button" aria-label={`Edit ${item.name}`} onClick={() => openEditItem(item)} style={{ display: 'inline-flex', padding: 4 }}><Edit size={16} /></button>
+                          <button className="btn btn-ghost btn-sm" type="button" aria-label={`Delete ${item.name}`} onClick={() => handleDeleteItem(item.id)} style={{ display: 'inline-flex', padding: 4, color: 'var(--color-accent-danger)' }}><Trash2 size={16} /></button>
                         </td>
                       </tr>
                     );
@@ -436,6 +433,195 @@ export function AdminDailySpin() {
 
         </div>
       )}
+
+      {itemModal && (
+        <AdminModalShell onClose={closeItemModal} labelledBy="daily-spin-item-modal-title">
+          <div className="daily-spin-item-modal-header">
+            <div>
+              <h2 id="daily-spin-item-modal-title">
+                {itemModal.mode === 'edit' ? 'Edit Loot Item' : 'Add Loot Item'}
+              </h2>
+              <p>{itemModal.mode === 'edit' ? 'Update this reward and its drop weight.' : 'Create a reward for the Daily Guild Spin.'}</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm daily-spin-item-modal-close"
+              onClick={closeItemModal}
+              disabled={savingItem}
+              aria-label="Close loot item popup"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {itemError && (
+            <div className="alert alert-error daily-spin-item-modal-error" role="alert">
+              <AlertCircle size={16} /> {itemError}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveItem} className="daily-spin-item-form">
+            <div className="daily-spin-item-form-grid">
+              <div>
+                <label className="form-label" htmlFor="daily-spin-item-name">Name</label>
+                <input
+                  id="daily-spin-item-name"
+                  required
+                  className="form-input"
+                  value={itemDraft.name}
+                  onChange={e => setItemDraft(draft => ({ ...draft, name: e.target.value }))}
+                  disabled={savingItem}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="form-label" htmlFor="daily-spin-item-rarity">Rarity</label>
+                <select
+                  id="daily-spin-item-rarity"
+                  className="form-input"
+                  value={itemDraft.rarity}
+                  onChange={e => setItemDraft(draft => ({ ...draft, rarity: e.target.value }))}
+                  disabled={savingItem}
+                >
+                  <option value="COMMON">Common</option>
+                  <option value="UNCOMMON">Uncommon</option>
+                  <option value="RARE">Rare</option>
+                  <option value="EPIC">Epic</option>
+                  <option value="LEGENDARY">Legendary</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label" htmlFor="daily-spin-item-description">Description</label>
+              <input
+                id="daily-spin-item-description"
+                className="form-input"
+                value={itemDraft.description}
+                onChange={e => setItemDraft(draft => ({ ...draft, description: e.target.value }))}
+                disabled={savingItem}
+              />
+            </div>
+
+            <div>
+              <label className="form-label" htmlFor="daily-spin-item-icon-url">Icon URL (optional)</label>
+              <input
+                id="daily-spin-item-icon-url"
+                className="form-input"
+                value={itemDraft.iconUrl}
+                onChange={e => setItemDraft(draft => ({ ...draft, iconUrl: e.target.value }))}
+                disabled={savingItem}
+              />
+            </div>
+
+            <div className="daily-spin-item-form-grid">
+              <div>
+                <label className="form-label" htmlFor="daily-spin-item-weight">Weight</label>
+                <input
+                  id="daily-spin-item-weight"
+                  type="number"
+                  required
+                  min="1"
+                  className="form-input"
+                  value={itemDraft.weight}
+                  onChange={e => setItemDraft(draft => ({ ...draft, weight: Number.parseInt(e.target.value, 10) || 0 }))}
+                  disabled={savingItem}
+                />
+              </div>
+              <div>
+                <label className="form-label" htmlFor="daily-spin-item-enabled">Enabled</label>
+                <select
+                  id="daily-spin-item-enabled"
+                  className="form-input"
+                  value={itemDraft.enabled ? 'true' : 'false'}
+                  onChange={e => setItemDraft(draft => ({ ...draft, enabled: e.target.value === 'true' }))}
+                  disabled={savingItem}
+                >
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="daily-spin-item-modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={closeItemModal} disabled={savingItem}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={savingItem}>
+                <Save size={16} /> {savingItem ? 'Saving...' : 'Save Item'}
+              </button>
+            </div>
+          </form>
+        </AdminModalShell>
+      )}
+
+      <style jsx>{`
+        .daily-spin-item-modal-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: var(--space-md);
+          margin-bottom: var(--space-lg);
+        }
+
+        .daily-spin-item-modal-header h2,
+        .daily-spin-item-modal-header p {
+          margin: 0;
+        }
+
+        .daily-spin-item-modal-header h2 {
+          font-size: 1.2rem;
+          font-weight: 700;
+        }
+
+        .daily-spin-item-modal-header p {
+          margin-top: var(--space-xs);
+          color: var(--color-text-muted);
+          font-size: 0.9rem;
+        }
+
+        .daily-spin-item-modal-close {
+          flex: 0 0 auto;
+          padding: 6px;
+        }
+
+        .daily-spin-item-modal-error {
+          margin-bottom: var(--space-md);
+        }
+
+        .daily-spin-item-form {
+          display: grid;
+          gap: var(--space-md);
+        }
+
+        .daily-spin-item-form-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: var(--space-sm);
+        }
+
+        .daily-spin-item-modal-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: var(--space-sm);
+          margin-top: var(--space-sm);
+        }
+
+        @media (max-width: 520px) {
+          .daily-spin-item-form-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .daily-spin-item-modal-actions {
+            flex-direction: column-reverse;
+          }
+
+          .daily-spin-item-modal-actions .btn {
+            width: 100%;
+            justify-content: center;
+          }
+        }
+      `}</style>
     </div>
   );
 }
