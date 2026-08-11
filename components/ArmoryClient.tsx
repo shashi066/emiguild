@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { AdminModalShell } from '@/components/admin/AdminModalShell';
 import {
   canRetryForgeRefresh,
   createForgeClockAnchor,
@@ -22,6 +23,7 @@ import {
   Gamepad2,
   Gem,
   Hand,
+  Info,
   IndianRupee,
   Package,
   Percent,
@@ -208,6 +210,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   const [forgeCharging, setForgeCharging] = useState(false);
   const [actionOverlay, setActionOverlay] = useState<ArmoryActionOverlayType | null>(null);
   const [claimConfirmation, setClaimConfirmation] = useState<any>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [rarityFilter, setRarityFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
   const [nextForgeTimer, setNextForgeTimer] = useState('--:--:--');
@@ -608,7 +611,14 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
     <main className="armory-rpg">
       <div className="armory-shell">
         <ArmoryHeader inventoryTotal={inventoryTotal} guildGems={state?.guildGems ?? 0} />
-        <DailyForgePanel state={state} saving={saving} forging={forging} nextForgeTimer={nextForgeTimer} onForge={() => act('/api/armory/forge')} />
+        <DailyForgePanel
+          state={state}
+          saving={saving}
+          forging={forging}
+          nextForgeTimer={nextForgeTimer}
+          onForge={() => act('/api/armory/forge')}
+          onGuide={() => setGuideOpen(true)}
+        />
         {error && <div className="armory-error">{error}</div>}
         {resetError && <div className="armory-error">{resetError}</div>}
         {notice && <div className="armory-notice"><Gem size={16} />{notice}</div>}
@@ -734,6 +744,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
           </section>
         </div>
       )}
+      {guideOpen && <ArtifactGuideModal onClose={() => setGuideOpen(false)} />}
       {(forgeCharging || revealArtifact) && (
         <ForgeReveal
           artifact={revealArtifact}
@@ -748,6 +759,72 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
       {actionOverlay && <ArmoryActionOverlay type={actionOverlay} />}
       <ArmoryStyles />
     </main>
+  );
+}
+
+function ArtifactGuideModal({ onClose }: { onClose: () => void }) {
+  const steps = [
+    {
+      title: 'Forge one artifact each day',
+      description: 'Tap Forge Artifact to receive one random artifact.',
+    },
+    {
+      title: 'Build one matching set',
+      description: 'Collect Headgear, Armor, Gloves, and Boots from the same set.',
+    },
+    {
+      title: 'Equip all four pieces',
+      description: 'Open Artifact Vault and equip one matching artifact in each slot.',
+    },
+    {
+      title: 'Claim your reward',
+      description: 'Claiming permanently consumes all four equipped pieces and gives you a counter-redeemable reward ticket plus 1 Guild Gem.',
+    },
+    {
+      title: 'Use duplicate artifacts',
+      description: 'Craft 3 unequipped copies of the same artifact into its next rarity, or use extras in Artifact Exchange.',
+    },
+  ];
+
+  return (
+    <AdminModalShell onClose={onClose} labelledBy="artifact-guide-title">
+      <section className="artifact-guide-modal">
+        <header className="artifact-guide-modal-header">
+          <span className="artifact-guide-modal-icon" aria-hidden="true">
+            <Info size={22} />
+          </span>
+          <div>
+            <span>Artifacts Guide</span>
+            <h2 id="artifact-guide-title">How Artifacts Work</h2>
+            <p>Forge. Match. Equip. Claim.</p>
+          </div>
+          <button
+            type="button"
+            className="artifact-guide-close"
+            aria-label="Close Artifacts guide"
+            onClick={onClose}
+          >
+            <X size={19} />
+          </button>
+        </header>
+
+        <ol className="artifact-guide-steps">
+          {steps.map((step, index) => (
+            <li key={step.title}>
+              <span className="artifact-guide-step-number" aria-hidden="true">{index + 1}</span>
+              <div>
+                <strong>{step.title}</strong>
+                <span>{step.description}</span>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <div className="artifact-guide-actions">
+          <button type="button" className="armory-primary artifact-guide-confirm" onClick={onClose}>Got It</button>
+        </div>
+      </section>
+    </AdminModalShell>
   );
 }
 
@@ -829,10 +906,28 @@ function ArmoryHeader({ inventoryTotal, guildGems }: { inventoryTotal: number; g
   );
 }
 
-function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge }: { state: any; saving: boolean; forging: boolean; nextForgeTimer: string; onForge: () => void }) {
+function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge, onGuide }: {
+  state: any;
+  saving: boolean;
+  forging: boolean;
+  nextForgeTimer: string;
+  onForge: () => void;
+  onGuide: () => void;
+}) {
   if (state?.forge?.reason === 'disabled') {
     return (
       <section className="armory-panel forge-disabled-card">
+        <button
+          type="button"
+          className="forge-guide-button"
+          aria-label="Open How Artifacts Work guide"
+          aria-haspopup="dialog"
+          title="How Artifacts Work"
+          onClick={onGuide}
+        >
+          <Info size={20} aria-hidden="true" />
+          <span>Info</span>
+        </button>
         <Sparkles size={48} />
         <h2>Daily Forge Disabled</h2>
         <p>The Daily Forge feature is currently disabled by the administrator.</p>
@@ -850,6 +945,17 @@ function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge }: { 
 
   return (
     <section className={forging ? 'forge-panel forging' : 'forge-panel'}>
+      <button
+        type="button"
+        className="forge-guide-button"
+        aria-label="Open How Artifacts Work guide"
+        aria-haspopup="dialog"
+        title="How Artifacts Work"
+        onClick={onGuide}
+      >
+        <Info size={20} aria-hidden="true" />
+        <span>Info</span>
+      </button>
       <div className="forge-ring"><Sparkles size={34} /></div>
       <div className="forge-copy">
         <span className="eyebrow">Daily Forge</span>
@@ -1175,12 +1281,12 @@ function ArmoryStyles() {
       .armory-primary { background: #ffd66e; color: #171008; border-color: rgba(255,214,110,0.5); }
       .armory-secondary { background: rgba(97,232,255,0.08); border-color: rgba(97,232,255,0.24); color: #dff8ff; }
       .armory-primary:disabled, .armory-secondary:disabled, .mini-action:disabled { opacity: 0.55; }
-      .forge-panel { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-md); align-items: center; padding: var(--space-lg); overflow: hidden; }
+      .forge-panel { position: relative; display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-md); align-items: center; padding: var(--space-lg); overflow: hidden; }
       .forge-ring { width: 82px; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(97,232,255,0.45); display: grid; place-items: center; color: #61e8ff; background: rgba(97,232,255,0.08); }
       .forge-panel.forging .forge-ring { animation: forgePulse 700ms ease-in-out infinite; }
       .forge-panel.forging { border-color: rgba(97,232,255,0.34); }
-      .forge-disabled-card { text-align: center; padding: var(--space-2xl); }
-      .forge-disabled-card svg { color: var(--color-text-muted); margin: 0 auto var(--space-md); }
+      .forge-disabled-card { position: relative; text-align: center; padding: var(--space-2xl); }
+      .forge-disabled-card > svg { color: var(--color-text-muted); margin: 0 auto var(--space-md); }
       .forge-disabled-card p { color: var(--color-text-secondary); }
       .forge-copy h1 { margin-top: 4px; font-size: clamp(1.85rem, 7vw, 3.4rem); }
       .forge-copy p, .muted, .auth-panel p { color: var(--color-text-secondary); }
@@ -1190,6 +1296,26 @@ function ArmoryStyles() {
       .forge-action { display: grid; gap: 8px; justify-items: stretch; min-width: 180px; }
       .forge-locked { background: rgba(255,255,255,0.04); color: var(--color-text-secondary); border-color: rgba(255,255,255,0.14); }
       .forge-locked svg { color: var(--color-accent-warning); }
+      .forge-guide-button { position: absolute; top: 12px; right: 12px; z-index: 2; min-width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 1px solid rgba(97,232,255,0.3); border-radius: 999px; background: #111b2a; color: #61e8ff; font: inherit; font-size: 0.78rem; font-weight: 900; cursor: pointer; }
+      .forge-guide-button:focus-visible, .artifact-guide-close:focus-visible { outline: 2px solid #61e8ff; outline-offset: 3px; }
+      .armory-rpg .admin-modal-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
+      .armory-rpg > .admin-modal-overlay > .admin-modal-dialog { padding: var(--space-lg); border-color: rgba(231,206,137,0.18); border-radius: 8px; background: #0c1220; transition: none; }
+      .artifact-guide-modal { display: grid; gap: 16px; color: var(--color-text-primary); }
+      .artifact-guide-modal-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+      .artifact-guide-modal-header > div { min-width: 0; display: grid; gap: 3px; }
+      .artifact-guide-modal-icon { width: 40px; height: 40px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid rgba(97,232,255,0.3); border-radius: 50%; background: rgba(97,232,255,0.08); color: #61e8ff; }
+      .artifact-guide-modal-header > div > span { color: #61e8ff; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+      .artifact-guide-modal-header h2 { margin: 0; font-family: var(--font-orbitron); font-size: 1.25rem; line-height: 1.2; }
+      .artifact-guide-modal-header p { margin: 0; color: var(--color-text-secondary); font-size: 0.86rem; }
+      .artifact-guide-close { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-muted); cursor: pointer; }
+      .artifact-guide-steps { list-style: none; display: grid; gap: 0; margin: 0; padding: 0; border-top: 1px solid rgba(255,255,255,0.1); }
+      .artifact-guide-steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+      .artifact-guide-step-number { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid rgba(97,232,255,0.28); border-radius: 50%; background: rgba(97,232,255,0.07); color: #8ee8ff; font-size: 0.76rem; font-weight: 900; }
+      .artifact-guide-steps li > div { min-width: 0; display: grid; gap: 3px; }
+      .artifact-guide-steps strong { font-size: 0.88rem; line-height: 1.3; }
+      .artifact-guide-steps li > div > span { color: var(--color-text-secondary); font-size: 0.8rem; line-height: 1.45; overflow-wrap: anywhere; }
+      .artifact-guide-actions { display: flex; justify-content: flex-end; }
+      .artifact-guide-actions .artifact-guide-confirm { min-width: 112px; border-color: rgba(97,232,255,0.5); background: #61e8ff; color: #061018; }
       .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }
       .forge-reveal-scene { width: min(440px, 100%); min-height: min(640px, calc(100vh - 36px)); display: grid; grid-template-rows: auto 1fr auto auto; align-items: center; justify-items: center; gap: 14px; margin: auto; text-align: center; color: var(--color-text-primary); }
       .forge-reveal-layer:not(.reveal-ready) .forge-reveal-scene { grid-template-rows: 1fr; }
