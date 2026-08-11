@@ -20,8 +20,32 @@ import {
   voidWatchParty,
   WatchPartyError,
 } from '../../lib/watch-party';
+import { buildWatchPartyInviteEmail } from '../../lib/notify';
 
 const DAY = 24 * 60 * 60 * 1000;
+
+test('builds a safe Watch Party invite email with event details and prediction link', () => {
+  const email = buildWatchPartyInviteEmail({
+    customerName: '<Guild Member>',
+    customerEmail: 'member@example.test',
+    partyId: 'party/id',
+    title: 'Arsenal <Final>\r\nNight',
+    homeTeam: 'Arsenal & Co',
+    awayTeam: '<Chelsea>',
+    kickoffAt: '2026-08-15T14:30:00.000Z',
+    venue: 'EmiGuild <Main>',
+  });
+
+  assert.equal(email.subject, "You're invited: Arsenal <Final> Night");
+  assert.match(email.html, /Hi &lt;Guild Member&gt;/);
+  assert.match(email.html, /Arsenal &amp; Co vs &lt;Chelsea&gt;/);
+  assert.match(email.html, /15 August 2026.*8:00 pm.*IST/i);
+  assert.match(email.html, /EmiGuild &lt;Main&gt;/);
+  assert.match(email.html, /\/watch-party\/party%2Fid/);
+  assert.doesNotMatch(email.html, /Entry fee|at the counter|&#8377;/i);
+  assert.doesNotMatch(email.html, /Arena Tokens|Check-in reward/i);
+  assert.doesNotMatch(email.html, /<Guild Member>|<Chelsea>|<Main>/);
+});
 
 async function cleanup(suffix: string) {
   await prisma.watchParty.deleteMany({
