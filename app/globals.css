@@ -2959,6 +2959,7 @@ select.form-input option {
 /* ============================================================
    MODAL STYLES
    ============================================================ */
+.admin-modal-overlay,
 .admin-booking-modal-overlay {
   position: fixed;
   inset: 0;
@@ -2972,6 +2973,7 @@ select.form-input option {
   background: rgba(0, 0, 0, 0.78);
 }
 
+.admin-modal-dialog,
 .admin-booking-modal-dialog {
   position: relative;
   width: 100%;
@@ -2983,7 +2985,12 @@ select.form-input option {
   animation: fadeInUp 0.2s ease;
 }
 
+.admin-modal-dialog--wide {
+  max-width: 960px;
+}
+
 @media (max-width: 768px) {
+  .admin-modal-overlay,
   .admin-booking-modal-overlay {
     align-items: flex-start;
     overflow-y: auto;
@@ -2992,6 +2999,7 @@ select.form-input option {
     -webkit-backdrop-filter: blur(8px);
   }
 
+  .admin-modal-dialog,
   .admin-booking-modal-dialog {
     max-height: none;
     margin: auto;
