@@ -537,7 +537,7 @@ export function DailySpinWidget() {
               </p>
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-accent-warning)', fontSize: '0.9rem', marginBottom: 'var(--space-md)' }}>
-              <Clock size={16} /> Next drop in: {timeLeft || 'Calculating...'}
+              <Clock size={16} /> Next spin in: {timeLeft || 'Calculating...'}
             </div>
             <div className="alert alert-info" style={{ fontSize: '0.85rem', marginBottom: 'var(--space-md)', textAlign: 'left' }}>
               <strong>How to claim:</strong> Show this to EMI Guild staff at the front desk. Daily spin gifts are valid only with a same-day booking.
