@@ -7,8 +7,8 @@ import { getWatchPartyList } from '@/lib/watch-party';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Watch Party',
-  description: 'Premier League watch parties at EmiGuild.',
+  title: 'EmiGuild Watch Parties',
+  description: 'Live watch parties, event Fan Picks, and EMIC Rewards at EmiGuild.',
 };
 
 export default async function WatchPartyPage() {
@@ -17,7 +17,7 @@ export default async function WatchPartyPage() {
 
   return (
     <div className="page-wrapper">
-      <div className="container" style={{ paddingTop: 'var(--space-2xl)', paddingBottom: 'var(--space-2xl)' }}>
+      <div className="container">
         <Link href="/" className="btn btn-ghost btn-sm" style={{ marginBottom: 'var(--space-lg)' }}>
           <ArrowLeft size={16} />
           Back to Home

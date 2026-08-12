@@ -5,10 +5,9 @@ import premierLeagueFixtures from '@/data/watch-party/premier-league-2026-27-fix
 
 export const WATCH_PARTY_COIN_UNIT_FACTOR = 10;
 export const DEFAULT_WATCH_PARTY_ENTRY_FEE_RUPEES = 100;
-export const DEFAULT_WATCH_PARTY_ENTRY_COINS = 100;
+export const DEFAULT_WATCH_PARTY_ENTRY_COINS = 500;
 export const DEFAULT_WATCH_PARTY_ENTRY_COIN_UNITS =
   DEFAULT_WATCH_PARTY_ENTRY_COINS * WATCH_PARTY_COIN_UNIT_FACTOR;
-export const ARENA_TOKEN_COLOR = '#22D3EE';
 export const WATCH_PARTY_COMPETITION_CODE = 'PL';
 export const WATCH_PARTY_COMPETITION_NAME = 'Premier League';
 export const WATCH_PARTY_SEASON = 2026;
@@ -18,24 +17,24 @@ export const WATCH_PARTY_SHOP_ORDER_GIVEN = 'GIVEN';
 export const WATCH_PARTY_SHOP_ORDER_CANCELLED = 'CANCELLED';
 
 const PARTY_STATUSES = new Set(['DRAFT', 'ACTIVE', 'CLOSED', 'ARCHIVED']);
-const MAX_STAKE_COINS = 10_000;
+const MAX_STAKE_COINS = 100_000;
 const MIN_MULTIPLIER_BPS = 10_000;
 const MAX_MULTIPLIER_BPS = 100_000;
 const ADMIN_PARTY_LIMIT = 24;
 const SHOP_ORDER_LIMIT = 24;
 const MAX_ADMIN_PAGE_LIMIT = 80;
 const WATCH_PARTY_SHOP_ITEMS = {
-  BRONZE: { label: 'Bronze Pass', category: 'Gaming', itemType: 'HOUR_PASS', detail: '10 hrs', tokenCost: 1300, accent: 'bronze' },
-  SILVER: { label: 'Silver Pass', category: 'Gaming', itemType: 'HOUR_PASS', detail: '20 hrs', tokenCost: 2300, accent: 'silver' },
-  GOLD: { label: 'Gold Pass', category: 'Gaming', itemType: 'HOUR_PASS', detail: '30 hrs', tokenCost: 3000, accent: 'gold' },
-  BLACK: { label: 'Black Pass', category: 'Racing', itemType: 'HOUR_PASS', detail: '10 hrs', tokenCost: 2400, accent: 'black' },
-  APEX: { label: 'Apex Pass', category: 'Racing', itemType: 'HOUR_PASS', detail: '15 hrs', tokenCost: 3150, accent: 'apex' },
-  GUILD_HERO: { label: 'Guild Hero', category: 'Guild', itemType: 'GUILD_MEMBERSHIP', detail: 'Membership ticket', tokenCost: 499, accent: 'guild-hero' },
-  GUILD_MASTER: { label: 'Guild Master', category: 'Guild', itemType: 'GUILD_MEMBERSHIP', detail: 'Membership ticket', tokenCost: 999, accent: 'guild-master' },
-  DRINK_125: { label: 'Premium Drink Coupon', category: 'Drinks', itemType: 'DRINK', detail: 'Counter coupon', tokenCost: 125, accent: 'drink' },
-  DRINK_60: { label: 'Classic Drink Coupon', category: 'Drinks', itemType: 'DRINK', detail: 'Counter coupon', tokenCost: 60, accent: 'drink' },
-  DRINK_40: { label: 'Quick Drink Coupon', category: 'Drinks', itemType: 'DRINK', detail: 'Counter coupon', tokenCost: 40, accent: 'drink' },
-  DRINK_20: { label: 'Mini Drink Coupon', category: 'Drinks', itemType: 'DRINK', detail: 'Counter coupon', tokenCost: 20, accent: 'drink' },
+  BRONZE: { label: 'Bronze Pass', category: 'Gaming', itemType: 'HOUR_PASS', detail: '10 hrs', tokenCost: 13_000, accent: 'bronze' },
+  SILVER: { label: 'Silver Pass', category: 'Gaming', itemType: 'HOUR_PASS', detail: '20 hrs', tokenCost: 23_000, accent: 'silver' },
+  GOLD: { label: 'Gold Pass', category: 'Gaming', itemType: 'HOUR_PASS', detail: '30 hrs', tokenCost: 30_000, accent: 'gold' },
+  BLACK: { label: 'Black Pass', category: 'Racing', itemType: 'HOUR_PASS', detail: '10 hrs', tokenCost: 24_000, accent: 'black' },
+  APEX: { label: 'Apex Pass', category: 'Racing', itemType: 'HOUR_PASS', detail: '15 hrs', tokenCost: 31_500, accent: 'apex' },
+  GUILD_HERO: { label: 'Guild Hero', category: 'Guild', itemType: 'GUILD_MEMBERSHIP', detail: 'Membership ticket', tokenCost: 4_990, accent: 'guild-hero' },
+  GUILD_MASTER: { label: 'Guild Master', category: 'Guild', itemType: 'GUILD_MEMBERSHIP', detail: 'Membership ticket', tokenCost: 9_990, accent: 'guild-master' },
+  DRINK_125: { label: 'Premium Drink Coupon', category: 'Drinks', itemType: 'DRINK', detail: 'Counter coupon', tokenCost: 1_250, accent: 'drink' },
+  DRINK_60: { label: 'Classic Drink Coupon', category: 'Drinks', itemType: 'DRINK', detail: 'Counter coupon', tokenCost: 600, accent: 'drink' },
+  DRINK_40: { label: 'Quick Drink Coupon', category: 'Drinks', itemType: 'DRINK', detail: 'Counter coupon', tokenCost: 400, accent: 'drink' },
+  DRINK_20: { label: 'Mini Drink Coupon', category: 'Drinks', itemType: 'DRINK', detail: 'Counter coupon', tokenCost: 200, accent: 'drink' },
 } as const;
 
 type Tx = Prisma.TransactionClient;
@@ -127,13 +126,13 @@ export function coinUnitsFromCoins(coins: unknown) {
   const parsed = Number(coins);
   if (
     !Number.isFinite(parsed)
-    || parsed <= 0
+    || parsed < 1
     || parsed > MAX_STAKE_COINS
     || !Number.isInteger(parsed * WATCH_PARTY_COIN_UNIT_FACTOR)
   ) {
     throw new WatchPartyError(
       'INVALID_COIN_AMOUNT',
-      `Enter an Arena Token amount between 1 and ${MAX_STAKE_COINS}.`,
+      `Enter an amount between 1 and ${MAX_STAKE_COINS.toLocaleString('en-US')} EMIC.`,
     );
   }
   return Math.round(parsed * WATCH_PARTY_COIN_UNIT_FACTOR);
@@ -229,7 +228,7 @@ function watchPartyShopItemKeys() {
 function watchPartyShopItemConfig(itemKey: unknown) {
   const normalized = typeof itemKey === 'string' ? itemKey.trim().toUpperCase() : '';
   if (!Object.prototype.hasOwnProperty.call(WATCH_PARTY_SHOP_ITEMS, normalized)) {
-    throw new WatchPartyError('INVALID_SHOP_ITEM', 'Choose a valid shop item.');
+    throw new WatchPartyError('INVALID_SHOP_ITEM', 'Choose a valid EMIC reward.');
   }
   return {
     key: normalized as WatchPartyShopItemKey,
@@ -277,7 +276,7 @@ function normalizeMultiplierBasisPoints(value: unknown) {
   ) {
     throw new WatchPartyError(
       'INVALID_MULTIPLIER',
-      'Multiplier must be between 1x and 10x.',
+      'Reward multiplier must be between 1× and 10×.',
     );
   }
   return parsed;
@@ -286,7 +285,7 @@ function normalizeMultiplierBasisPoints(value: unknown) {
 function defaultPredictionOptions(homeTeam: string, awayTeam: string): PredictionOption[] {
   return [
     { key: 'HOME', label: homeTeam, multiplierBasisPoints: 20_000 },
-    { key: 'DRAW', label: 'Draw', multiplierBasisPoints: 30_000 },
+    { key: 'DRAW', label: 'Draw / Tie', multiplierBasisPoints: 30_000 },
     { key: 'AWAY', label: awayTeam, multiplierBasisPoints: 20_000 },
   ];
 }
@@ -299,7 +298,7 @@ function normalizePredictionOptions(input: unknown, homeTeam: string, awayTeam: 
       ?? (index === 0 ? 'HOME' : index === 1 ? 'DRAW' : index === 2 ? 'AWAY' : `CUSTOM_${index + 1}`);
     return {
       key,
-      label: requiredString(value.label, 'Prediction option', 80),
+      label: requiredString(value.label, 'Fan Pick option', 80),
       multiplierBasisPoints: normalizeMultiplierBasisPoints(
         value.multiplierBasisPoints ?? value.multiplierBps ?? 20_000,
       ),
@@ -309,13 +308,13 @@ function normalizePredictionOptions(input: unknown, homeTeam: string, awayTeam: 
   if (options.length < 2) {
     throw new WatchPartyError(
       'INVALID_PREDICTION_OPTIONS',
-      'Add at least two prediction options.',
+      'Add at least two Fan Pick options.',
     );
   }
   if (new Set(options.map((option) => option.key)).size !== options.length) {
     throw new WatchPartyError(
       'INVALID_PREDICTION_OPTIONS',
-      'Prediction option keys must be unique.',
+      'Fan Pick option keys must be unique.',
     );
   }
   return options;
@@ -430,7 +429,7 @@ function serializePartyDetail(party: any, walletUnits: number | null) {
 function normalizePartyInput(input: WatchPartyInput) {
   const homeTeam = requiredString(input.homeTeam, 'Team A');
   const awayTeam = requiredString(input.awayTeam, 'Team B');
-  const kickoffAt = requiredDate(input.kickoffAt, 'Kickoff time');
+  const kickoffAt = requiredDate(input.kickoffAt, 'Event start');
   const title = optionalString(input.title, 140) ?? `${homeTeam} vs ${awayTeam}`;
   const entryCoins = normalizeEntryCoins(input.entryCoins);
   const options = normalizePredictionOptions(input.predictionOptions, homeTeam, awayTeam);
@@ -504,7 +503,7 @@ export async function purchaseWatchPartyShopOrder(userId: string, itemKey: unkno
     if (debited.count !== 1) {
       throw new WatchPartyError(
         'INSUFFICIENT_TOKENS',
-        'Not enough Arena Tokens for this item.',
+        'Your EMIC balance is too low to redeem this item.',
         409,
       );
     }
@@ -568,10 +567,10 @@ export async function markWatchPartyShopOrderGiven(adminId: string, orderId: str
       include: { user: { select: { id: true, name: true, email: true } } },
     });
     if (!order) {
-      throw new WatchPartyError('SHOP_ORDER_NOT_FOUND', 'Shop order not found.', 404);
+      throw new WatchPartyError('SHOP_ORDER_NOT_FOUND', 'EMIC redemption not found.', 404);
     }
     if (order.status !== WATCH_PARTY_SHOP_ORDER_PENDING) {
-      throw new WatchPartyError('SHOP_ORDER_NOT_PENDING', 'This shop order is no longer pending.', 409);
+      throw new WatchPartyError('SHOP_ORDER_NOT_PENDING', 'This EMIC redemption is no longer pending.', 409);
     }
 
     const given = await tx.watchPartyShopOrder.update({
@@ -595,10 +594,10 @@ export async function cancelWatchPartyShopOrder(adminId: string, orderId: string
       include: { user: { select: { id: true, name: true, email: true } } },
     });
     if (!order) {
-      throw new WatchPartyError('SHOP_ORDER_NOT_FOUND', 'Shop order not found.', 404);
+      throw new WatchPartyError('SHOP_ORDER_NOT_FOUND', 'EMIC redemption not found.', 404);
     }
     if (order.status !== WATCH_PARTY_SHOP_ORDER_PENDING) {
-      throw new WatchPartyError('SHOP_ORDER_NOT_PENDING', 'This shop order is no longer pending.', 409);
+      throw new WatchPartyError('SHOP_ORDER_NOT_PENDING', 'This EMIC redemption is no longer pending.', 409);
     }
 
     const refundUnits = order.tokenCostUnits;
@@ -733,16 +732,31 @@ export async function updateWatchParty(partyId: string, input: WatchPartyInput) 
     entryFeeRupees: input.entryFeeRupees ?? existing.entryFeeRupees,
     predictionOptions: input.predictionOptions ?? parsePredictionOptions(existing),
   });
+  const providerBacked = existing.source !== 'MANUAL'
+    || Boolean(existing.providerMatchId)
+    || Boolean(existing.providerCompetitionCode)
+    || existing.providerSeason != null
+    || Boolean(existing.providerPayload);
+  const importedTeamsEdited = providerBacked
+    && (data.homeTeam !== existing.homeTeam || data.awayTeam !== existing.awayTeam);
 
   await prisma.watchParty.update({
     where: { id: partyId },
     data: {
       ...data,
-      source: data.source || existing.source,
-      providerMatchId: data.providerMatchId ?? existing.providerMatchId,
-      providerCompetitionCode: data.providerCompetitionCode ?? existing.providerCompetitionCode,
-      providerSeason: data.providerSeason ?? existing.providerSeason,
-      providerPayload: data.providerPayload ?? existing.providerPayload,
+      source: importedTeamsEdited ? 'MANUAL' : data.source || existing.source,
+      providerMatchId: importedTeamsEdited
+        ? null
+        : data.providerMatchId ?? existing.providerMatchId,
+      providerCompetitionCode: importedTeamsEdited
+        ? null
+        : data.providerCompetitionCode ?? existing.providerCompetitionCode,
+      providerSeason: importedTeamsEdited
+        ? null
+        : data.providerSeason ?? existing.providerSeason,
+      providerPayload: importedTeamsEdited
+        ? null
+        : data.providerPayload ?? existing.providerPayload,
     },
   });
   return getAdminWatchParty(null, partyId);
@@ -776,10 +790,14 @@ export async function stopWatchPartyPredictions(adminId: string, partyId: string
       throw new WatchPartyError('PARTY_NOT_FOUND', 'Watch party not found.', 404);
     }
     if (party.predictionStatus === 'SETTLED') {
-      throw new WatchPartyError('PARTY_SETTLED', 'This watch party is already settled.', 409);
+      throw new WatchPartyError('PARTY_SETTLED', 'The result for this watch party is already final.', 409);
     }
     if (party.predictionStatus === 'VOID') {
-      throw new WatchPartyError('PARTY_VOID', 'This watch party has been voided.', 409);
+      throw new WatchPartyError(
+        'PARTY_VOID',
+        'Fan Picks for this watch party were cancelled and EMIC was restored.',
+        409,
+      );
     }
     if (party.predictionStatus !== 'OPEN') return getAdminWatchParty(adminId, partyId, tx);
 
@@ -861,7 +879,7 @@ export async function cancelWatchPartyInvite(adminId: string, partyId: string, u
     if (prediction) {
       throw new WatchPartyError(
         'INVITE_ALREADY_USED',
-        'Invites with predictions cannot be cancelled.',
+        'Invites with a Fan Pick cannot be cancelled.',
         409,
       );
     }
@@ -985,7 +1003,7 @@ export async function submitWatchPartyPrediction(
     if (!invite?.checkedInAt || !invite.enteredAt) {
       throw new WatchPartyError(
         'ENTRY_REQUIRED',
-        'Enter this watch party before making predictions.',
+        'Enter this watch party before making a Fan Pick.',
         403,
       );
     }
@@ -995,13 +1013,13 @@ export async function submitWatchPartyPrediction(
     if (isPredictionLocked(party)) {
       throw new WatchPartyError(
         'PREDICTION_LOCKED',
-        'Predictions are locked for this match.',
+        'Fan Picks are closed for this event.',
         409,
       );
     }
     const option = parsePredictionOptions(party).find((candidate) => candidate.key === optionKey);
     if (!option) {
-      throw new WatchPartyError('OPTION_NOT_FOUND', 'Prediction option not found.', 404);
+      throw new WatchPartyError('OPTION_NOT_FOUND', 'Fan Pick option not found.', 404);
     }
     const existing = await tx.watchPartyPrediction.findUnique({
       where: { partyId_userId: { partyId, userId } },
@@ -1010,7 +1028,7 @@ export async function submitWatchPartyPrediction(
     if (existing) {
       throw new WatchPartyError(
         'ALREADY_PREDICTED',
-        'You already made a prediction for this party.',
+        'You already confirmed a Fan Pick for this event.',
         409,
       );
     }
@@ -1022,7 +1040,7 @@ export async function submitWatchPartyPrediction(
     if (debited.count !== 1) {
       throw new WatchPartyError(
         'INSUFFICIENT_TOKENS',
-        'Not enough Arena Tokens.',
+        'Your EMIC balance is lower than the selected amount.',
         409,
       );
     }
@@ -1066,14 +1084,18 @@ export async function settleWatchParty(adminId: string, partyId: string, optionK
       throw new WatchPartyError('PARTY_NOT_FOUND', 'Watch party not found.', 404);
     }
     if (party.predictionStatus === 'SETTLED') {
-      throw new WatchPartyError('PARTY_SETTLED', 'This watch party is already settled.', 409);
+      throw new WatchPartyError('PARTY_SETTLED', 'The result for this watch party is already final.', 409);
     }
     if (party.predictionStatus === 'VOID') {
-      throw new WatchPartyError('PARTY_VOID', 'This watch party has been voided.', 409);
+      throw new WatchPartyError(
+        'PARTY_VOID',
+        'Fan Picks for this watch party were cancelled and EMIC was restored.',
+        409,
+      );
     }
     const winningOption = parsePredictionOptions(party).find((option) => option.key === optionKey);
     if (!winningOption) {
-      throw new WatchPartyError('OPTION_NOT_FOUND', 'Winning option not found.', 404);
+      throw new WatchPartyError('OPTION_NOT_FOUND', 'Result option not found.', 404);
     }
 
     await tx.watchParty.update({
@@ -1135,7 +1157,7 @@ export async function voidWatchParty(adminId: string, partyId: string) {
       throw new WatchPartyError('PARTY_NOT_FOUND', 'Watch party not found.', 404);
     }
     if (party.predictionStatus === 'SETTLED') {
-      throw new WatchPartyError('PARTY_SETTLED', 'Settled parties cannot be voided.', 409);
+      throw new WatchPartyError('PARTY_SETTLED', 'Completed Fan Picks cannot be cancelled.', 409);
     }
     if (party.predictionStatus === 'VOID') return getAdminWatchParty(adminId, partyId, tx);
 

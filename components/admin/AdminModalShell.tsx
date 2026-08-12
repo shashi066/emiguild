@@ -7,6 +7,7 @@ export type AdminModalShellSize = 'default' | 'wide';
 export type AdminModalShellProps = {
   onClose: () => void;
   labelledBy: string;
+  describedBy?: string;
   children: ReactNode;
   size?: AdminModalShellSize;
 };
@@ -44,6 +45,7 @@ function getFocusableElements(dialog: HTMLElement) {
 export function AdminModalShell({
   onClose,
   labelledBy,
+  describedBy,
   children,
   size = 'default',
 }: AdminModalShellProps) {
@@ -164,6 +166,7 @@ export function AdminModalShell({
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
         tabIndex={-1}
       >
         {children}

@@ -319,23 +319,23 @@ export function buildWatchPartyInviteEmail(payload: WatchPartyInviteEmailPayload
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#0f0f1a;color:#e5e7eb;border-radius:12px;overflow:hidden;border:1px solid #2d2d4e;">
       <div style="background:linear-gradient(135deg,#6c63ff,#00d4ff);padding:24px 28px;text-align:center;">
         ${APP_URL ? `<img src="${APP_URL}/images/logoImage.png" alt="EMI Guild" style="height:56px;margin-bottom:12px;object-fit:contain;" />` : ''}
-        <h1 style="margin:0;font-size:1.3rem;color:#fff;font-weight:800;letter-spacing:1px;">Watch Party Invite - EMI Guild</h1>
+        <h1 style="margin:0;font-size:1.3rem;color:#fff;font-weight:800;letter-spacing:1px;">EmiGuild Watch Parties</h1>
         <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:0.85rem;">You are on the guest list</p>
       </div>
       <div style="padding:24px 28px;">
         <p style="margin:0 0 18px;line-height:1.6;">Hi ${customerName}, EmiGuild has invited you to <strong>${title}</strong>.</p>
         <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
-          <tr><td style="padding:8px 0;color:#9ca3af;width:140px;">Fixture</td><td style="padding:8px 0;font-weight:700;">${homeTeam} vs ${awayTeam}</td></tr>
-          <tr><td style="padding:8px 0;color:#9ca3af;">Kickoff</td><td style="padding:8px 0;">${kickoff}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;width:140px;">Event</td><td style="padding:8px 0;font-weight:700;">${homeTeam} vs ${awayTeam}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;">Event start</td><td style="padding:8px 0;">${kickoff}</td></tr>
           <tr><td style="padding:8px 0;color:#9ca3af;">Venue</td><td style="padding:8px 0;">${venue}</td></tr>
         </table>
-        <p style="margin:20px 0;text-align:center;color:#d1d5db;line-height:1.55;">Open the party page to view the event and make your prediction when predictions are available.</p>
+        <p style="margin:20px 0;text-align:center;color:#d1d5db;line-height:1.55;">Open the party page to view the event. An optional Fan Pick activity may be available during the watch party.</p>
         <div style="text-align:center;">
-          <a href="${partyUrl}" style="display:inline-block;padding:12px 20px;background:#22d3ee;color:#0b0b12;text-decoration:none;border-radius:6px;font-weight:800;">PREDICT NOW</a>
+          <a href="${partyUrl}" style="display:inline-block;padding:12px 20px;background:#22d3ee;color:#0b0b12;text-decoration:none;border-radius:6px;font-weight:800;">OPEN WATCH PARTY</a>
         </div>
       </div>
       <div style="padding:16px 28px;background:#0a0a14;font-size:0.75rem;color:#6b7280;text-align:center;">
-        Automated Watch Party invitation from EMI Guild.
+        Automated invitation from EmiGuild Watch Parties.
       </div>
     </div>
   `;
@@ -353,7 +353,7 @@ export async function notifyUserWatchPartyInvite(payload: WatchPartyInviteEmailP
 
   try {
     await transporter.sendMail({
-      from: `"EMI Guild Watch Party" <${GMAIL_USER}>`,
+      from: `"EmiGuild Watch Parties" <${GMAIL_USER}>`,
       to: payload.customerEmail,
       subject: email.subject,
       html: email.html,

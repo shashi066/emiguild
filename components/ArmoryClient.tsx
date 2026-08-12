@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { AdminModalShell } from '@/components/admin/AdminModalShell';
+import { InfoGuideModal } from '@/components/InfoGuideModal';
 import {
   canRetryForgeRefresh,
   createForgeClockAnchor,
@@ -787,44 +787,15 @@ function ArtifactGuideModal({ onClose }: { onClose: () => void }) {
   ];
 
   return (
-    <AdminModalShell onClose={onClose} labelledBy="artifact-guide-title">
-      <section className="artifact-guide-modal">
-        <header className="artifact-guide-modal-header">
-          <span className="artifact-guide-modal-icon" aria-hidden="true">
-            <Info size={22} />
-          </span>
-          <div>
-            <span>Artifacts Guide</span>
-            <h2 id="artifact-guide-title">How Artifacts Work</h2>
-            <p>Forge. Match. Equip. Claim.</p>
-          </div>
-          <button
-            type="button"
-            className="artifact-guide-close"
-            aria-label="Close Artifacts guide"
-            onClick={onClose}
-          >
-            <X size={19} />
-          </button>
-        </header>
-
-        <ol className="artifact-guide-steps">
-          {steps.map((step, index) => (
-            <li key={step.title}>
-              <span className="artifact-guide-step-number" aria-hidden="true">{index + 1}</span>
-              <div>
-                <strong>{step.title}</strong>
-                <span>{step.description}</span>
-              </div>
-            </li>
-          ))}
-        </ol>
-
-        <div className="artifact-guide-actions">
-          <button type="button" className="armory-primary artifact-guide-confirm" onClick={onClose}>Got It</button>
-        </div>
-      </section>
-    </AdminModalShell>
+    <InfoGuideModal
+      eyebrow="Artifacts Guide"
+      title="How Artifacts Work"
+      subtitle="Forge. Match. Equip. Claim."
+      titleId="artifact-guide-title"
+      steps={steps}
+      onClose={onClose}
+      closeLabel="Close Artifacts guide"
+    />
   );
 }
 
@@ -1297,25 +1268,9 @@ function ArmoryStyles() {
       .forge-locked { background: rgba(255,255,255,0.04); color: var(--color-text-secondary); border-color: rgba(255,255,255,0.14); }
       .forge-locked svg { color: var(--color-accent-warning); }
       .forge-guide-button { position: absolute; top: 12px; right: 12px; z-index: 2; min-width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 1px solid rgba(97,232,255,0.3); border-radius: 999px; background: #111b2a; color: #61e8ff; font: inherit; font-size: 0.78rem; font-weight: 900; cursor: pointer; }
-      .forge-guide-button:focus-visible, .artifact-guide-close:focus-visible { outline: 2px solid #61e8ff; outline-offset: 3px; }
+      .forge-guide-button:focus-visible { outline: 2px solid #61e8ff; outline-offset: 3px; }
       .armory-rpg .admin-modal-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
       .armory-rpg > .admin-modal-overlay > .admin-modal-dialog { padding: var(--space-lg); border-color: rgba(231,206,137,0.18); border-radius: 8px; background: #0c1220; transition: none; }
-      .artifact-guide-modal { display: grid; gap: 16px; color: var(--color-text-primary); }
-      .artifact-guide-modal-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; }
-      .artifact-guide-modal-header > div { min-width: 0; display: grid; gap: 3px; }
-      .artifact-guide-modal-icon { width: 40px; height: 40px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid rgba(97,232,255,0.3); border-radius: 50%; background: rgba(97,232,255,0.08); color: #61e8ff; }
-      .artifact-guide-modal-header > div > span { color: #61e8ff; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
-      .artifact-guide-modal-header h2 { margin: 0; font-family: var(--font-orbitron); font-size: 1.25rem; line-height: 1.2; }
-      .artifact-guide-modal-header p { margin: 0; color: var(--color-text-secondary); font-size: 0.86rem; }
-      .artifact-guide-close { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-muted); cursor: pointer; }
-      .artifact-guide-steps { list-style: none; display: grid; gap: 0; margin: 0; padding: 0; border-top: 1px solid rgba(255,255,255,0.1); }
-      .artifact-guide-steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
-      .artifact-guide-step-number { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid rgba(97,232,255,0.28); border-radius: 50%; background: rgba(97,232,255,0.07); color: #8ee8ff; font-size: 0.76rem; font-weight: 900; }
-      .artifact-guide-steps li > div { min-width: 0; display: grid; gap: 3px; }
-      .artifact-guide-steps strong { font-size: 0.88rem; line-height: 1.3; }
-      .artifact-guide-steps li > div > span { color: var(--color-text-secondary); font-size: 0.8rem; line-height: 1.45; overflow-wrap: anywhere; }
-      .artifact-guide-actions { display: flex; justify-content: flex-end; }
-      .artifact-guide-actions .artifact-guide-confirm { min-width: 112px; border-color: rgba(97,232,255,0.5); background: #61e8ff; color: #061018; }
       .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }
       .forge-reveal-scene { width: min(440px, 100%); min-height: min(640px, calc(100vh - 36px)); display: grid; grid-template-rows: auto 1fr auto auto; align-items: center; justify-items: center; gap: 14px; margin: auto; text-align: center; color: var(--color-text-primary); }
       .forge-reveal-layer:not(.reveal-ready) .forge-reveal-scene { grid-template-rows: 1fr; }

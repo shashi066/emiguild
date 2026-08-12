@@ -13,7 +13,7 @@ export default async function WatchPartyDetailPage({ params }: { params: Promise
     const party = await getWatchPartyDetail(id, session?.user?.id);
     return (
       <div className="page-wrapper">
-        <div className="container" style={{ paddingTop: 'var(--space-2xl)', paddingBottom: 'var(--space-2xl)' }}>
+        <div className="container">
           <WatchPartyDetailClient
             initialParty={JSON.parse(JSON.stringify(party))}
             signedIn={Boolean(session?.user?.id)}

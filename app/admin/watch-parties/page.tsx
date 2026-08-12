@@ -23,6 +23,9 @@ import {
 } from 'lucide-react';
 import { readApiResponse } from '@/lib/read-api-response';
 import AdminBookingModalShell from '@/components/admin/AdminBookingModalShell';
+import { EmicoinAmount } from '@/components/watch-party/EmicoinAmount';
+import { predictionOddsBasisPoints } from '@/lib/watch-party-odds';
+import { emicRewardCategoryLabel, fanPickWindowStatusLabel, formatRewardLabel } from '@/lib/watch-party-presentation';
 
 type WatchControlTab = 'live' | 'needs-result' | 'settled';
 
@@ -119,6 +122,14 @@ type AdminShopOrderResponse = {
 const ADMIN_PARTY_PAGE_SIZE = 24;
 const ADMIN_ORDER_PAGE_SIZE = 24;
 
+type PredictionOptionKey = 'HOME' | 'DRAW' | 'AWAY';
+
+const DEFAULT_PREDICTION_ODDS: Record<PredictionOptionKey, string> = {
+  HOME: '2.00',
+  DRAW: '3.00',
+  AWAY: '2.00',
+};
+
 const EMPTY_FORM = {
   title: '',
   homeTeam: '',
@@ -126,7 +137,7 @@ const EMPTY_FORM = {
   kickoffAt: '',
   venue: '',
   entryFeeRupees: '100',
-  entryCoins: '100',
+  entryCoins: '500',
   status: 'ACTIVE',
   source: 'MANUAL',
   providerMatchId: '',
@@ -160,7 +171,24 @@ function formatTime(value: string | null) {
 }
 
 function readError(data: any, fallback: string) {
-  return typeof data?.error === 'string' ? data.error : fallback;
+  const message = typeof data?.error === 'string' ? data.error : fallback;
+  return message
+    .replace(/\bpredictions\b/gi, 'fan picks')
+    .replace(/\bprediction\b/gi, 'fan pick')
+    .replace(/\bodds\b/gi, 'reward multipliers')
+    .replace(/\bstake\b/gi, 'EMIC used')
+    .replace(/\bpayout\b/gi, 'Watch Party Reward')
+    .replace(/\bsettlement\b/gi, 'official result')
+    .replace(/\bsettled\b/gi, 'completed')
+    .replace(/\bvoided\b/gi, 'cancelled')
+    .replace(/\bvoid\b/gi, 'cancel')
+    .replace(/\bwinning\b/gi, 'official result')
+    .replace(/\bwins\b/gi, 'rewards')
+    .replace(/\bwon\b/gi, 'matched')
+    .replace(/\bloss(?:es)?\b/gi, 'unmatched picks')
+    .replace(/\blost\b/gi, 'did not match')
+    .replace(/\brefunded\b/gi, 'restored')
+    .replace(/\brefund\b/gi, 'restore EMIC');
 }
 
 function sortLiveControlParties(parties: AdminParty[]) {
@@ -205,6 +233,7 @@ type WatchPartyCreateModalProps = {
 
 function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProps) {
   const [form, setForm] = useState(EMPTY_FORM);
+  const [predictionOdds, setPredictionOdds] = useState(DEFAULT_PREDICTION_ODDS);
   const [matches, setMatches] = useState<ProviderMatch[]>([]);
   const [fixtureTeams, setFixtureTeams] = useState<string[]>([]);
   const [matchDateFrom, setMatchDateFrom] = useState('');
@@ -219,7 +248,18 @@ function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProp
   const [fixtureNotice, setFixtureNotice] = useState('');
   const matchRequestRef = useRef<AbortController | null>(null);
   const teamBlurTimeoutRef = useRef<number | null>(null);
+  const oddsInputRefs = useRef<Record<PredictionOptionKey, HTMLInputElement | null>>({
+    HOME: null,
+    DRAW: null,
+    AWAY: null,
+  });
 
+  const oddsBasisPoints = {
+    HOME: predictionOddsBasisPoints(predictionOdds.HOME),
+    DRAW: predictionOddsBasisPoints(predictionOdds.DRAW),
+    AWAY: predictionOddsBasisPoints(predictionOdds.AWAY),
+  } satisfies Record<PredictionOptionKey, number | null>;
+  const oddsAreValid = Object.values(oddsBasisPoints).every((value) => value != null);
   const canCreateParty = Boolean(form.homeTeam.trim() && form.awayTeam.trim() && form.kickoffAt);
   const isSubmitting = busy === 'create';
   const teamSuggestions = useMemo(() => {
@@ -261,6 +301,32 @@ function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProp
 
   const requestClose = () => {
     if (!isSubmitting) onClose();
+  };
+
+  const updateTeam = (field: 'homeTeam' | 'awayTeam', value: string) => {
+    setForm((current) => {
+      if (current[field] === value) return current;
+
+      const hasProviderMetadata = current.source !== 'MANUAL'
+        || Boolean(current.providerMatchId)
+        || Boolean(current.providerCompetitionCode)
+        || Boolean(current.providerSeason)
+        || Boolean(current.providerPayload);
+
+      return {
+        ...current,
+        [field]: value,
+        ...(hasProviderMetadata
+          ? {
+              source: 'MANUAL',
+              providerMatchId: '',
+              providerCompetitionCode: '',
+              providerSeason: '',
+              providerPayload: '',
+            }
+          : {}),
+      };
+    });
   };
 
   const fetchMatches = async (teamOverride?: string) => {
@@ -321,6 +387,15 @@ function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProp
   const createParty = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canCreateParty || isSubmitting) return;
+    if (!oddsAreValid) {
+      const invalidKey = (['HOME', 'DRAW', 'AWAY'] as const)
+        .find((key) => oddsBasisPoints[key] == null);
+      setError('Enter reward multipliers from 1.00× to 10.00× (up to 2 decimals).');
+      if (invalidKey) {
+        window.requestAnimationFrame(() => oddsInputRefs.current[invalidKey]?.focus());
+      }
+      return;
+    }
     setBusy('create');
     setError('');
     setFixtureNotice('');
@@ -331,6 +406,23 @@ function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProp
         entryFeeRupees: Number(form.entryFeeRupees),
         entryCoins: Number(form.entryCoins),
         providerSeason: form.providerSeason ? Number(form.providerSeason) : undefined,
+        predictionOptions: [
+          {
+            key: 'HOME',
+            label: form.homeTeam.trim(),
+            multiplierBasisPoints: oddsBasisPoints.HOME,
+          },
+          {
+            key: 'DRAW',
+            label: 'Draw / Tie',
+            multiplierBasisPoints: oddsBasisPoints.DRAW,
+          },
+          {
+            key: 'AWAY',
+            label: form.awayTeam.trim(),
+            multiplierBasisPoints: oddsBasisPoints.AWAY,
+          },
+        ],
       };
       const response = await fetch('/api/admin/watch-parties', {
         method: 'POST',
@@ -352,7 +444,7 @@ function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProp
       <AdminBookingModalShell onClose={requestClose} labelledBy="create-watch-party-title">
         <div className="watch-create-modal-head">
           <div>
-            <div className="watch-create-kicker">Premier League 2026-27</div>
+            <div className="watch-create-kicker">EmiGuild Watch Parties</div>
             <h2 id="create-watch-party-title"><Tv size={18} /> Create Watch Party</h2>
           </div>
           <button
@@ -366,94 +458,152 @@ function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProp
           </button>
         </div>
 
-        {error && <div className="alert alert-error watch-create-alert">{error}</div>}
-        {fixtureNotice && <div className="alert alert-info watch-create-alert">{fixtureNotice}</div>}
+        {error && <div className="alert alert-error watch-create-alert" role="alert">{error}</div>}
 
-        <div className="watch-fixture-tabs" role="tablist" aria-label="Fixture search mode">
-          <button type="button" className={fixtureSearchMode === 'date' ? 'active' : ''} onClick={() => setFixtureSearchMode('date')}>
-            Date / Matchweek
-          </button>
-          <button type="button" className={fixtureSearchMode === 'team' ? 'active' : ''} onClick={() => setFixtureSearchMode('team')}>
-            Team Search
-          </button>
-        </div>
+        <details className="watch-fixture-import">
+          <summary>
+            <span>Optional: Import Premier League 2026–27 fixture</span>
+            <ChevronDown size={16} aria-hidden="true" />
+          </summary>
+          <div className="watch-fixture-import-body">
+            {fixtureNotice && <div className="alert alert-info watch-create-alert">{fixtureNotice}</div>}
 
-        {fixtureSearchMode === 'team' ? (
-          <div className="watch-match-tools team">
-            <div className="watch-team-search">
-              <input
-                className="form-input"
-                type="search"
-                placeholder={loadingTeams ? 'Loading teams...' : 'Search team, e.g. Arsenal'}
-                value={teamSearch}
-                onBlur={() => {
-                  teamBlurTimeoutRef.current = window.setTimeout(() => setTeamDropdownOpen(false), 120);
-                }}
-                onChange={(event) => {
-                  setTeamSearch(event.target.value);
-                  setTeamDropdownOpen(true);
-                }}
-                onFocus={() => setTeamDropdownOpen(true)}
-                aria-label="Search Premier League team"
-              />
-              {teamDropdownOpen && teamSuggestions.length > 0 && (
-                <div className="watch-team-dropdown">
-                  {teamSuggestions.map((team) => (
-                    <button
-                      key={team}
-                      type="button"
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        setTeamSearch(team);
-                        setTeamDropdownOpen(false);
-                        void fetchMatches(team);
-                      }}
-                    >
-                      {team}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => void fetchMatches()} disabled={busy === 'matches'}>
-              <Search size={15} />
-              {busy === 'matches' ? 'Loading' : 'Find Team'}
-            </button>
-          </div>
-        ) : (
-          <div className="watch-match-tools">
-            <input className="form-input" type="date" value={matchDateFrom} onChange={(event) => setMatchDateFrom(event.target.value)} aria-label="Fixture date from" />
-            <input className="form-input" type="date" value={matchDateTo} onChange={(event) => setMatchDateTo(event.target.value)} aria-label="Fixture date to" />
-            <input className="form-input" type="number" min={1} max={38} placeholder="Matchweek" value={matchday} onChange={(event) => setMatchday(event.target.value)} aria-label="Matchweek number" />
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => void fetchMatches()} disabled={busy === 'matches'}>
-              <Search size={15} />
-              {busy === 'matches' ? 'Loading' : 'Fixtures'}
-            </button>
-          </div>
-        )}
-
-        {matches.length > 0 && (
-          <div className="watch-match-list">
-            {matches.slice(0, 12).map((match) => (
-              <button key={match.providerMatchId} type="button" onClick={() => selectMatch(match)}>
-                <strong>{match.title}</strong>
-                <span>MW {match.matchday} · {formatTime(match.kickoffAt)}</span>
-                {!match.kickoffAt && <em>TBA - set kickoff before creating</em>}
+            <div className="watch-fixture-tabs" role="tablist" aria-label="Premier League fixture search mode">
+              <button type="button" className={fixtureSearchMode === 'date' ? 'active' : ''} onClick={() => setFixtureSearchMode('date')}>
+                Date / Matchweek
               </button>
-            ))}
-          </div>
-        )}
+              <button type="button" className={fixtureSearchMode === 'team' ? 'active' : ''} onClick={() => setFixtureSearchMode('team')}>
+                Team Search
+              </button>
+            </div>
 
-        <form onSubmit={createParty}>
-          <div className="watch-form-grid">
-            <input className="form-input" placeholder="Title" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} aria-label="Watch party title" />
-            <input className="form-input" placeholder="Team A" value={form.homeTeam} onChange={(event) => setForm({ ...form, homeTeam: event.target.value })} aria-label="Home team" />
-            <input className="form-input" placeholder="Team B" value={form.awayTeam} onChange={(event) => setForm({ ...form, awayTeam: event.target.value })} aria-label="Away team" />
-            <input className="form-input" type="datetime-local" value={form.kickoffAt} onChange={(event) => setForm({ ...form, kickoffAt: event.target.value })} aria-label="Kickoff time" />
-            <input className="form-input" placeholder="Guild TV area" value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} aria-label="Venue" />
-            <input className="form-input" type="number" placeholder="Entry fee" value={form.entryFeeRupees} onChange={(event) => setForm({ ...form, entryFeeRupees: event.target.value })} aria-label="Entry fee in rupees" />
-            <input className="form-input" type="number" placeholder="Arena Tokens" value={form.entryCoins} onChange={(event) => setForm({ ...form, entryCoins: event.target.value })} aria-label="Arena token credit" />
+            {fixtureSearchMode === 'team' ? (
+              <div className="watch-match-tools team">
+                <div className="watch-team-search">
+                  <input
+                    className="form-input"
+                    type="search"
+                    placeholder={loadingTeams ? 'Loading teams...' : 'Search team, e.g. Arsenal'}
+                    value={teamSearch}
+                    onBlur={() => {
+                      teamBlurTimeoutRef.current = window.setTimeout(() => setTeamDropdownOpen(false), 120);
+                    }}
+                    onChange={(event) => {
+                      setTeamSearch(event.target.value);
+                      setTeamDropdownOpen(true);
+                    }}
+                    onFocus={() => setTeamDropdownOpen(true)}
+                    aria-label="Search Premier League team"
+                  />
+                  {teamDropdownOpen && teamSuggestions.length > 0 && (
+                    <div className="watch-team-dropdown">
+                      {teamSuggestions.map((team) => (
+                        <button
+                          key={team}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            setTeamSearch(team);
+                            setTeamDropdownOpen(false);
+                            void fetchMatches(team);
+                          }}
+                        >
+                          {team}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => void fetchMatches()} disabled={busy === 'matches'}>
+                  <Search size={15} />
+                  {busy === 'matches' ? 'Loading' : 'Find Team'}
+                </button>
+              </div>
+            ) : (
+              <div className="watch-match-tools">
+                <input className="form-input" type="date" value={matchDateFrom} onChange={(event) => setMatchDateFrom(event.target.value)} aria-label="Fixture date from" />
+                <input className="form-input" type="date" value={matchDateTo} onChange={(event) => setMatchDateTo(event.target.value)} aria-label="Fixture date to" />
+                <input className="form-input" type="number" min={1} max={38} placeholder="Matchweek" value={matchday} onChange={(event) => setMatchday(event.target.value)} aria-label="Matchweek number" />
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => void fetchMatches()} disabled={busy === 'matches'}>
+                  <Search size={15} />
+                  {busy === 'matches' ? 'Loading' : 'Fixtures'}
+                </button>
+              </div>
+            )}
+
+            {matches.length > 0 && (
+              <div className="watch-match-list">
+                {matches.slice(0, 12).map((match) => (
+                  <button key={match.providerMatchId} type="button" onClick={() => selectMatch(match)}>
+                    <strong>{match.title}</strong>
+                    <span>MW {match.matchday} · {formatTime(match.kickoffAt)}</span>
+                    {!match.kickoffAt && <em>TBA — set the event start before creating</em>}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+        </details>
+
+        <form onSubmit={createParty} noValidate>
+          <div className="watch-manual-heading">
+            <strong>Event details</strong>
+            <span>Create football, cricket, esports, or any other watch-party event.</span>
+          </div>
+          <div className="watch-form-grid">
+            <input className="form-input" placeholder="Event title (optional)" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} aria-label="Watch party event title" />
+            <input className="form-input" placeholder="Team A" value={form.homeTeam} onChange={(event) => updateTeam('homeTeam', event.target.value)} aria-label="Team A" />
+            <input className="form-input" placeholder="Team B" value={form.awayTeam} onChange={(event) => updateTeam('awayTeam', event.target.value)} aria-label="Team B" />
+            <input className="form-input" type="datetime-local" value={form.kickoffAt} onChange={(event) => setForm({ ...form, kickoffAt: event.target.value })} aria-label="Event start time" />
+            <input className="form-input" placeholder="Guild TV area" value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} aria-label="Venue" />
+            <input className="form-input" type="number" min={0} max={100000} step={1} placeholder="Entry fee (₹)" value={form.entryFeeRupees} onChange={(event) => setForm({ ...form, entryFeeRupees: event.target.value })} aria-label="Entry fee in rupees" />
+            <input className="form-input" type="number" min={1} max={100000} step={1} placeholder="Watch Party Reward (EMIC)" value={form.entryCoins} onChange={(event) => setForm({ ...form, entryCoins: event.target.value })} aria-label="Watch Party Reward in EMIC" />
+          </div>
+
+          <section className="watch-odds-section" aria-labelledby="watch-odds-title">
+            <div className="watch-odds-heading">
+              <strong id="watch-odds-title">Fan Pick Reward Multipliers</strong>
+              <span>Required · 1.00× to 10.00× · maximum two decimal places</span>
+            </div>
+            <div className="watch-odds-grid">
+              {(['HOME', 'DRAW', 'AWAY'] as const).map((key) => {
+                const label = key === 'HOME'
+                  ? (form.homeTeam.trim() || 'Team A')
+                  : key === 'AWAY'
+                    ? (form.awayTeam.trim() || 'Team B')
+                    : 'Draw / Tie';
+                const valid = predictionOddsBasisPoints(predictionOdds[key]) != null;
+
+                return (
+                  <label key={key} className="watch-odds-row">
+                    <span>{label}</span>
+                    <span className="watch-odds-input-wrap">
+                      <input
+                        ref={(node) => { oddsInputRefs.current[key] = node; }}
+                        className="form-input"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        maxLength={5}
+                        required
+                        value={predictionOdds[key]}
+                        onChange={(event) => setPredictionOdds((current) => ({
+                          ...current,
+                          [key]: event.target.value,
+                        }))}
+                        aria-invalid={!valid}
+                        aria-label={`${label} fan pick reward multiplier`}
+                        aria-describedby="watch-odds-help"
+                      />
+                      <b aria-hidden="true">×</b>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <p id="watch-odds-help">Potential Reward = EMIC amount × reward multiplier. The total includes the selected EMIC.</p>
+          </section>
+
           <div className="watch-create-actions">
             <button className="btn btn-ghost" type="button" onClick={requestClose} disabled={isSubmitting}>
               Cancel
@@ -470,9 +620,17 @@ function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProp
         .watch-create-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: var(--space-md); }
         .watch-create-modal-head h2 { display: flex; align-items: center; gap: 8px; margin: 2px 0 0; font-size: 1.08rem; }
         .watch-create-kicker { color: #22d3ee; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
-        .watch-create-close { flex: 0 0 auto; padding-inline: 9px; }
+        .watch-create-close { width: 44px; height: 44px; flex: 0 0 44px; padding: 0; justify-content: center; }
         .watch-create-alert { margin-bottom: 10px; }
+        .watch-fixture-import { margin-bottom: 14px; border: 1px solid rgba(34,211,238,0.2); border-radius: 9px; background: rgba(34,211,238,0.045); }
+        .watch-fixture-import summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 42px; padding: 9px 11px; color: #9eeeff; cursor: pointer; font-size: 0.76rem; font-weight: 850; list-style: none; }
+        .watch-fixture-import summary::-webkit-details-marker { display: none; }
+        .watch-fixture-import summary :global(svg) { flex: 0 0 auto; transition: transform 160ms ease; }
+        .watch-fixture-import[open] summary :global(svg) { transform: rotate(180deg); }
+        .watch-fixture-import-body { padding: 0 10px 10px; border-top: 1px solid rgba(34,211,238,0.13); }
+        .watch-fixture-import-body > .watch-create-alert { margin-top: 10px; }
         .watch-fixture-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; padding: 3px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(0,0,0,0.18); }
+        .watch-fixture-import-body > .watch-fixture-tabs:first-child { margin-top: 10px; }
         .watch-fixture-tabs button { min-height: 34px; padding: 0 8px; border: 0; border-radius: 6px; color: var(--color-text-muted); background: transparent; font-size: 0.75rem; font-weight: 800; }
         .watch-fixture-tabs button.active { color: #061016; background: #22d3ee; }
         .watch-match-tools { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
@@ -487,13 +645,39 @@ function WatchPartyCreateModal({ onClose, onCreated }: WatchPartyCreateModalProp
         .watch-match-list button { display: grid; gap: 2px; padding: 9px 10px; text-align: left; border: 1px solid rgba(34,211,238,0.18); border-radius: 8px; color: var(--color-text-primary); background: rgba(34,211,238,0.06); }
         .watch-match-list span { color: var(--color-text-muted); font-size: 0.76rem; }
         .watch-match-list em { color: #fbbf24; font-size: 0.72rem; font-style: normal; font-weight: 800; }
-        .watch-form-grid { display: grid; gap: 8px; }
+        .watch-manual-heading { display: grid; gap: 3px; margin-bottom: 9px; }
+        .watch-manual-heading strong { font-size: 0.84rem; }
+        .watch-manual-heading span { color: var(--color-text-muted); font-size: 0.73rem; line-height: 1.45; }
+        .watch-form-grid { display: grid; grid-template-columns: minmax(0,1fr); gap: 8px; min-width: 0; }
+        .watch-form-grid .form-input { width: 100%; min-width: 0; }
+        .watch-odds-section { min-width: 0; margin-top: 12px; padding: 11px; border: 1px solid rgba(108,99,255,0.26); border-radius: 9px; background: rgba(108,99,255,0.055); }
+        .watch-odds-heading { display: grid; gap: 3px; margin-bottom: 9px; }
+        .watch-odds-heading strong { font-size: 0.83rem; }
+        .watch-odds-heading span { color: var(--color-text-muted); font-size: 0.68rem; line-height: 1.4; }
+        .watch-odds-grid { display: grid; gap: 7px; }
+        .watch-odds-row { display: grid; grid-template-columns: minmax(0,1fr) 108px; align-items: center; gap: 10px; color: var(--color-text-primary); font-size: 0.76rem; font-weight: 750; }
+        .watch-odds-row > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .watch-odds-input-wrap { position: relative; min-width: 0; }
+        .watch-odds-input-wrap .form-input { width: 100%; padding-right: 28px; text-align: right; font-variant-numeric: tabular-nums; }
+        .watch-odds-input-wrap .form-input[aria-invalid='true'] { border-color: rgba(255,107,107,0.72); }
+        .watch-odds-input-wrap b { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); color: #9aa7bd; pointer-events: none; }
+        .watch-odds-section p { margin: 9px 0 0; color: #b9c7de; font-size: 0.7rem; line-height: 1.45; }
         .watch-create-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
         .watch-create-actions .btn { width: 100%; justify-content: center; }
         @keyframes watchSpin { to { transform: rotate(360deg); } }
         @media (max-width: 560px) {
           .watch-match-tools, .watch-match-tools.team { grid-template-columns: 1fr; }
           .watch-create-actions { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 390px) {
+          .watch-create-modal-head { align-items: center; }
+          .watch-create-modal-head > div { min-width: 0; }
+          .watch-create-modal-head h2 { overflow-wrap: anywhere; }
+          .watch-form-grid { grid-template-columns: minmax(0,1fr); }
+          .watch-odds-section { padding: 9px; }
+          .watch-odds-row { grid-template-columns: minmax(0,1fr); align-items: stretch; gap: 5px; }
+          .watch-odds-row > span:first-child { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+          .watch-odds-input-wrap { width: 100%; }
         }
       `}</style>
     </>
@@ -549,7 +733,7 @@ export default function AdminWatchPartiesPage() {
     ? 'No live watch parties needing check-in right now.'
     : watchControlTab === 'needs-result'
       ? 'No watch parties waiting for a result.'
-      : 'No settled or void watch parties.';
+      : 'No completed watch parties.';
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -564,11 +748,11 @@ export default function AdminWatchPartiesPage() {
       const [partyData, userData, orderData] = await Promise.all([
         readApiResponse<AdminPartyResponse>(partyRes, 'Failed to load watch parties.'),
         readApiResponse<{ users?: UserOption[]; error?: string }>(userRes, 'Failed to load users.'),
-        readApiResponse<AdminShopOrderResponse>(orderRes, 'Failed to load shop orders.'),
+        readApiResponse<AdminShopOrderResponse>(orderRes, 'Failed to load EMIC redemptions.'),
       ]);
       if (!partyRes.ok) throw new Error(readError(partyData, 'Failed to load watch parties.'));
       if (!userRes.ok) throw new Error(readError(userData, 'Failed to load users.'));
-      if (!orderRes.ok) throw new Error(readError(orderData, 'Failed to load shop orders.'));
+      if (!orderRes.ok) throw new Error(readError(orderData, 'Failed to load EMIC redemptions.'));
       setParties(sortLiveControlParties(partyData.parties ?? []));
       setPartyPageInfo(partyData.pageInfo ?? null);
       setUsers(userData.users ?? []);
@@ -614,12 +798,12 @@ export default function AdminWatchPartiesPage() {
         take: String(orderPageInfo.take || ADMIN_ORDER_PAGE_SIZE),
       });
       const res = await fetch(`/api/admin/watch-parties/orders?${params.toString()}`, { cache: 'no-store' });
-      const data = await readApiResponse<AdminShopOrderResponse>(res, 'Failed to load more shop orders.');
-      if (!res.ok) throw new Error(readError(data, 'Failed to load more shop orders.'));
+      const data = await readApiResponse<AdminShopOrderResponse>(res, 'Failed to load more EMIC redemptions.');
+      if (!res.ok) throw new Error(readError(data, 'Failed to load more EMIC redemptions.'));
       setShopOrders((current) => mergeShopOrders(current, data.orders ?? []));
       setOrderPageInfo(data.pageInfo ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load more shop orders.');
+      setError(err instanceof Error ? err.message : 'Failed to load more EMIC redemptions.');
     } finally {
       setBusy('');
     }
@@ -692,7 +876,7 @@ export default function AdminWatchPartiesPage() {
       const data = await readApiResponse<{ party: AdminParty; error?: string }>(res, 'Check-in failed.');
       if (!res.ok) throw new Error(readError(data, 'Check-in failed.'));
       replaceParty(data.party);
-      setNotice('Checked in and credited.');
+      setNotice('Check-in completed. Watch Party Reward credited.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Check-in failed.');
     } finally {
@@ -705,12 +889,12 @@ export default function AdminWatchPartiesPage() {
     setError('');
     try {
       const res = await fetch(`/api/admin/watch-parties/${partyId}/lock`, { method: 'POST' });
-      const data = await readApiResponse<{ party: AdminParty; error?: string }>(res, 'Stop predictions failed.');
-      if (!res.ok) throw new Error(readError(data, 'Stop predictions failed.'));
+      const data = await readApiResponse<{ party: AdminParty; error?: string }>(res, 'Close fan picks failed.');
+      if (!res.ok) throw new Error(readError(data, 'Close fan picks failed.'));
       replaceParty(data.party);
-      setNotice('Predictions stopped.');
+      setNotice('Fan picks closed.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Stop predictions failed.');
+      setError(err instanceof Error ? err.message : 'Close fan picks failed.');
     } finally {
       setBusy('');
     }
@@ -725,12 +909,12 @@ export default function AdminWatchPartiesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ optionKey }),
       });
-      const data = await readApiResponse<{ party: AdminParty; error?: string }>(res, 'Settlement failed.');
-      if (!res.ok) throw new Error(readError(data, 'Settlement failed.'));
+      const data = await readApiResponse<{ party: AdminParty; error?: string }>(res, 'Apply official result failed.');
+      if (!res.ok) throw new Error(readError(data, 'Apply official result failed.'));
       replaceParty(data.party);
-      setNotice('Predictions settled.');
+      setNotice('Official result applied. Eligible EMIC rewards credited.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Settlement failed.');
+      setError(err instanceof Error ? err.message : 'Apply official result failed.');
     } finally {
       setBusy('');
     }
@@ -745,12 +929,12 @@ export default function AdminWatchPartiesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'VOID' }),
       });
-      const data = await readApiResponse<{ party: AdminParty; error?: string }>(res, 'Void failed.');
-      if (!res.ok) throw new Error(readError(data, 'Void failed.'));
+      const data = await readApiResponse<{ party: AdminParty; error?: string }>(res, 'Cancel fan picks and restore EMIC failed.');
+      if (!res.ok) throw new Error(readError(data, 'Cancel fan picks and restore EMIC failed.'));
       replaceParty(data.party);
-      setNotice('Predictions voided and refunded.');
+      setNotice('Fan picks cancelled and EMIC restored.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Void failed.');
+      setError(err instanceof Error ? err.message : 'Cancel fan picks and restore EMIC failed.');
     } finally {
       setBusy('');
     }
@@ -761,12 +945,12 @@ export default function AdminWatchPartiesPage() {
     setError('');
     try {
       const res = await fetch(`/api/admin/watch-parties/orders/${orderId}/given`, { method: 'POST' });
-      const data = await readApiResponse<{ error?: string }>(res, 'Mark given failed.');
-      if (!res.ok) throw new Error(readError(data, 'Mark given failed.'));
+      const data = await readApiResponse<{ error?: string }>(res, 'Mark collected failed.');
+      if (!res.ok) throw new Error(readError(data, 'Mark collected failed.'));
       setShopOrders((current) => current.filter((order) => order.id !== orderId));
-      setNotice('Shop order marked given.');
+      setNotice('EMIC redemption marked collected.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Mark given failed.');
+      setError(err instanceof Error ? err.message : 'Mark collected failed.');
     } finally {
       setBusy('');
     }
@@ -777,12 +961,12 @@ export default function AdminWatchPartiesPage() {
     setError('');
     try {
       const res = await fetch(`/api/admin/watch-parties/orders/${orderId}/cancel`, { method: 'POST' });
-      const data = await readApiResponse<{ error?: string }>(res, 'Cancel order failed.');
-      if (!res.ok) throw new Error(readError(data, 'Cancel order failed.'));
+      const data = await readApiResponse<{ error?: string }>(res, 'Cancel EMIC redemption failed.');
+      if (!res.ok) throw new Error(readError(data, 'Cancel EMIC redemption failed.'));
       setShopOrders((current) => current.filter((order) => order.id !== orderId));
-      setNotice('Shop order cancelled and refunded.');
+      setNotice('EMIC redemption cancelled and EMIC restored.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Cancel order failed.');
+      setError(err instanceof Error ? err.message : 'Cancel EMIC redemption failed.');
     } finally {
       setBusy('');
     }
@@ -807,7 +991,7 @@ export default function AdminWatchPartiesPage() {
   const archiveSettled = async () => {
     if (controlBuckets.settled.length === 0) return;
     const confirmed = window.confirm(
-      `Archive ${controlBuckets.settled.length} settled/void watch parties? They will be hidden from Live Control but kept in history.`,
+      `Archive ${controlBuckets.settled.length} completed watch parties? They will be hidden from Live Control but kept in history.`,
     );
     if (!confirmed) return;
     setBusy('archive-settled');
@@ -815,13 +999,13 @@ export default function AdminWatchPartiesPage() {
     setNotice('');
     try {
       const res = await fetch('/api/admin/watch-parties/archive-settled', { method: 'POST' });
-      const data = await readApiResponse<{ archivedCount?: number; error?: string }>(res, 'Archive settled failed.');
-      if (!res.ok) throw new Error(readError(data, 'Archive settled failed.'));
+      const data = await readApiResponse<{ archivedCount?: number; error?: string }>(res, 'Archive completed failed.');
+      if (!res.ok) throw new Error(readError(data, 'Archive completed failed.'));
       setParties((current) => current.filter((party) => !isCompletedParty(party)));
       setWatchControlTab('live');
       setNotice(`${data.archivedCount ?? 0} completed watch parties archived.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Archive settled failed.');
+      setError(err instanceof Error ? err.message : 'Archive completed failed.');
     } finally {
       setBusy('');
     }
@@ -831,8 +1015,8 @@ export default function AdminWatchPartiesPage() {
     <div>
       <div className="watch-admin-header">
         <div>
-          <h1 className="font-orbitron">PL Watch Party</h1>
-          <p>Premier League 2026-27</p>
+          <h1 className="font-orbitron">EmiGuild Watch Parties</h1>
+          <p>Manage events, invitations, fan picks, Watch Party Rewards, and EMIC redemptions.</p>
         </div>
         <div className="watch-admin-header-actions">
           <button
@@ -881,7 +1065,7 @@ export default function AdminWatchPartiesPage() {
                 disabled={busy === 'archive-settled'}
               >
                 {busy === 'archive-settled' ? <Loader2 size={14} className="watch-spin" /> : <Archive size={14} />}
-                Archive Settled
+                Archive Completed
               </button>
             )}
           </div>
@@ -893,7 +1077,7 @@ export default function AdminWatchPartiesPage() {
               Needs Result <span>{controlBuckets.needsResult.length}</span>
             </button>
             <button type="button" className={watchControlTab === 'settled' ? 'active' : ''} onClick={() => setWatchControlTab('settled')}>
-              Settled <span>{controlBuckets.settled.length}</span>
+              Completed <span>{controlBuckets.settled.length}</span>
             </button>
           </div>
           {loading ? (
@@ -921,10 +1105,10 @@ export default function AdminWatchPartiesPage() {
                   <div className="watch-admin-card-head">
                     <div>
                       <strong>{party.homeTeam} vs {party.awayTeam}</strong>
-                      <span>{formatTime(party.kickoffAt)}</span>
+                      <span>Event start · {formatTime(party.kickoffAt)}</span>
                     </div>
                     <div className="watch-admin-card-state">
-                      <span className="watch-status">{party.predictionStatus}</span>
+                      <span className="watch-status">{fanPickWindowStatusLabel(party.predictionStatus)}</span>
                       <button
                         className="btn btn-ghost btn-sm watch-card-toggle"
                         type="button"
@@ -941,9 +1125,12 @@ export default function AdminWatchPartiesPage() {
                   </div>
 
                   <div className="watch-admin-token-row">
-                    <span>Counter fee Rs {party.entryFeeRupees}</span>
-                    <strong>Check-in ◈ {party.entryCoins}</strong>
-                    <span>{party.predictions.length} predictions</span>
+                    <span>Entry fee ₹{party.entryFeeRupees}</span>
+                    <strong className="watch-checkin-credit">
+                      <span>Watch Party Reward</span>
+                      <EmicoinAmount value={party.entryCoins} />
+                    </strong>
+                    <span>{party.predictions.length} fan pick{party.predictions.length === 1 ? '' : 's'}</span>
                   </div>
 
                   <div className="watch-card-details">
@@ -1033,10 +1220,11 @@ export default function AdminWatchPartiesPage() {
                   )}
 
                   <div className="watch-settle-row">
+                    <span className="watch-result-label">Apply Official Result</span>
                     {party.predictionStatus === 'OPEN' && (
                       <button className="btn btn-ghost btn-sm" type="button" onClick={() => stopPredictions(party.id)} disabled={busy === `lock-${party.id}`}>
                         <PauseCircle size={14} />
-                        Stop Predictions
+                        Close Fan Picks
                       </button>
                     )}
                     {party.options.map((option) => (
@@ -1047,15 +1235,22 @@ export default function AdminWatchPartiesPage() {
                         onClick={() => settle(party.id, option.key)}
                         disabled={['SETTLED', 'VOID'].includes(party.predictionStatus) || busy === `settle-${party.id}-${option.key}`}
                       >
-                        {option.label}
+                        Result: {option.label} · {formatRewardLabel(option.multiplier)}
                       </button>
                     ))}
                     <button className="btn btn-ghost btn-sm watch-danger" type="button" onClick={() => voidParty(party.id)} disabled={['SETTLED', 'VOID'].includes(party.predictionStatus) || busy === `void-${party.id}`}>
                       <XCircle size={14} />
-                      Void
+                      Cancel Fan Picks + Restore EMIC
                     </button>
-                    <button className="btn btn-ghost btn-sm watch-danger" type="button" onClick={() => archive(party.id)} disabled={Boolean(busy)}>
+                    <button
+                      className="btn btn-ghost btn-sm watch-danger watch-archive-action"
+                      type="button"
+                      aria-label={`Archive ${party.homeTeam} versus ${party.awayTeam} watch party`}
+                      onClick={() => archive(party.id)}
+                      disabled={Boolean(busy)}
+                    >
                       <Trash2 size={14} />
+                      <span className="watch-archive-label">Archive</span>
                     </button>
                   </div>
                   </div>
@@ -1076,22 +1271,22 @@ export default function AdminWatchPartiesPage() {
 
       <section className="watch-admin-panel watch-ticket-panel">
         <div className="watch-ticket-panel-head">
-          <h2><ShoppingBag size={17} /> Shop Orders</h2>
+          <h2><ShoppingBag size={17} /> EMIC Redemptions</h2>
           <span>{shopOrders.length} pending</span>
         </div>
-        <p className="watch-ticket-panel-note">For passes or Guild memberships, assign from Admin Passes first. Drinks can be handed over at counter.</p>
+        <p className="watch-ticket-panel-note">For Gaming Passes or Guild Membership Rewards, assign access from Admin Passes first. Food &amp; Drink Rewards can be collected at the counter.</p>
         {loading ? (
-          <div className="loading-state"><div className="spinner" />Loading shop orders...</div>
+          <div className="loading-state"><div className="spinner" />Loading EMIC redemptions...</div>
         ) : shopOrders.length === 0 ? (
           <>
             <div className="empty-state">
-              No pending shop orders.
-              {orderPageInfo?.hasMore ? ' Load more to check older tickets.' : ''}
+              No pending EMIC redemptions.
+              {orderPageInfo?.hasMore ? ' Load more to check older redemptions.' : ''}
             </div>
             {orderPageInfo?.hasMore && (
               <button className="btn btn-ghost btn-sm watch-load-more" type="button" onClick={loadMoreOrders} disabled={busy === 'load-more-orders'}>
                 {busy === 'load-more-orders' ? <Loader2 size={14} className="watch-spin" /> : <ChevronDown size={14} />}
-                Load More Orders
+                Load More Redemptions
               </button>
             )}
           </>
@@ -1102,7 +1297,10 @@ export default function AdminWatchPartiesPage() {
                 <article key={order.id} className="watch-ticket-admin-card">
                   <div>
                     <strong>{order.label}</strong>
-                    <span>{order.category} · {order.itemType.replace('_', ' ')} · ◈ {order.tokenCost}</span>
+                    <div className="watch-order-meta">
+                      <span className="watch-order-category">{emicRewardCategoryLabel(order.itemType, order.category)}</span>
+                      <EmicoinAmount value={order.tokenCost} />
+                    </div>
                   </div>
                   <div>
                     <strong>{order.userName}</strong>
@@ -1114,11 +1312,11 @@ export default function AdminWatchPartiesPage() {
                   <div className="watch-ticket-admin-actions">
                     <button className="btn btn-primary btn-sm" type="button" onClick={() => markShopOrderGiven(order.id)} disabled={busy === `given-order-${order.id}`}>
                       <BadgeCheck size={14} />
-                      Mark Given
+                      Mark Collected
                     </button>
                     <button className="btn btn-ghost btn-sm watch-danger" type="button" onClick={() => cancelShopOrder(order.id)} disabled={busy === `cancel-order-${order.id}`}>
                       <Undo2 size={14} />
-                      Cancel + Refund
+                      Cancel + Restore EMIC
                     </button>
                   </div>
                 </article>
@@ -1127,7 +1325,7 @@ export default function AdminWatchPartiesPage() {
             {orderPageInfo?.hasMore && (
               <button className="btn btn-ghost btn-sm watch-load-more" type="button" onClick={loadMoreOrders} disabled={busy === 'load-more-orders'}>
                 {busy === 'load-more-orders' ? <Loader2 size={14} className="watch-spin" /> : <ChevronDown size={14} />}
-                Load More Orders
+                Load More Redemptions
               </button>
             )}
           </>
@@ -1155,13 +1353,16 @@ export default function AdminWatchPartiesPage() {
         .watch-admin-card { min-width: 0; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(255,255,255,0.035); }
         .watch-admin-card-head, .watch-admin-token-row, .watch-admin-actions, .watch-settle-row, .watch-invite-list div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .watch-admin-card-head div { display: grid; gap: 4px; }
-        .watch-admin-card-head span, .watch-admin-token-row span { color: var(--color-text-muted); font-size: 0.78rem; }
-        .watch-admin-card-state { display: flex !important; align-items: center !important; justify-content: flex-end !important; gap: 8px !important; }
+        .watch-admin-card-head span, .watch-admin-token-row > span { color: var(--color-text-muted); font-size: 0.78rem; }
+        .watch-admin-card-state { display: flex !important; align-items: center !important; justify-content: flex-end !important; flex-wrap: wrap; gap: 8px !important; }
         .watch-card-toggle { display: none; }
         .watch-card-details { display: grid; gap: 10px; }
-        .watch-status { padding: 5px 8px; border-radius: 999px; color: #22d3ee !important; background: rgba(34,211,238,0.12); font-weight: 800; }
-        .watch-admin-token-row { min-height: 36px; margin: 10px 0; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); }
+        .watch-status { max-width: 100%; flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; color: #22d3ee !important; background: rgba(34,211,238,0.12); font-weight: 800; }
+        .watch-admin-token-row { min-height: 36px; flex-wrap: wrap; margin: 10px 0; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); }
         .watch-admin-token-row strong { color: #22d3ee; font-family: Orbitron, sans-serif; }
+        .watch-checkin-credit { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+        .watch-checkin-credit > span { min-width: 0; color: inherit; font-size: 0.78rem; }
+        .watch-checkin-credit :global(.emicoin-amount) { flex: 0 0 auto !important; flex-shrink: 0 !important; min-width: max-content !important; overflow: visible; }
         .watch-admin-actions { align-items: stretch; }
         .watch-user-search { position: relative; min-width: 0; flex: 1; }
         .watch-user-search-icon { position: absolute; left: 10px; top: 50%; z-index: 1; transform: translateY(-50%); color: var(--color-text-muted); pointer-events: none; }
@@ -1177,16 +1378,22 @@ export default function AdminWatchPartiesPage() {
         .watch-invite-list em { display: inline-flex; align-items: center; gap: 5px; color: #b9ffd0; font-size: 0.76rem; font-style: normal; }
         .watch-invite-actions { display: inline-flex !important; align-items: center !important; justify-content: flex-end !important; gap: 6px !important; min-height: auto !important; padding: 0 !important; background: transparent !important; }
         .watch-settle-row { justify-content: flex-start; flex-wrap: wrap; margin-top: 10px; }
+        .watch-settle-row .btn { max-width: 100%; }
+        .watch-result-label { display: block; flex: 0 0 100%; width: 100%; padding: 8px 10px; border-left: 3px solid #22d3ee; border-radius: 6px; color: #bff7ff; background: rgba(34,211,238,0.08); font-size: 0.7rem; font-weight: 900; letter-spacing: 0.08em; line-height: 1.35; text-transform: uppercase; }
+        .watch-archive-label { display: none; }
         .watch-ticket-panel { margin-top: var(--space-lg); }
         .watch-ticket-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: var(--space-md); }
-        .watch-ticket-panel-head h2 { margin: 0; }
-        .watch-ticket-panel-head span { color: #22d3ee; font-size: 0.78rem; font-weight: 800; }
+        .watch-ticket-panel-head h2 { min-width: 0; margin: 0; }
+        .watch-ticket-panel-head > span { flex: 0 0 auto; color: #22d3ee; font-size: 0.78rem; font-weight: 800; }
         .watch-ticket-panel-note { margin: -6px 0 12px; color: var(--color-text-muted); font-size: 0.8rem; }
         .watch-ticket-admin-list { display: grid; gap: 8px; }
         .watch-ticket-admin-card { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(160px, 1fr) minmax(120px, auto) auto; align-items: center; gap: 10px; min-height: 62px; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(255,255,255,0.035); }
         .watch-ticket-admin-card > div { display: grid; gap: 3px; min-width: 0; }
-        .watch-ticket-admin-card strong, .watch-ticket-admin-card span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .watch-ticket-admin-card span { color: var(--color-text-muted); font-size: 0.76rem; }
+        .watch-ticket-admin-card > div:not(.watch-ticket-admin-actions) > strong, .watch-ticket-admin-card > div:not(.watch-ticket-admin-actions) > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .watch-ticket-admin-card > div:not(.watch-ticket-admin-actions) > span { color: var(--color-text-muted); font-size: 0.76rem; }
+        .watch-order-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; min-width: 0; color: var(--color-text-muted); font-size: 0.76rem; }
+        .watch-order-category { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .watch-order-meta :global(.emicoin-amount) { flex: 0 0 auto !important; flex-shrink: 0 !important; min-width: max-content !important; overflow: visible; }
         .watch-ticket-admin-actions { display: flex !important; flex-direction: row !important; justify-content: flex-end !important; gap: 6px !important; }
         .watch-load-more { width: 100%; justify-content: center; margin-top: 12px; }
         .watch-danger { color: #ff9b9b !important; border-color: rgba(255,107,107,0.32) !important; }
@@ -1213,7 +1420,30 @@ export default function AdminWatchPartiesPage() {
           .watch-control-tabs { grid-template-columns: 1fr; }
           .watch-control-tabs button { flex-direction: row; justify-content: space-between; padding: 0 10px; }
           .watch-admin-token-row { gap: 6px; }
-          .watch-settle-row .btn { width: 100%; justify-content: center; }
+          .watch-settle-row .btn { width: 100%; min-height: 44px; height: auto; justify-content: center; padding-block: 9px; overflow: visible; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; text-align: center; }
+          .watch-settle-row .btn :global(svg) { flex: 0 0 auto; }
+          .watch-archive-label { display: inline; }
+        }
+        @media (max-width: 390px) {
+          .watch-admin-card-state { width: 100%; display: grid !important; grid-template-columns: minmax(0,1fr) auto; align-items: center !important; justify-content: stretch !important; }
+          .watch-status { min-width: 0; justify-self: start; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+          .watch-card-toggle { min-height: 44px; }
+          .watch-checkin-credit { width: 100%; justify-content: space-between; flex-wrap: wrap; row-gap: 7px; }
+          .watch-checkin-credit > span { white-space: normal; overflow-wrap: anywhere; }
+          .watch-ticket-panel-head { align-items: flex-start; flex-wrap: wrap; }
+          .watch-ticket-panel-head h2 { overflow-wrap: anywhere; }
+          .watch-ticket-admin-card { padding: 10px; }
+          .watch-ticket-admin-card > div:not(.watch-ticket-admin-actions) > strong, .watch-ticket-admin-card > div:not(.watch-ticket-admin-actions) > span { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+          .watch-order-meta { width: 100%; align-items: center; overflow: visible; white-space: normal; }
+          .watch-order-category { flex: 1 1 120px; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+          .watch-ticket-admin-actions .btn { min-height: 44px; height: auto; padding-block: 9px; overflow: visible; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; text-align: center; }
+        }
+        @media (max-width: 340px) {
+          .watch-admin-card-state { grid-template-columns: minmax(0,1fr); }
+          .watch-card-toggle { width: 100%; }
+          .watch-checkin-credit { align-items: flex-start; flex-direction: column; }
+          .watch-order-meta { align-items: flex-start; flex-direction: column; }
+          .watch-order-category { flex-basis: auto; width: 100%; }
         }
       `}</style>
     </div>

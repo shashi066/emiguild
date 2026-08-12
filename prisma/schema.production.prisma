@@ -466,8 +466,8 @@ model WatchParty {
   kickoffAt               DateTime
   venue                   String?
   entryFeeRupees          Int      @default(100)
-  entryCoins              Int      @default(100)
-  entryCoinUnits          Int      @default(1000)
+  entryCoins              Int      @default(500)
+  entryCoinUnits          Int      @default(5000)
   predictionOptions       String?
   predictionLockAt        DateTime?
   predictionStatus        String   @default("OPEN")
