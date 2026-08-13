@@ -20,6 +20,7 @@ import {
   Wifi,
   Phone,
   MapPin,
+  Instagram,
   Award,
   RotateCcw,
   Gift,
@@ -435,36 +436,24 @@ export default async function HomePage() {
             </div>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 'var(--space-md)', fontSize: '0.9rem' }}>Quick Links</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-  {[
-    ['/', 'Home'],
-    ['/book', 'Book a Slot'],
-    ['/my-bookings', 'My Bookings'],
-    ['https://www.instagram.com/theemiguild', 'Instagram'],
-  ].map(([href, label]) =>
-    href.startsWith('http') ? (
-      // External link: open in new tab
-      <a
-        key={href}
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}
-      >
-        {label}
-      </a>
-    ) : (
-      // Internal link: use Next.js Link
-      <Link
-        key={href}
-        href={href}
-        style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}
-      >
-        {label}
-      </Link>
-    )
-  )}
-</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {[
+                  ['/book', 'Book a Slot'],
+                  ['/games', 'Games'],
+                  ['/passes', 'Passes'],
+                  ['/tournaments', 'Tournaments'],
+                  ['/daily-spin', 'Guild Spin'],
+                  ...(session ? [['/my-bookings', 'My Bookings']] : []),
+                ].map(([href, label]) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </div>
             </div>  
             <div>
               <div style={{ fontWeight: 700, marginBottom: 'var(--space-md)', fontSize: '0.9rem' }}>Hours</div>
@@ -492,6 +481,15 @@ export default async function HomePage() {
                 >
                   <MapPin size={14} style={{ marginTop: 2, flexShrink: 0 }} />
                   Find us on Google Maps
+                </a>
+                <a
+                  href="https://www.instagram.com/theemiguild"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="footer-map-link"
+                >
+                  <Instagram size={14} style={{ marginTop: 2, flexShrink: 0 }} />
+                  Instagram
                 </a>
               </div>
             </div>

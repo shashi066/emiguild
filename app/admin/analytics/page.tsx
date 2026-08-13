@@ -8,6 +8,7 @@ import {
   Eye,
   History,
   RefreshCcw,
+  Users,
 } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { VisitorAnalyticsTable } from './VisitorAnalyticsTable';
@@ -23,6 +24,7 @@ export default async function AdminAnalyticsPage() {
 
   const analytics = await getAdminAnalytics();
   const cards = [
+    { label: 'Unique Users Today', value: analytics.uniqueUsersToday, icon: Users, tone: styles.green },
     { label: 'Today', value: analytics.summary.today, icon: Eye, tone: styles.violet },
     { label: 'Yesterday', value: analytics.summary.yesterday, icon: History, tone: styles.cyan },
     { label: 'Last 7 Days', value: analytics.summary.last7Days, icon: CalendarDays, tone: styles.green },

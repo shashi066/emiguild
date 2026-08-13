@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   UserPlus, Plus, Trash2, AlertCircle, RefreshCw,
   Calendar, Clock, Monitor, X, CheckCircle, Phone, User, Search, Award, ChevronDown,
@@ -19,6 +19,7 @@ import {
   selectPreferredGuildMembership,
 } from '@/lib/guild-membership';
 import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
+import { AdminBookingModalShell } from '@/components/admin/AdminBookingModalShell';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 type BookedSlot = { startTime: string; endTime: string; status: string };
@@ -49,6 +50,12 @@ type ActivePass = {
   expiresAt: string;
 };
 const PASS_COLOR: Record<string, string> = { BRONZE: '#cd7f32', SILVER: '#c0c0c0', GOLD: '#FFD700', BLACK: '#d8dee9', APEX: '#67e8f9' };
+const STATUS_COLORS: Record<string, string> = {
+  CONFIRMED: '#10b981',
+  PENDING: '#f59e0b',
+  CANCELLED: '#ef4444',
+  COMPLETED: '#818cf8',
+};
 
 // DURATION_OPTIONS is now generated dynamically via getDurationOptions()
 
@@ -56,42 +63,15 @@ export default function WalkinBookingPage() {
   const [stations, setStations] = useState<Station[]>([]);
   const [bookings, setBookings] = useState<WalkinBooking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [search, setSearch] = useState('');
   const [controllerPrice, setControllerPrice] = useState(0);
-  const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
 
   // Filters
   const [filterDate, setFilterDate] = useState('');
   const [filterStation, setFilterStation] = useState('');
-
-  // Form
-  const [form, setForm] = useState({
-    customerName: '',
-    customerPhone: '',
-    stationId: '',
-    date: getTodayString(),
-    startTime: '09:00',
-    duration: 2,
-    extraControllers: 0,
-    discount: 0,
-    appliedBenefitType: null as string | null,
-    notes: '',
-  });
-
-  // Search-select state
-  const [allUsers, setAllUsers]         = useState<FoundUser[]>([]);
-  const [userQuery, setUserQuery]       = useState('');
-  const [showUserDrop, setShowUserDrop] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<FoundUser | null>(null);
-  const [activePasses, setActivePasses] = useState<ActivePass[]>([]);
-  const [usePass, setUsePass]           = useState(false);
-  const [loadingPass, setLoadingPass]   = useState(false);
-  const userWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch('/api/stations')
@@ -102,25 +82,6 @@ export default function WalkinBookingPage() {
       .then((d) => {
         if (d.controller_price) setControllerPrice(parseFloat(d.controller_price));
       });
-    // Load all users once for the search-select
-    fetch('/api/admin/passes/users')
-      .then((r) => r.json())
-      .then((d) => setAllUsers((d.users ?? []).map((user: FoundUser) => ({
-        ...user,
-        phone: decryptPhone(user.phone),
-      }))))
-      .catch(() => {});
-  }, []);
-
-  // Close user dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (userWrapRef.current && !userWrapRef.current.contains(e.target as Node)) {
-        setShowUserDrop(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const loadBookings = useCallback(async () => {
@@ -142,135 +103,6 @@ export default function WalkinBookingPage() {
 
   useEffect(() => { loadBookings(); }, [loadBookings]);
 
-  // Fetch booked slots whenever station or date changes
-  useEffect(() => {
-    if (!form.stationId || !form.date) { setBookedSlots([]); return; }
-    fetch(`/api/slots?stationId=${form.stationId}&date=${form.date}`)
-      .then((r) => r.json())
-      .then((d) => setBookedSlots(d.bookings ?? []));
-  }, [form.stationId, form.date]);
-
-  const selectedStation = stations.find((s) => s.id === form.stationId);
-  const activePass = selectedStation
-    ? activePasses.find((pass) =>
-        selectedStation.hasControllers
-          ? ['BRONZE', 'SILVER', 'GOLD'].includes(pass.passType)
-          : ['BLACK', 'APEX'].includes(pass.passType)
-      ) ?? null
-    : null;
-  const stationPassAllowed = selectedStation != null;
-  const passDateAllowed = isPassDateEligible(form.date);
-  const activeMembership = selectPreferredGuildMembership(activePasses);
-  const membershipEligibility = getGuildMembershipEligibility({
-    membership: activeMembership,
-    bookingDate: form.date,
-    hasControllers: selectedStation?.hasControllers ?? false,
-    extraControllers: form.extraControllers,
-  });
-  const controllerCharge = form.extraControllers * controllerPrice * form.duration;
-  const sessionCost = selectedStation ? selectedStation.hourlyRate * form.duration : 0;
-  const priceBeforeDiscount = (usePass ? 0 : sessionCost) + controllerCharge;
-  const estimatedTotal = Math.round(priceBeforeDiscount * (1 - form.discount / 100));
-
-  useEffect(() => {
-    if ((!activePass || !passDateAllowed) && usePass) {
-      setUsePass(false);
-    }
-  }, [activePass, passDateAllowed, usePass]);
-
-  useEffect(() => {
-    if (form.appliedBenefitType && !membershipEligibility.eligible) {
-      setForm((current) => ({
-        ...current,
-        discount: 0,
-        appliedBenefitType: null,
-      }));
-    }
-  }, [form.appliedBenefitType, membershipEligibility.eligible]);
-
-  // Filtered user list for dropdown
-  const filteredUsers = userQuery.trim().length < 1 ? [] : allUsers.filter((u) => {
-    const q = userQuery.toLowerCase();
-    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.phone ?? '').includes(q);
-  }).slice(0, 8);
-
-  const fetchPassForUser = async (userId: string) => {
-    setLoadingPass(true);
-    setActivePasses([]);
-    setUsePass(false);
-    try {
-      const res = await fetch(`/api/admin/passes?userId=${userId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setActivePasses(data.passes ?? []);
-      }
-    } finally {
-      setLoadingPass(false);
-    }
-  };
-
-  const handleSelectUser = (user: FoundUser) => {
-    setSelectedUser(user);
-    setUserQuery('');
-    setShowUserDrop(false);
-    setForm((f) => ({
-      ...f,
-      customerName: user.name,
-      customerPhone: user.phone ?? '',
-    }));
-    fetchPassForUser(user.id);
-  };
-
-  const handleClearUser = () => {
-    setSelectedUser(null);
-    setActivePasses([]);
-    setUsePass(false);
-    setUserQuery('');
-    setForm((f) => ({ ...f, customerName: '', customerPhone: '' }));
-  };
-
-  // Reset user/pass state when form is reset
-  const resetForm = () => {
-    setForm({ customerName: '', customerPhone: '', stationId: '', date: getTodayString(), startTime: '09:00', duration: 2, extraControllers: 0, discount: 0, appliedBenefitType: null, notes: '' });
-    setSelectedUser(null);
-    setActivePasses([]);
-    setUsePass(false);
-    setUserQuery('');
-  };
-
-  const availableSlots = ADMIN_WALKIN_TIME_SLOTS.filter((time) => (
-    validateAdminWalkinTime(time, form.duration).valid
-    && isSlotAvailable(time, form.duration, bookedSlots)
-  ));
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setSubmitting(true);
-    try {
-      const res = await fetch('/api/admin/walkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          duration: Number(form.duration),
-          usePass,
-          passId: usePass ? activePass?.id ?? null : null,
-          linkedUserId: selectedUser?.id ?? null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Booking failed.'); return; }
-      setSuccess(`✅ Walk-in booking created for ${data.booking.customerName} — ${data.booking.station.name}`);
-      setShowForm(false);
-      resetForm();
-      loadBookings();
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleCancel = async (id: string) => {
     if (!confirm('Cancel this walk-in booking?')) return;
     setDeletingId(id);
@@ -289,30 +121,27 @@ export default function WalkinBookingPage() {
 
   const today = getTodayString();
 
-  // Filter by search (client-side for offline bookings)
-  const filtered = bookings.filter((b) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      b.customerName?.toLowerCase().includes(q) ||
-      b.customerPhone?.includes(q) ||
-      b.station.name.toLowerCase().includes(q)
-    );
-  });
+  const { filteredBookings, groupedBookings } = useMemo(() => {
+    const query = search.toLowerCase();
+    const filteredResults = bookings.filter((booking) => (
+      !search
+      || booking.customerName?.toLowerCase().includes(query)
+      || booking.customerPhone?.includes(query)
+      || booking.station.name.toLowerCase().includes(query)
+    ));
+    const bookingsByDate = filteredResults.reduce<Record<string, WalkinBooking[]>>((groups, booking) => {
+      (groups[booking.date] ??= []).push(booking);
+      return groups;
+    }, {});
+    const sortedGroups = Object.entries(bookingsByDate)
+      .sort(([firstDate], [secondDate]) => secondDate.localeCompare(firstDate))
+      .map(([date, dateBookings]) => [
+        date,
+        [...dateBookings].sort((first, second) => first.startTime.localeCompare(second.startTime)),
+      ] as const);
 
-  // Group by date
-  const grouped = filtered.reduce<Record<string, WalkinBooking[]>>((acc, b) => {
-    if (!acc[b.date]) acc[b.date] = [];
-    acc[b.date].push(b);
-    return acc;
-  }, {});
-
-  const STATUS_COLORS: Record<string, string> = {
-    CONFIRMED: '#10b981',
-    PENDING:   '#f59e0b',
-    CANCELLED: '#ef4444',
-    COMPLETED: '#818cf8',
-  };
+    return { filteredBookings: filteredResults, groupedBookings: sortedGroups };
+  }, [bookings, search]);
 
   return (
     <div>
@@ -329,7 +158,7 @@ export default function WalkinBookingPage() {
           <button className="btn btn-ghost btn-sm" onClick={loadBookings} id="refresh-walkin-btn">
             <RefreshCw size={15} /> Refresh
           </button>
-          <button className="btn btn-primary" onClick={() => { setShowForm(true); setError(''); setSuccess(''); }} id="new-walkin-btn">
+          <button className="btn btn-primary" onClick={() => { setShowForm(true); setSuccess(''); }} id="new-walkin-btn">
             <Plus size={16} /> New Walk-in Booking
           </button>
         </div>
@@ -341,12 +170,6 @@ export default function WalkinBookingPage() {
           <CheckCircle size={16} /> {success}
         </div>
       )}
-      {error && (
-        <div className="alert alert-error" style={{ marginBottom: 'var(--space-lg)' }}>
-          <AlertCircle size={16} /> {error}
-        </div>
-      )}
-
       {/* Info */}
       <div className="alert alert-info" style={{ marginBottom: 'var(--space-xl)' }}>
         <UserPlus size={16} style={{ flexShrink: 0 }} />
@@ -397,7 +220,7 @@ export default function WalkinBookingPage() {
       {/* Bookings list */}
       {loading ? (
         <div className="loading-state"><div className="spinner" />Loading walk-in bookings...</div>
-      ) : filtered.length === 0 ? (
+      ) : filteredBookings.length === 0 ? (
         <div className="card">
           <div className="empty-state">
             <div className="empty-state-icon"><UserPlus size={32} /></div>
@@ -407,9 +230,7 @@ export default function WalkinBookingPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)' }}>
-          {Object.entries(grouped)
-            .sort(([a], [b]) => b.localeCompare(a))
-            .map(([date, slots]) => (
+          {groupedBookings.map(([date, slots]) => (
               <div key={date}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
                   <Calendar size={15} style={{ color: 'var(--color-accent-primary)' }} />
@@ -421,7 +242,7 @@ export default function WalkinBookingPage() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-                  {slots.sort((a, b) => a.startTime.localeCompare(b.startTime)).map((booking) => (
+                  {slots.map((booking) => (
                     <div key={booking.id} className="card" style={{
                       padding: 'var(--space-lg)',
                       borderColor: booking.status === 'CANCELLED' ? 'rgba(239,68,68,0.15)' : 'rgba(108,99,255,0.15)',
@@ -532,31 +353,231 @@ export default function WalkinBookingPage() {
 
       {/* ── Walk-in Booking Form Modal ── */}
       {showForm && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1000,
-            background: 'rgba(0,0,0,0.75)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'flex-start',
-            overflowY: 'auto',
-            padding: '24px 12px',
-            WebkitOverflowScrolling: 'touch',
+        <WalkinBookingModal
+          stations={stations}
+          controllerPrice={controllerPrice}
+          onClose={() => setShowForm(false)}
+          onCreated={(message) => {
+            setShowForm(false);
+            setSuccess(message);
+            void loadBookings();
           }}
-          onClick={(e) => e.target === e.currentTarget && setShowForm(false)}
-        >
-          <div className="card" style={{ width: '100%', maxWidth: 540, margin: 'auto' }}>
+        />
+      )}
+    </div>
+  );
+}
+
+type WalkinBookingModalProps = {
+  stations: Station[];
+  controllerPrice: number;
+  onClose: () => void;
+  onCreated: (message: string) => void;
+};
+
+function WalkinBookingModal({ stations, controllerPrice, onClose, onCreated }: WalkinBookingModalProps) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
+  const [form, setForm] = useState(() => ({
+    customerName: '',
+    customerPhone: '',
+    stationId: '',
+    date: getTodayString(),
+    startTime: '09:00',
+    duration: 2,
+    extraControllers: 0,
+    discount: 0,
+    appliedBenefitType: null as string | null,
+    notes: '',
+  }));
+  const [allUsers, setAllUsers] = useState<FoundUser[]>([]);
+  const [userQuery, setUserQuery] = useState('');
+  const [showUserDrop, setShowUserDrop] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<FoundUser | null>(null);
+  const [activePasses, setActivePasses] = useState<ActivePass[]>([]);
+  const [usePass, setUsePass] = useState(false);
+  const [loadingPass, setLoadingPass] = useState(false);
+  const userWrapRef = useRef<HTMLDivElement>(null);
+  const deferredUserQuery = useDeferredValue(userQuery);
+
+  useEffect(() => {
+    let mounted = true;
+
+    fetch('/api/admin/passes/users')
+      .then((response) => response.json())
+      .then((data) => {
+        if (!mounted) return;
+        setAllUsers((data.users ?? []).map((user: FoundUser) => ({
+          ...user,
+          phone: decryptPhone(user.phone),
+        })));
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (userWrapRef.current && !userWrapRef.current.contains(event.target as Node)) {
+        setShowUserDrop(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    if (!form.stationId || !form.date) {
+      setBookedSlots([]);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    fetch(`/api/slots?stationId=${form.stationId}&date=${form.date}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (mounted) setBookedSlots(data.bookings ?? []);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [form.stationId, form.date]);
+
+  const selectedStation = stations.find((station) => station.id === form.stationId);
+  const activePass = selectedStation
+    ? activePasses.find((pass) => (
+        selectedStation.hasControllers
+          ? ['BRONZE', 'SILVER', 'GOLD'].includes(pass.passType)
+          : ['BLACK', 'APEX'].includes(pass.passType)
+      )) ?? null
+    : null;
+  const stationPassAllowed = selectedStation != null;
+  const passDateAllowed = isPassDateEligible(form.date);
+  const activeMembership = selectPreferredGuildMembership(activePasses);
+  const membershipEligibility = getGuildMembershipEligibility({
+    membership: activeMembership,
+    bookingDate: form.date,
+    hasControllers: selectedStation?.hasControllers ?? false,
+    extraControllers: form.extraControllers,
+  });
+  const controllerCharge = form.extraControllers * controllerPrice * form.duration;
+  const sessionCost = selectedStation ? selectedStation.hourlyRate * form.duration : 0;
+  const priceBeforeDiscount = (usePass ? 0 : sessionCost) + controllerCharge;
+  const estimatedTotal = Math.round(priceBeforeDiscount * (1 - form.discount / 100));
+
+  useEffect(() => {
+    if ((!activePass || !passDateAllowed) && usePass) {
+      setUsePass(false);
+    }
+  }, [activePass, passDateAllowed, usePass]);
+
+  useEffect(() => {
+    if (form.appliedBenefitType && !membershipEligibility.eligible) {
+      setForm((current) => ({
+        ...current,
+        discount: 0,
+        appliedBenefitType: null,
+      }));
+    }
+  }, [form.appliedBenefitType, membershipEligibility.eligible]);
+
+  const filteredUsers = useMemo(() => {
+    const query = deferredUserQuery.trim().toLowerCase();
+    if (!query) return [];
+
+    return allUsers.filter((user) => (
+      user.name.toLowerCase().includes(query)
+      || user.email.toLowerCase().includes(query)
+      || (user.phone ?? '').includes(query)
+    )).slice(0, 8);
+  }, [allUsers, deferredUserQuery]);
+
+  const availableSlots = useMemo(() => ADMIN_WALKIN_TIME_SLOTS.filter((time) => (
+    validateAdminWalkinTime(time, form.duration).valid
+    && isSlotAvailable(time, form.duration, bookedSlots)
+  )), [bookedSlots, form.duration]);
+
+  const fetchPassForUser = async (userId: string) => {
+    setLoadingPass(true);
+    setActivePasses([]);
+    setUsePass(false);
+    try {
+      const response = await fetch(`/api/admin/passes?userId=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setActivePasses(data.passes ?? []);
+      }
+    } finally {
+      setLoadingPass(false);
+    }
+  };
+
+  const handleSelectUser = (user: FoundUser) => {
+    setSelectedUser(user);
+    setUserQuery('');
+    setShowUserDrop(false);
+    setForm((current) => ({
+      ...current,
+      customerName: user.name,
+      customerPhone: user.phone ?? '',
+    }));
+    void fetchPassForUser(user.id);
+  };
+
+  const handleClearUser = () => {
+    setSelectedUser(null);
+    setActivePasses([]);
+    setUsePass(false);
+    setUserQuery('');
+    setForm((current) => ({ ...current, customerName: '', customerPhone: '' }));
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const response = await fetch('/api/admin/walkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          duration: Number(form.duration),
+          usePass,
+          passId: usePass ? activePass?.id ?? null : null,
+          linkedUserId: selectedUser?.id ?? null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? 'Booking failed.');
+        return;
+      }
+      onCreated(`✅ Walk-in booking created for ${data.booking.customerName} — ${data.booking.station.name}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <AdminBookingModalShell onClose={onClose} labelledBy="walkin-booking-title">
 
             {/* Modal header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>
+              <h2 id="walkin-booking-title" style={{ fontSize: '1.2rem', fontWeight: 700 }}>
                 <UserPlus size={20} style={{ display: 'inline', marginRight: 8, color: 'var(--color-accent-primary)' }} />
                 New Walk-in Booking
               </h2>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}><X size={18} /></button>
+              <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close walk-in booking form"><X size={18} /></button>
             </div>
 
             {error && (
@@ -992,7 +1013,7 @@ export default function WalkinBookingPage() {
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)' }}>
-                <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { setShowForm(false); resetForm(); }}>
+                <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>
                   Cancel
                 </button>
                 <button
@@ -1007,9 +1028,6 @@ export default function WalkinBookingPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-    </div>
+    </AdminBookingModalShell>
   );
 }

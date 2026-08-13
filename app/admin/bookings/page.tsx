@@ -30,6 +30,7 @@ import {
   validateAdminWalkinTime,
 } from '@/lib/admin-walkin-time';
 import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
+import AdminBookingModalShell from '@/components/admin/AdminBookingModalShell';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
 
@@ -293,21 +294,17 @@ function EditModal({
   };
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="card" style={{ width: '100%', maxWidth: 540, maxHeight: '90vh', overflowY: 'auto', position: 'relative', animation: 'fadeInUp 0.2s ease' }}>
+    <AdminBookingModalShell onClose={onClose} labelledBy="edit-booking-title">
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-xl)' }}>
           <div>
-            <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>Edit Booking</h2>
+            <h2 id="edit-booking-title" style={{ fontSize: '1rem', fontWeight: 700 }}>Edit Booking</h2>
             <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
               #{booking.id.slice(-8).toUpperCase()} · {booking.user?.name ?? booking.customerName ?? 'Walk-in'}
             </p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+          <button aria-label="Close edit booking" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>
             <X size={18} />
           </button>
         </div>
@@ -646,8 +643,7 @@ function EditModal({
             {loading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
-      </div>
-    </div>
+    </AdminBookingModalShell>
   );
 }
 

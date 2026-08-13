@@ -287,6 +287,7 @@ test('maps visitor types, sorts visits, and derives every overall summary field'
 
   assert.equal(iso(deleteBefore!), '2025-08-05T00:00:00.000Z');
   assert.equal(queryCalls, 1);
+  assert.equal(analytics.uniqueUsersToday, 2);
   assert.deepEqual(analytics.summary, {
     today: 7,
     yesterday: 4,
@@ -343,6 +344,7 @@ test('retention deletion removes older rows but preserves the exact anniversary'
       today: 0, yesterday: 0, last7Days: 0, last30Days: 0,
       currentMonth: 0, previousMonth: 0, currentYear: 0, rollingYear: 0,
     },
+    uniqueUsersToday: 0,
     visitors: [],
   });
 });

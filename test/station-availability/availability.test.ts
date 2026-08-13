@@ -301,6 +301,7 @@ test('returns only public station and timing fields', () => {
       'nextBookingAt',
       'position',
       'state',
+      'todaySlots',
     ],
   );
 });

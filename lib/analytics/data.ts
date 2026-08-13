@@ -28,6 +28,7 @@ export interface AnalyticsVisitor {
 
 export interface AdminAnalyticsData {
   summary: AnalyticsSummary;
+  uniqueUsersToday: number;
   visitors: AnalyticsVisitor[];
 }
 
@@ -197,7 +198,11 @@ export async function getAdminAnalytics(
     return totals;
   }, emptySummary());
 
+  const uniqueUsersToday = visitorsWithSortKeys.filter((visitor) => (
+    visitor.type !== 'ANONYMOUS' && visitor.visits.today > 0
+  )).length;
+
   const visitors = visitorsWithSortKeys.map(({ sortKey: _sortKey, ...visitor }) => visitor);
 
-  return { summary, visitors };
+  return { summary, uniqueUsersToday, visitors };
 }

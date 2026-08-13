@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { z } from 'zod';
 
+const INTERNAL_SETTING_KEYS = new Set(['watch_party_economy_version']);
+
 const updateSchema = z.array(
   z.object({
     key:   z.string().min(1),
@@ -17,7 +19,10 @@ export async function GET() {
   if (!session || session.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const settings = await prisma.setting.findMany({ orderBy: { key: 'asc' } });
+  const settings = await prisma.setting.findMany({
+    where: { key: { notIn: Array.from(INTERNAL_SETTING_KEYS) } },
+    orderBy: { key: 'asc' },
+  });
   return NextResponse.json({ settings });
 }
 
@@ -32,6 +37,9 @@ export async function PUT(req: NextRequest) {
   const result = updateSchema.safeParse(body);
   if (!result.success) {
     return NextResponse.json({ error: 'Invalid data', issues: result.error.issues }, { status: 400 });
+  }
+  if (result.data.some((setting) => INTERNAL_SETTING_KEYS.has(setting.key))) {
+    return NextResponse.json({ error: 'Internal settings cannot be edited.' }, { status: 400 });
   }
 
   const updated = await Promise.all(

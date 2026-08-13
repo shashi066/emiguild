@@ -1,11 +1,36 @@
 'use client';
 
-import { useState } from 'react';
-import { Search, Users, X } from 'lucide-react';
-import type { AnalyticsVisitor } from '@/lib/analytics';
+import { useMemo, useState } from 'react';
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Search, Users, X } from 'lucide-react';
+import type { AnalyticsSummary, AnalyticsVisitor } from '@/lib/analytics';
 import styles from './analytics.module.css';
 
 const NUMBER_FORMAT = new Intl.NumberFormat('en-IN');
+const DEFAULT_METRIC: AnalyticsMetric = 'rollingYear';
+const DEFAULT_DIRECTION: SortDirection = 'desc';
+
+type AnalyticsMetric = keyof AnalyticsSummary;
+type SortDirection = 'asc' | 'desc';
+type VisitorTypeFilter = 'ALL' | 'USERS' | 'ADMINS' | 'ANONYMOUS' | 'DELETED';
+
+const METRIC_OPTIONS: Array<{ value: AnalyticsMetric; label: string }> = [
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'last7Days', label: '7 Days' },
+  { value: 'last30Days', label: '30 Days' },
+  { value: 'currentMonth', label: 'This Month' },
+  { value: 'previousMonth', label: 'Last Month' },
+  { value: 'currentYear', label: 'This Year' },
+  { value: 'rollingYear', label: 'Rolling Year' },
+];
+
+const TYPE_FILTER_OPTIONS: Array<{ value: VisitorTypeFilter; label: string }> = [
+  { value: 'ALL', label: 'All Visitors' },
+  { value: 'USERS', label: 'Users' },
+  { value: 'ADMINS', label: 'Admins' },
+  { value: 'ANONYMOUS', label: 'Anonymous' },
+  { value: 'DELETED', label: 'Deleted' },
+];
 
 function matchesSearch(visitor: AnalyticsVisitor, search: string) {
   const query = search.trim().toLowerCase();
@@ -23,10 +48,58 @@ function matchesSearch(visitor: AnalyticsVisitor, search: string) {
     ));
 }
 
+function matchesTypeFilter(visitor: AnalyticsVisitor, typeFilter: VisitorTypeFilter) {
+  if (typeFilter === 'ALL') return true;
+  if (typeFilter === 'ANONYMOUS') return visitor.type === 'ANONYMOUS';
+  if (typeFilter === 'DELETED') return visitor.type === 'DELETED';
+  if (typeFilter === 'ADMINS') return visitor.type === 'USER' && visitor.role === 'ADMIN';
+  return visitor.type === 'USER' && visitor.role !== 'ADMIN';
+}
+
+function getVisitorStableKey(visitor: AnalyticsVisitor) {
+  return visitor.email ?? visitor.userId ?? visitor.type;
+}
+
+function compareVisitors(
+  left: AnalyticsVisitor,
+  right: AnalyticsVisitor,
+  metric: AnalyticsMetric,
+  direction: SortDirection,
+) {
+  const multiplier = direction === 'desc' ? -1 : 1;
+  const visitDelta = left.visits[metric] - right.visits[metric];
+
+  return visitDelta * multiplier
+    || left.name.localeCompare(right.name, 'en')
+    || getVisitorStableKey(left).localeCompare(getVisitorStableKey(right), 'en');
+}
+
 export function VisitorAnalyticsTable({ visitors }: { visitors: AnalyticsVisitor[] }) {
   const [search, setSearch] = useState('');
+  const [metric, setMetric] = useState<AnalyticsMetric>(DEFAULT_METRIC);
+  const [direction, setDirection] = useState<SortDirection>(DEFAULT_DIRECTION);
+  const [typeFilter, setTypeFilter] = useState<VisitorTypeFilter>('ALL');
   const searchQuery = search.trim();
-  const filteredVisitors = visitors.filter((visitor) => matchesSearch(visitor, search));
+  const selectedMetricLabel = METRIC_OPTIONS.find((option) => option.value === metric)?.label ?? 'Rolling Year';
+  const sortDirectionLabel = direction === 'desc' ? 'Highest first' : 'Lowest first';
+  const hasControls = searchQuery
+    || metric !== DEFAULT_METRIC
+    || direction !== DEFAULT_DIRECTION
+    || typeFilter !== 'ALL';
+  const filteredVisitors = useMemo(
+    () => visitors
+      .filter((visitor) => matchesSearch(visitor, search))
+      .filter((visitor) => matchesTypeFilter(visitor, typeFilter))
+      .sort((left, right) => compareVisitors(left, right, metric, direction)),
+    [direction, metric, search, typeFilter, visitors],
+  );
+
+  function clearControls() {
+    setSearch('');
+    setMetric(DEFAULT_METRIC);
+    setDirection(DEFAULT_DIRECTION);
+    setTypeFilter('ALL');
+  }
 
   return (
     <section aria-labelledby="visitor-visits-heading">
@@ -35,8 +108,8 @@ export function VisitorAnalyticsTable({ visitors }: { visitors: AnalyticsVisitor
         <h2 id="visitor-visits-heading">Visitors</h2>
       </div>
 
-      <div className={styles.searchBar}>
-        <div className="search-input-wrapper" style={{ width: '100%', maxWidth: 420 }}>
+      <div className={styles.controlBar}>
+        <div className={`search-input-wrapper ${styles.searchControl}`}>
           <Search size={16} className="search-icon" aria-hidden="true" />
           <input
             id="analytics-visitor-search"
@@ -49,16 +122,57 @@ export function VisitorAnalyticsTable({ visitors }: { visitors: AnalyticsVisitor
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        {search && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch('')}>
+
+        <select
+          id="analytics-metric-sort"
+          className={`form-input ${styles.selectControl}`}
+          aria-label="Sort visitors by analytics window"
+          value={metric}
+          onChange={(event) => setMetric(event.target.value as AnalyticsMetric)}
+        >
+          {METRIC_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              Sort: {option.label}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          className={`btn btn-ghost btn-sm ${styles.sortButton}`}
+          aria-label={`Sort ${direction === 'desc' ? 'lowest first' : 'highest first'}`}
+          onClick={() => setDirection((current) => (current === 'desc' ? 'asc' : 'desc'))}
+        >
+          {direction === 'desc'
+            ? <ArrowDownWideNarrow size={15} aria-hidden="true" />
+            : <ArrowUpNarrowWide size={15} aria-hidden="true" />}
+          {sortDirectionLabel}
+        </button>
+
+        <select
+          id="analytics-type-filter"
+          className={`form-input ${styles.typeControl}`}
+          aria-label="Filter visitors by type"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value as VisitorTypeFilter)}
+        >
+          {TYPE_FILTER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        {hasControls && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={clearControls}>
             <X size={14} aria-hidden="true" /> Clear
           </button>
         )}
-        {searchQuery && (
-          <span className={styles.resultCount} aria-live="polite">
-            {filteredVisitors.length} {filteredVisitors.length === 1 ? 'result' : 'results'}
-          </span>
-        )}
+
+        <span className={styles.resultCount} aria-live="polite">
+          {filteredVisitors.length} {filteredVisitors.length === 1 ? 'result' : 'results'}
+          {' '}sorted by {selectedMetricLabel.toLowerCase()}
+        </span>
       </div>
 
       <div
@@ -120,7 +234,7 @@ export function VisitorAnalyticsTable({ visitors }: { visitors: AnalyticsVisitor
             {filteredVisitors.length === 0 && (
               <tr>
                 <td colSpan={10} className={styles.emptyRow}>
-                  {searchQuery ? 'No visitors match your search.' : 'No homepage visits recorded yet.'}
+                  {hasControls ? 'No visitors match these controls.' : 'No homepage visits recorded yet.'}
                 </td>
               </tr>
             )}

@@ -366,6 +366,7 @@ export default function AdminSettingsPage() {
               <div style={{ position: 'relative' }}>
                 <select
                   id="modal-opening-time"
+                  className="form-input"
                   disabled={!draftSpecialEnabled}
                   value={draftSpecialTime}
                   onChange={(e) => setDraft((p) => ({ ...p, [SPECIAL_OPENING_TIME_KEY]: e.target.value }))}
