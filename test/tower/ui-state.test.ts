@@ -315,7 +315,9 @@ test('stages one lightweight red card before the terminal tower reveal', () => {
   assert.equal(source.includes('nextRemaining === 0 && !redCardRevealActive'), true);
   assert.equal(source.includes("!result && !loading && !redCardRevealActive"), true);
   assert.equal(source.includes('attempt?.canClaim && runIsOpen && !redCardRevealActive'), true);
-  assert.equal(source.includes("result?.result === 'SAFE' && !result.completed && attempt?.canClaim && runIsOpen && !redCardRevealActive"), true);
+  assert.equal(source.includes("pendingSafeLevel && attempt?.canClaim && runIsOpen && !redCardRevealActive"), true);
+  assert.equal(source.includes("attempt?.status === 'IN_PROGRESS' && !attempt.canClaim && runIsOpen"), true);
+  assert.equal(source.includes("lastResolvedFloor?.result === 'SAFE'"), true);
   assert.equal(source.includes('aria-label={redCard ? `Floor ${floor.level} card ${index + 1} was red`'), true);
   assert.equal(source.includes("{redCard ? <X size={27} /> : '?'}"), true);
   assert.equal(source.includes('.active-cards button.red-card-reveal strong { color: #ffd9de; }'), true);
@@ -347,7 +349,7 @@ test('pulses the selected safe card without delaying reward actions', () => {
   assert.equal(safeKeyframes.includes('opacity:'), false);
   assert.equal(source.match(/@keyframes/g)?.length, 2);
   assert.equal(source.match(/window\.setTimeout/g)?.length, 1);
-  assert.equal(source.includes("result?.result === 'SAFE' && !result.completed"), true);
+  assert.equal(source.includes("lastResolvedFloor?.result === 'SAFE'"), true);
   assert.equal(source.includes('(canClaim || canClimb) && ('), true);
   assert.equal(source.includes('infinite'), false);
 });

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import test from 'node:test';
 import { prisma } from '../../lib/prisma';
 import { checkInBookingWithArtifact, getArmoryState, getArmoryToday, redeemArmoryTicket } from '../../lib/armory';
@@ -24,8 +25,15 @@ import {
 const baseNow = new Date('2030-08-20T12:00:00.000Z');
 const oneHour = 60 * 60 * 1000;
 
+function towerCardId(attemptId: string, level: number, slot: 'A' | 'B' | 'C') {
+  const secret = process.env.TOWER_CARD_SECRET || process.env.AUTH_SECRET || 'tower-dev-secret';
+  const digest = crypto.createHmac('sha256', secret).update(`${attemptId}:${level}:${slot}`).digest('base64url').slice(0, 14);
+  return `card_${digest}`;
+}
+
 function assertActivePrivacy(value: unknown) {
   const json = JSON.stringify(value);
+  assert.ok(Buffer.byteLength(json, 'utf8') < 10_000, 'active Tower response exceeded 10 KB');
   for (const privateField of [
     'redCards', 'resolvedPicks', 'cardSlot', 'redPosition', 'tokenId', 'checkInId', 'sourceRefId',
     'startedAt', 'securedLevel', '"code"',
@@ -225,14 +233,22 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.equal(safe.result, 'SAFE');
       assert.deepEqual(duplicate, safe);
       assert.equal(safe.attempt.canClaim, true);
+      assert.equal(safe.attempt.cards.length, 0);
       assert.equal(safe.attempt.history.length, 1);
       assertActivePrivacy(safe);
+      const restoredDecision = await getTowerCurrent(owner.id, baseNow);
+      assert.equal(restoredDecision.attempt?.canClaim, true);
+      assert.equal(restoredDecision.attempt?.cards.length, 0);
       await assert.rejects(
         () => pickTowerCard(owner.id, first.attemptId, first.cards[2].id, baseNow),
         (error: TowerError) => error.code === 'INVALID_CARD',
       );
       await assert.rejects(
-        () => pickTowerCard(lossUser.id, first.attemptId, safe.attempt.cards[1].id, baseNow),
+        () => pickTowerCard(owner.id, first.attemptId, towerCardId(first.attemptId, 2, 'B'), baseNow),
+        (error: TowerError) => error.code === 'CLIMB_DECISION_REQUIRED',
+      );
+      await assert.rejects(
+        () => pickTowerCard(lossUser.id, first.attemptId, first.cards[1].id, baseNow),
         (error: TowerError) => error.code === 'FORBIDDEN',
       );
 
@@ -355,11 +371,12 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.equal(continued.securedReward, null);
       assert.deepEqual(continuedRetry, continued);
       assert.equal((await getTowerCurrent(lossUser.id, baseNow)).attempt?.canClaim, false);
+      assert.equal(continued.cards.length, 3);
       await assert.rejects(
         () => claimTowerReward(lossUser.id, attempt.attemptId, baseNow),
         (error: TowerError) => error.code === 'CLIMB_COMMITTED',
       );
-      const loss = await pickTowerCard(lossUser.id, attempt.attemptId, safe.attempt.cards[0].id, baseNow);
+      const loss = await pickTowerCard(lossUser.id, attempt.attemptId, continued.cards[0].id, baseNow);
 
       assert.equal(loss.result, 'LOSS');
       assert.equal(loss.attempt.securedReward, null);
@@ -392,7 +409,8 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.deepEqual(concurrent[0], concurrent[1]);
       let result = concurrent[0];
       for (let level = 2; level <= 10; level += 1) {
-        result = await pickTowerCard(completeUser.id, attempt.attemptId, result.attempt.cards[1].id, baseNow);
+        const continued = await continueTowerAttempt(completeUser.id, attempt.attemptId, level - 1, baseNow);
+        result = await pickTowerCard(completeUser.id, attempt.attemptId, continued.cards[1].id, baseNow);
       }
       assert.equal(result.completed, true);
       assert.equal(result.attempt.status, 'COMPLETED');
@@ -428,7 +446,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.equal(safe.attempt.canClaim, true);
 
       await assert.rejects(
-        () => pickTowerCard(timeoutUser.id, attempt.attemptId, safe.attempt.cards[1].id, boundary),
+        () => pickTowerCard(timeoutUser.id, attempt.attemptId, attempt.cards[1].id, boundary),
         (error: TowerError) => error.code === 'TOWER_RUN_EXPIRED',
       );
       await assert.rejects(
@@ -460,7 +478,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       const boundary = new Date(granted.token.expiresAt);
 
       await assert.rejects(
-        () => pickTowerCard(expiryUser.id, attempt.attemptId, safe.attempt.cards[1].id, boundary),
+        () => pickTowerCard(expiryUser.id, attempt.attemptId, attempt.cards[1].id, boundary),
         (error: TowerError) => error.code === 'TOWER_EXPIRED',
       );
       await assert.rejects(

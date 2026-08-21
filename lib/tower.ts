@@ -94,6 +94,7 @@ export function friendlyTowerError(error: unknown) {
     ATTEMPT_ENDED: { error: 'This Tower attempt has already ended.', status: 409 },
     INVALID_CARD: { error: 'Choose a valid card.', status: 400 },
     NO_SECURED_REWARD: { error: 'Clear a floor before taking a reward.', status: 400 },
+    CLIMB_DECISION_REQUIRED: { error: 'Take your reward or choose the next floor first.', status: 409 },
     CLIMB_COMMITTED: { error: 'You chose the next floor. Pick a card before taking a reward.', status: 409 },
     TICKET_CODE_FAILED: { error: 'The reward ticket could not be created. Please retry.', status: 500 },
     BAD_TOWER_CONFIG: { error: 'Tower rewards need admin configuration.', status: 500 },
@@ -312,6 +313,10 @@ function serializeAttempt(
     : parseJson<TowerPublicReward | null>(attempt.securedRewardSnapshot, null);
   const latestPick = parseJson<TowerPickRecord[]>(attempt.resolvedPicks, []).at(-1);
   const terminal = status !== 'IN_PROGRESS';
+  const waitingForDecision = status === 'IN_PROGRESS'
+    && Boolean(securedReward)
+    && latestPick?.result === 'SAFE'
+    && latestPick.continued !== true;
   return {
     attemptId: attempt.id,
     level: attempt.currentLevel,
@@ -327,7 +332,9 @@ function serializeAttempt(
     serverNow: now.toISOString(),
     floors: publicFloors(rewards),
     history: publicHistory(attempt),
-    cards: status === 'IN_PROGRESS' ? cardsForLevel(attempt.id, attempt.currentLevel) : [],
+    cards: status === 'IN_PROGRESS' && !waitingForDecision
+      ? cardsForLevel(attempt.id, attempt.currentLevel)
+      : [],
     ...(terminal ? { reveal: publicReveal(attempt) } : {}),
   };
 }
@@ -616,6 +623,14 @@ export async function pickTowerCard(userId: string, attemptId: string, selectedC
     const level = attempt.currentLevel;
     const slot = slotForCard(attempt.id, level, selectedCardId);
     if (!slot) throw new TowerError('INVALID_CARD');
+    const latestPick = history.at(-1);
+    if (
+      latestPick?.result === 'SAFE'
+      && latestPick.level === level - 1
+      && latestPick.continued !== true
+    ) {
+      throw new TowerError('CLIMB_DECISION_REQUIRED', undefined, 409);
+    }
     const redCards = parseJson<string[]>(attempt.redCards, []);
     const redSlot = redCards[level - 1];
     if (!TOWER_CARD_SLOTS.includes(redSlot as typeof TOWER_CARD_SLOTS[number])) throw new TowerError('BAD_TOWER_CONFIG', undefined, 500);

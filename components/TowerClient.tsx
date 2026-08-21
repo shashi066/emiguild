@@ -140,6 +140,9 @@ function attemptMessage(attempt: TowerAttemptState | null, result: PickResult | 
   if (attempt?.status === 'CLAIMED') return 'Reward taken. The full tower is revealed.';
   if (attempt?.status === 'TIMED_OUT') return 'Time is up. Your next climb is a fresh start.';
   if (attempt?.status === 'EXPIRED') return 'This Tower attempt expired.';
+  if (attempt?.status === 'IN_PROGRESS' && attempt.canClaim && attempt.securedReward) {
+    return `${rewardLabel(attempt.securedReward)} secured. Take it or climb.`;
+  }
   return 'Choose one card on the highlighted floor.';
 }
 
@@ -178,7 +181,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const timedStatus = shouldShowTowerAttemptExpiry(attempt?.status);
   const redCardRevealActive = redCardReveal !== null;
   const runIsOpen = remainingMs === null || remainingMs > 0;
-  const canPick = Boolean(attempt?.status === 'IN_PROGRESS' && runIsOpen && !result && !loading && !redCardRevealActive);
+  const canPick = Boolean(attempt?.status === 'IN_PROGRESS' && !attempt.canClaim && runIsOpen && !result && !loading && !redCardRevealActive);
   const canClaim = Boolean(attempt?.canClaim && runIsOpen && !redCardRevealActive);
   const timerWarning = Boolean(timedStatus && remainingMs !== null && remainingMs > 0 && remainingMs <= TOWER_WARNING_THRESHOLD_MS);
   const timerEnded = Boolean(timedStatus && remainingMs === 0);
@@ -186,8 +189,13 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const floors = useMemo(() => orderTowerFloors(attempt?.floors ?? []), [attempt?.floors]);
   const historyByLevel = useMemo(() => new Map((attempt?.history ?? []).map((item) => [item.level, item])), [attempt?.history]);
   const revealByLevel = useMemo(() => new Map((attempt?.reveal ?? []).map((item) => [item.level, item.redPosition])), [attempt?.reveal]);
-  const lastResolvedLevel = attempt?.history.length ? attempt.history[attempt.history.length - 1].level : undefined;
-  const pendingSafeLevel = result?.result === 'SAFE' && !result.completed ? lastResolvedLevel : undefined;
+  const lastResolvedFloor = attempt?.history.length ? attempt.history[attempt.history.length - 1] : undefined;
+  const pendingSafeLevel = attempt?.status === 'IN_PROGRESS'
+    && attempt.canClaim
+    && lastResolvedFloor?.result === 'SAFE'
+    && lastResolvedFloor.level < attempt.level
+    ? lastResolvedFloor.level
+    : undefined;
   const focusedLevel = attempt ? getTowerFocusedLevel({
     attemptLevel: attempt.level,
     attemptStatus: attempt.status,
@@ -196,7 +204,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const canUseNextToken = Boolean(
     terminalStatus(attempt?.status) && !attempt?.canClaim && state.availableTokens > 0,
   );
-  const canClimb = Boolean(result?.result === 'SAFE' && !result.completed && attempt?.canClaim && runIsOpen && !redCardRevealActive);
+  const canClimb = Boolean(pendingSafeLevel && attempt?.canClaim && runIsOpen && !redCardRevealActive);
   const showActions = canClaim || canClimb || canUseNextToken;
   const showInlineFeedback = Boolean(attempt?.status === 'IN_PROGRESS' || canClaim);
 
@@ -341,7 +349,13 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Unable to start Tower.');
       scrollReasonRef.current = 'start';
-      setState((current) => ({ ...current, availableTokens: Math.max(0, current.availableTokens - 1), attempt: data }));
+      setState((current) => ({
+        ...current,
+        availableTokens: current.attempt?.attemptId === data.attemptId
+          ? current.availableTokens
+          : Math.max(0, current.availableTokens - 1),
+        attempt: data,
+      }));
       setResult(null);
       setSelectedCard('');
     } catch (startError) {

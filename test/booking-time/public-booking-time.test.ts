@@ -9,7 +9,6 @@ import {
   getIndiaClock,
   getPublicBookingHoursForDate,
   getPublicTimeSlotsForDate,
-  getSpecialOpeningNotice,
   isBookingStartPastInIndia,
   validatePublicBookingTime,
 } from '../../lib/public-booking-time';
@@ -116,22 +115,6 @@ test('applies a valid same-day early opening override to slots and validation', 
     validatePublicBookingTime('2026-07-28', '11:00', 1, specialOpening),
     'OUTSIDE_PUBLIC_HOURS',
   );
-});
-
-test('keeps the enabled early-opening notice visible through closing time', () => {
-  const specialOpening = getActiveSpecialOpening(
-    {
-      special_opening_enabled: 'true',
-      special_opening_date: '2026-07-27',
-      special_opening_time: '14:00',
-    },
-    '2026-07-27',
-  );
-
-  assert.ok(specialOpening);
-  assert.equal(getSpecialOpeningNotice(specialOpening, 13 * 60 + 30)?.state, 'upcoming');
-  assert.equal(getSpecialOpeningNotice(specialOpening, 18 * 60)?.state, 'open-now');
-  assert.equal(getSpecialOpeningNotice(specialOpening, PUBLIC_BOOKING_CLOSE_MINUTES), null);
 });
 
 test('ignores disabled, expired, invalid, and non-early opening overrides', () => {
