@@ -33,6 +33,9 @@ model User {
   armoryLoadout     ArmoryLoadout?
   armoryDailyClaims ArmoryDailyClaim[]
   armoryTickets     ArmoryTicket[]
+  towerTokens       TowerToken[] @relation("TowerTokenOwner")
+  towerTokensGranted TowerToken[] @relation("TowerTokenGrantor")
+  towerAttempts     TowerAttempt[]
   armoryTradeListings ArmoryTradeListing[] @relation("ArmoryTradeSeller")
   armoryTradePurchases ArmoryTradeListing[] @relation("ArmoryTradeBuyer")
   guildGemLedger      GuildGemLedger[] @relation("GuildGemOwner")
@@ -94,6 +97,7 @@ model Booking {
   userPassId        String?
   passHoursDeducted Float    @default(0)
   appliedBenefitType String?
+  checkedInAt       DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -385,10 +389,12 @@ model ArmorySetReward {
 model ArmoryTicket {
   id             String    @id @default(cuid())
   userId         String
-  setId          String
+  setId          String?
   rewardSnapshot String
   code           String    @unique
   status         String    @default("UNUSED")
+  source         String    @default("ARMORY")
+  sourceRefId    String?
   claimDate      String    @default("") // YYYY-MM-DD in IST
   claimedAt      DateTime  @default(now())
   expiresAt      DateTime
@@ -397,11 +403,58 @@ model ArmoryTicket {
   updatedAt      DateTime  @updatedAt
 
   user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  set  ArmorySet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  set  ArmorySet? @relation(fields: [setId], references: [id], onDelete: Cascade)
 
   @@index([userId, claimDate])
   @@index([claimDate])
+  @@unique([source, sourceRefId])
   @@map("armory_tickets")
+}
+
+model TowerToken {
+  id          String    @id @default(cuid())
+  userId      String
+  checkInId   String?   @unique
+  source      String    @default("CHECK_IN")
+  sourceRefId String?   @unique
+  grantedById String?
+  status      String    @default("AVAILABLE")
+  earnedAt    DateTime  @default(now())
+  expiresAt   DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  usedAt      DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  user      User          @relation("TowerTokenOwner", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User?         @relation("TowerTokenGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+  attempt   TowerAttempt?
+
+  @@index([userId, status, expiresAt])
+  @@index([source, createdAt])
+  @@map("tower_tokens")
+}
+
+model TowerAttempt {
+  id                    String    @id @default(cuid())
+  tokenId               String    @unique
+  userId                String
+  currentLevel          Int       @default(1)
+  securedLevel          Int       @default(0)
+  securedRewardSnapshot String?
+  status                String    @default("IN_PROGRESS")
+  redCards              String
+  resolvedPicks         String    @default("[]")
+  startedAt             DateTime  @default(now())
+  runExpiresAt          DateTime
+  completedAt           DateTime?
+  claimedAt             DateTime?
+  updatedAt             DateTime  @updatedAt
+
+  token  TowerToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, runExpiresAt])
+  @@map("tower_attempts")
 }
 
 model ArmoryTradeListing {

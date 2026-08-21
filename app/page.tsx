@@ -8,6 +8,7 @@ import { auth } from '@/auth';
 import { formatCurrency } from '@/lib/utils';
 import { getIndiaClock, getSpecialOpeningNotice } from '@/lib/public-booking-time';
 import { loadActiveSpecialOpening } from '@/lib/special-opening-server';
+import { getTowerHomePrompt } from '@/lib/tower';
 import {
   Gamepad2,
   Calendar,
@@ -24,6 +25,7 @@ import {
   Award,
   RotateCcw,
   Gift,
+  Castle,
 } from 'lucide-react';
 
 async function getStations() {
@@ -179,12 +181,20 @@ const AVAILABLE_GAMES = [
 
 export default async function HomePage() {
   const now = new Date();
-  const [stations, stats, session, specialOpening, showAvailabilitySetting] = await Promise.all([
+  const sessionPromise = auth();
+  const towerPromptPromise = sessionPromise.then((currentSession) => (
+    currentSession?.user?.id ? getTowerHomePrompt(currentSession.user.id, now) : null
+  )).catch((error) => {
+    console.error('Tower homepage prompt failed:', error);
+    return null;
+  });
+  const [stations, stats, session, specialOpening, showAvailabilitySetting, towerPrompt] = await Promise.all([
     getStations(),
     getStats(),
-    auth(),
+    sessionPromise,
     loadActiveSpecialOpening(now),
     prisma.setting.findUnique({ where: { key: 'show_stations_availability' } }),
+    towerPromptPromise,
   ]);
   const showStationsAvailability = showAvailabilitySetting?.value !== 'false';
   const indiaClock = getIndiaClock(now);
@@ -220,6 +230,16 @@ export default async function HomePage() {
                     <span>{specialOpeningNotice.detail}</span>
                   </span>
                 </div>
+              )}
+
+              {towerPrompt && (
+                <Link href="/tower" className="hero-opening-pill tower-token-pill">
+                  <Castle size={14} />
+                  <span className="hero-opening-pill-copy">
+                    <strong>{towerPrompt.kind === 'ATTEMPT' ? 'Continue your Tower' : 'Tower Token ready'}</strong>
+                    <span>Play before the deadline</span>
+                  </span>
+                </Link>
               )}
             </div>
 

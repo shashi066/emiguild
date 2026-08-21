@@ -911,6 +911,19 @@ input.form-input[type="time"]:focus {
   color: #a7f3d0;
 }
 
+.tower-token-pill {
+  border-color: rgba(97, 232, 255, 0.5);
+  background: #0b1723;
+  color: #8ee8ff;
+  text-decoration: none;
+}
+
+.tower-token-pill:hover,
+.tower-token-pill:focus-visible {
+  border-color: #61e8ff;
+  outline: none;
+}
+
 .hero-title {
   font-family: 'Orbitron', sans-serif;
   font-size: clamp(2.5rem, 6vw, 5rem);

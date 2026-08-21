@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { InfoGuideModal } from '@/components/InfoGuideModal';
+import { RewardTicketCard } from '@/components/RewardTicketCard';
+import { getArtifactRewardTicketDisplay } from '@/lib/reward-ticket';
 import {
   canRetryForgeRefresh,
   createForgeClockAnchor,
@@ -84,14 +86,6 @@ async function readJson(res: Response) {
 
 function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function parseReward(snapshot: string) {
-  try {
-    return JSON.parse(snapshot);
-  } catch {
-    return { description: 'Armory reward ticket' };
-  }
 }
 
 function ticketMeta(snapshot: any) {
@@ -666,7 +660,9 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
           </div>
           {state?.tickets?.length ? (
             <div className="ticket-grid">
-              {state.tickets.map((ticket: any) => <RewardTicketCard key={ticket.id} ticket={ticket} />)}
+              {state.tickets.map((ticket: any) => (
+                <RewardTicketCard key={ticket.id} ticket={getArtifactRewardTicketDisplay(ticket)} />
+              ))}
             </div>
           ) : (
             <p className="muted">Complete a matching set to create your first counter-redeemable ticket.</p>
@@ -1213,28 +1209,6 @@ function ArtifactCard({ item, equippedSlot, saving, onEquip, onCraft }: any) {
   );
 }
 
-function RewardTicketCard({ ticket }: { ticket: any }) {
-  const snapshot = parseReward(ticket.rewardSnapshot);
-  const meta = ticketMeta(snapshot);
-  const Icon = meta.Icon;
-
-  return (
-    <article className="ticket-card" style={{ ['--ticket-accent' as any]: meta.accent }}>
-      <div className="ticket-type">
-        <span><Icon size={16} /> {meta.label}</span>
-        <strong>{meta.value}</strong>
-      </div>
-      <div className="ticket-main">
-        <span>{ticket.set?.name ?? snapshot.setName ?? 'Armory Set'}</span>
-        <h3>{snapshot.description ?? 'Armory reward ticket'}</h3>
-      </div>
-      <div className="ticket-foot">
-        <span><Clock size={14} /> Expires end of today</span>
-      </div>
-    </article>
-  );
-}
-
 function ArmoryStyles() {
   return (
     <style>{`
@@ -1371,18 +1345,6 @@ function ArmoryStyles() {
       .artifact-sigil-md { width: 66px; aspect-ratio: 1; }
       .artifact-sigil-lg { width: 112px; aspect-ratio: 1; }
       .ticket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
-      .ticket-card { min-height: 174px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); border-left: 4px solid var(--ticket-accent); border-radius: 8px; padding: var(--space-md); display: grid; gap: 12px; background: linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02)); }
-      .ticket-card::before, .ticket-card::after { content: ""; position: absolute; right: 22%; width: 18px; aspect-ratio: 1; border-radius: 50%; background: #0c1220; border: 1px solid rgba(255,255,255,0.12); }
-      .ticket-card::before { top: -9px; }
-      .ticket-card::after { bottom: -9px; }
-      .ticket-type { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-      .ticket-type span, .ticket-foot span { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-secondary); font-size: 0.78rem; font-weight: 800; }
-      .ticket-type span { color: var(--ticket-accent); text-transform: uppercase; letter-spacing: 0.06em; }
-      .ticket-type strong { color: var(--ticket-accent); font-family: var(--font-orbitron); font-size: 1.45rem; line-height: 1; }
-      .ticket-main { display: grid; gap: 4px; align-content: center; }
-      .ticket-main span { color: var(--color-text-muted); font-size: 0.82rem; }
-      .ticket-main h3 { font-size: 1.05rem; }
-      .ticket-foot { align-self: end; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.14); }
       .auth-shell { min-height: 72vh; align-content: center; }
       .auth-panel { max-width: 560px; margin: 0 auto; padding: var(--space-lg); text-align: center; justify-items: center; }
       @keyframes revealFade { from { opacity: 0; } to { opacity: 1; } }

@@ -86,6 +86,27 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   COMPLETED:  [],
 };
 
+function towerTokenGrantNotice(data: any) {
+  const expired = Boolean(data?.token?.expired);
+  const expiresAt = data?.token?.expiresAt
+    ? new Date(data.token.expiresAt).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    })
+    : '';
+  if (expired) {
+    return {
+      text: data.created
+        ? 'Tower Token was stored, but its claim window has already expired.'
+        : 'Tower Token already exists, but its claim window has expired.',
+      success: false,
+    };
+  }
+  if (data?.created) {
+    return { text: `Tower Token added${expiresAt ? `. Expires ${expiresAt}` : ' until the end of the next day'}.`, success: true };
+  }
+  return { text: `Tower Token already stored${expiresAt ? `. Expires ${expiresAt}` : ''}.`, success: true };
+}
+
 // ── Edit Modal ────────────────────────────────────────────────────────────────
 function EditModal({
   booking,
@@ -737,6 +758,33 @@ export default function AdminBookingsPage() {
             setNotice({ text: `Already checked in. The existing ${award.artifact.name} award was kept.`, success: true });
           } else {
             setNotice({ text: 'This booking was already checked in; no additional artifact was awarded.', success: false });
+          }
+        }
+        if (newStatus === 'CHECKED_IN') {
+          try {
+            const towerRes = await fetch('/api/tower/grant-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ checkInId: id }),
+            });
+            const towerData = await towerRes.json();
+            if (towerRes.ok) {
+              const tokenNotice = towerTokenGrantNotice(towerData);
+              setNotice((current) => ({
+                text: `${current?.text ? `${current.text} ` : 'Checked in. '}${tokenNotice.text}`,
+                success: tokenNotice.success,
+              }));
+            } else {
+              setNotice((current) => ({
+                text: `${current?.text ? `${current.text} ` : 'Checked in.'} Tower Token was not added: ${towerData.error ?? 'the grant failed.'} Grant one manually from Admin > Tower.`,
+                success: false,
+              }));
+            }
+          } catch {
+            setNotice((current) => ({
+              text: `${current?.text ? `${current.text} ` : 'Checked in.'} Tower Token grant failed. Grant one manually from Admin > Tower.`,
+              success: false,
+            }));
           }
         }
         return true;

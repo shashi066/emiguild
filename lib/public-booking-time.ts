@@ -168,7 +168,7 @@ export function getSpecialOpeningNotice(
     };
   }
 
-  if (currentMinutes < specialOpening.standardOpenMinutes) {
+  if (currentMinutes < specialOpening.closeMinutes) {
     return {
       title: 'We’re open early today',
       detail: `live from ${timeLabel}`,
