@@ -12,62 +12,64 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  phone     String?
-  role      String   @default("USER")   // "USER" | "ADMIN"
-  guildGems Int      @default(0)
-  watchPartyCoins Int @default(0)
+  id                     String   @id @default(cuid())
+  name                   String
+  email                  String   @unique
+  password               String
+  phone                  String?
+  role                   String   @default("USER") // "USER" | "ADMIN"
+  guildGems              Int      @default(0)
+  watchPartyCoins        Int      @default(0)
   lastForgotPasswordDate String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  bookings          Booking[]
-  passes            UserPass[]
-  dailySpins        UserDailySpin[]
-  wonDraws          LuckyDraw[] @relation("DrawWinner")
-  drawEntries       DrawEntry[]
-  tournamentPlayers TournamentPlayer[]
-  armoryInventory   ArmoryInventory[]
-  armoryLoadout     ArmoryLoadout?
-  armoryDailyClaims ArmoryDailyClaim[]
-  armoryTickets     ArmoryTicket[]
-  towerTokens       TowerToken[] @relation("TowerTokenOwner")
-  towerTokensGranted TowerToken[] @relation("TowerTokenGrantor")
-  towerAttempts     TowerAttempt[]
-  armoryTradeListings ArmoryTradeListing[] @relation("ArmoryTradeSeller")
-  armoryTradePurchases ArmoryTradeListing[] @relation("ArmoryTradeBuyer")
-  guildGemLedger      GuildGemLedger[] @relation("GuildGemOwner")
-  guildGemAdjustments GuildGemLedger[] @relation("GuildGemActor")
-  watchPartyInvites         WatchPartyInvite[]
-  watchPartyInvitesCreated  WatchPartyInvite[] @relation("WatchPartyInviteCreator")
-  watchPartyCheckins        WatchPartyInvite[] @relation("WatchPartyCheckinActor")
-  watchPartyPredictions     WatchPartyPrediction[]
-  watchPartyCoinLedger      WatchPartyCoinLedger[] @relation("WatchPartyCoinOwner")
-  watchPartyCoinAdjustments WatchPartyCoinLedger[] @relation("WatchPartyCoinActor")
-  watchPartySettlements     WatchParty[] @relation("WatchPartySettlementActor")
-  watchPartyShopOrders      WatchPartyShopOrder[] @relation("WatchPartyShopOrderOwner")
-  watchPartyShopOrdersGiven WatchPartyShopOrder[] @relation("WatchPartyShopOrderGivenActor")
-  watchPartyShopOrdersCancelled WatchPartyShopOrder[] @relation("WatchPartyShopOrderCancelActor")
+  bookings                      Booking[]
+  passes                        UserPass[]
+  dailySpins                    UserDailySpin[]
+  wonDraws                      LuckyDraw[]            @relation("DrawWinner")
+  drawEntries                   DrawEntry[]
+  tournamentPlayers             TournamentPlayer[]
+  armoryInventory               ArmoryInventory[]
+  armoryLoadout                 ArmoryLoadout?
+  armoryDailyClaims             ArmoryDailyClaim[]
+  armoryTickets                 ArmoryTicket[]
+  towerTokens                   TowerToken[]           @relation("TowerTokenOwner")
+  towerTokensGranted            TowerToken[]           @relation("TowerTokenGrantor")
+  towerAttempts                 TowerAttempt[]
+  armoryTradeListings           ArmoryTradeListing[]   @relation("ArmoryTradeSeller")
+  armoryTradePurchases          ArmoryTradeListing[]   @relation("ArmoryTradeBuyer")
+  guildGemLedger                GuildGemLedger[]       @relation("GuildGemOwner")
+  guildGemAdjustments           GuildGemLedger[]       @relation("GuildGemActor")
+  watchPartyInvites             WatchPartyInvite[]
+  watchPartyInvitesCreated      WatchPartyInvite[]     @relation("WatchPartyInviteCreator")
+  watchPartyCheckins            WatchPartyInvite[]     @relation("WatchPartyCheckinActor")
+  watchPartyPredictions         WatchPartyPrediction[]
+  watchPartyCoinLedger          WatchPartyCoinLedger[] @relation("WatchPartyCoinOwner")
+  watchPartyCoinAdjustments     WatchPartyCoinLedger[] @relation("WatchPartyCoinActor")
+  watchPartySettlements         WatchParty[]           @relation("WatchPartySettlementActor")
+  watchPartyShopOrders          WatchPartyShopOrder[]  @relation("WatchPartyShopOrderOwner")
+  watchPartyShopOrdersGiven     WatchPartyShopOrder[]  @relation("WatchPartyShopOrderGivenActor")
+  watchPartyShopOrdersCancelled WatchPartyShopOrder[]  @relation("WatchPartyShopOrderCancelActor")
+  fnbStockMovements             FnbStockMovement[]     @relation("FnbStockMovementActor")
+  fnbItemsVoided                BookingFnbItem[]       @relation("BookingFnbItemVoidActor")
 
   @@map("users")
 }
 
 model Station {
-  id          String   @id @default(cuid())
-  name        String
-  description String
-  specs       String
-  hourlyRate  Float
-  minDuration Float    @default(1)
-  hasControllers  Boolean  @default(true)
-  imageUrl    String?
-  isActive    Boolean  @default(true)
-  position    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  description    String
+  specs          String
+  hourlyRate     Float
+  minDuration    Float    @default(1)
+  hasControllers Boolean  @default(true)
+  imageUrl       String?
+  isActive       Boolean  @default(true)
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   bookings Booking[]
 
@@ -75,38 +77,107 @@ model Station {
 }
 
 model Booking {
-  id                String   @id @default(cuid())
-  userId            String?
-  stationId         String
-  date              String
-  startTime         String
-  endTime           String
-  duration          Float
-  totalPrice        Float
-  status            String   @default("PENDING")
-  bookingType       String   @default("ONLINE")
-  customerName      String?
-  customerPhone     String?
-  paymentStatus     String   @default("UNPAID")
-  razorpayOrderId   String?
-  razorpayPaymentId String?
-  extraControllers  Int      @default(0)
-  controllerCharge  Float    @default(0)
-  discount          Int      @default(0)
-  notes             String?
-  adminComment      String?
-  userPassId        String?
-  passHoursDeducted Float    @default(0)
+  id                 String   @id @default(cuid())
+  userId             String?
+  stationId          String
+  date               String
+  startTime          String
+  endTime            String
+  duration           Float
+  totalPrice         Float
+  status             String   @default("PENDING")
+  bookingType        String   @default("ONLINE")
+  customerName       String?
+  customerPhone      String?
+  paymentStatus      String   @default("UNPAID")
+  razorpayOrderId    String?
+  razorpayPaymentId  String?
+  extraControllers   Int      @default(0)
+  controllerCharge   Float    @default(0)
+  discount           Int      @default(0)
+  notes              String?
+  adminComment       String?
+  userPassId         String?
+  passHoursDeducted  Float    @default(0)
   appliedBenefitType String?
-  checkedInAt       DateTime?
+  checkedInAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user     User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  station  Station          @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  userPass UserPass?        @relation(fields: [userPassId], references: [id], onDelete: SetNull)
+  fnbItems BookingFnbItem[]
+
+  @@map("bookings")
+}
+
+model FnbProduct {
+  id                String   @id @default(cuid())
+  name              String
+  category          String
+  sku               String?  @unique
+  sellingPrice      Int
+  costPrice         Int?
+  currentStock      Int      @default(0)
+  lowStockThreshold Int      @default(0)
+  isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  user     User?     @relation(fields: [userId],     references: [id], onDelete: SetNull)
-  station  Station   @relation(fields: [stationId],  references: [id], onDelete: Cascade)
-  userPass UserPass? @relation(fields: [userPassId], references: [id], onDelete: SetNull)
+  bookingItems   BookingFnbItem[]
+  stockMovements FnbStockMovement[]
 
-  @@map("bookings")
+  @@index([isActive, category])
+  @@index([currentStock])
+  @@map("fnb_products")
+}
+
+model BookingFnbItem {
+  id          String    @id @default(cuid())
+  bookingId   String
+  productId   String
+  productName String
+  unitPrice   Int
+  quantity    Int
+  subtotal    Int
+  status      String    @default("ACTIVE")
+  voidedAt    DateTime?
+  voidedById  String?
+  voidReason  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  booking        Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  product        FnbProduct         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  voidedBy       User?              @relation("BookingFnbItemVoidActor", fields: [voidedById], references: [id], onDelete: SetNull)
+  stockMovements FnbStockMovement[]
+
+  @@index([bookingId, createdAt])
+  @@index([productId, status])
+  @@index([status, createdAt])
+  @@map("booking_fnb_items")
+}
+
+model FnbStockMovement {
+  id               String   @id @default(cuid())
+  productId        String
+  bookingFnbItemId String?
+  actorId          String?
+  type             String
+  quantityChange   Int
+  unitCost         Int?
+  note             String?
+  createdAt        DateTime @default(now())
+
+  product        FnbProduct      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  bookingFnbItem BookingFnbItem? @relation(fields: [bookingFnbItemId], references: [id], onDelete: SetNull)
+  actor          User?           @relation("FnbStockMovementActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+  @@index([bookingFnbItemId])
+  @@index([type, createdAt])
+  @@map("fnb_stock_movements")
 }
 
 model UserPass {
@@ -161,7 +232,7 @@ model UserDailySpin {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user     User      @relation(fields: [userId],     references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   lootItem LootItem? @relation(fields: [lootItemId], references: [id], onDelete: SetNull)
 
   @@unique([userId, spinDate])
@@ -213,17 +284,17 @@ model Game {
 }
 
 model Tournament {
-  id           String   @id @default(cuid())
-  name         String
-  game         String   @default("FC26")
-  date         String
-  entryFee     String   @default("Free")
-  prizePool    String   @default("")
-  maxPlayers   Int      @default(16)
-  status       String   @default("REGISTRATION_OPEN")
-  bracketGenerated Boolean @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  game             String   @default("FC26")
+  date             String
+  entryFee         String   @default("Free")
+  prizePool        String   @default("")
+  maxPlayers       Int      @default(16)
+  status           String   @default("REGISTRATION_OPEN")
+  bracketGenerated Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   players TournamentPlayer[]
   matches TournamentMatch[]
@@ -268,7 +339,7 @@ model TournamentMatch {
   tournament Tournament        @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   player1    TournamentPlayer? @relation("MatchPlayer1", fields: [player1Id], references: [id], onDelete: SetNull)
   player2    TournamentPlayer? @relation("MatchPlayer2", fields: [player2Id], references: [id], onDelete: SetNull)
-  winner     TournamentPlayer? @relation("MatchWinner",  fields: [winnerId],  references: [id], onDelete: SetNull)
+  winner     TournamentPlayer? @relation("MatchWinner", fields: [winnerId], references: [id], onDelete: SetNull)
 
   @@map("tournament_matches")
 }
@@ -302,13 +373,13 @@ model ArmoryArtifact {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  set             ArmorySet          @relation(fields: [setId], references: [id], onDelete: Cascade)
+  set             ArmorySet            @relation(fields: [setId], references: [id], onDelete: Cascade)
   inventory       ArmoryInventory[]
   dailyClaims     ArmoryDailyClaim[]
-  headgearLoadout ArmoryLoadout[]    @relation("ArmoryHeadgear")
-  armorLoadout    ArmoryLoadout[]    @relation("ArmoryArmor")
-  glovesLoadout   ArmoryLoadout[]    @relation("ArmoryGloves")
-  bootsLoadout    ArmoryLoadout[]    @relation("ArmoryBoots")
+  headgearLoadout ArmoryLoadout[]      @relation("ArmoryHeadgear")
+  armorLoadout    ArmoryLoadout[]      @relation("ArmoryArmor")
+  glovesLoadout   ArmoryLoadout[]      @relation("ArmoryGloves")
+  bootsLoadout    ArmoryLoadout[]      @relation("ArmoryBoots")
   tradeOffers     ArmoryTradeListing[] @relation("ArmoryTradeOfferedArtifact")
   tradeRequests   ArmoryTradeListing[] @relation("ArmoryTradeRequestedArtifact")
 
@@ -324,8 +395,8 @@ model ArmoryInventory {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  artifact ArmoryArtifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artifact ArmoryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
 
   @@unique([userId, artifactId])
   @@map("armory_inventory")
@@ -341,11 +412,11 @@ model ArmoryLoadout {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  headgear ArmoryArtifact?  @relation("ArmoryHeadgear", fields: [headgearArtifactId], references: [id], onDelete: SetNull)
-  armor    ArmoryArtifact?  @relation("ArmoryArmor", fields: [armorArtifactId], references: [id], onDelete: SetNull)
-  gloves   ArmoryArtifact?  @relation("ArmoryGloves", fields: [glovesArtifactId], references: [id], onDelete: SetNull)
-  boots    ArmoryArtifact?  @relation("ArmoryBoots", fields: [bootsArtifactId], references: [id], onDelete: SetNull)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headgear ArmoryArtifact? @relation("ArmoryHeadgear", fields: [headgearArtifactId], references: [id], onDelete: SetNull)
+  armor    ArmoryArtifact? @relation("ArmoryArmor", fields: [armorArtifactId], references: [id], onDelete: SetNull)
+  gloves   ArmoryArtifact? @relation("ArmoryGloves", fields: [glovesArtifactId], references: [id], onDelete: SetNull)
+  boots    ArmoryArtifact? @relation("ArmoryBoots", fields: [bootsArtifactId], references: [id], onDelete: SetNull)
 
   @@map("armory_loadouts")
 }
@@ -505,11 +576,11 @@ model GuildGemLedger {
 }
 
 model WatchParty {
-  id                      String   @id @default(cuid())
+  id                      String    @id @default(cuid())
   title                   String
   description             String?
-  status                  String   @default("DRAFT")
-  source                  String   @default("MANUAL")
+  status                  String    @default("DRAFT")
+  source                  String    @default("MANUAL")
   providerMatchId         String?
   providerCompetitionCode String?
   providerSeason          Int?
@@ -518,22 +589,22 @@ model WatchParty {
   awayTeam                String
   kickoffAt               DateTime
   venue                   String?
-  entryFeeRupees          Int      @default(100)
-  entryCoins              Int      @default(500)
-  entryCoinUnits          Int      @default(5000)
+  entryFeeRupees          Int       @default(100)
+  entryCoins              Int       @default(500)
+  entryCoinUnits          Int       @default(5000)
   predictionOptions       String?
   predictionLockAt        DateTime?
-  predictionStatus        String   @default("OPEN")
+  predictionStatus        String    @default("OPEN")
   settledOption           String?
   settledAt               DateTime?
   settledById             String?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   invites     WatchPartyInvite[]
   predictions WatchPartyPrediction[]
   coinLedger  WatchPartyCoinLedger[]
-  settledBy   User? @relation("WatchPartySettlementActor", fields: [settledById], references: [id], onDelete: SetNull)
+  settledBy   User?                  @relation("WatchPartySettlementActor", fields: [settledById], references: [id], onDelete: SetNull)
 
   @@index([status, kickoffAt])
   @@index([status, createdAt])
@@ -615,7 +686,7 @@ model WatchPartyCoinLedger {
 }
 
 model WatchPartyShopOrder {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
   itemKey        String
   itemType       String
@@ -623,13 +694,13 @@ model WatchPartyShopOrder {
   itemCategory   String
   tokenCost      Int
   tokenCostUnits Int
-  status         String   @default("PENDING")
+  status         String    @default("PENDING")
   givenAt        DateTime?
   givenById      String?
   cancelledAt    DateTime?
   cancelledById  String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user        User  @relation("WatchPartyShopOrderOwner", fields: [userId], references: [id], onDelete: Cascade)
   givenBy     User? @relation("WatchPartyShopOrderGivenActor", fields: [givenById], references: [id], onDelete: SetNull)

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard, BookOpen, Monitor, Users,
-  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity, Tv, Menu, X, Castle,
+  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity, Tv, Menu, X, Castle, CupSoda,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: '/admin/daily-spin', label: 'Guild Spin', icon: RotateCw },
   { href: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { href: '/admin/watch-parties', label: 'Watch Parties', icon: Tv },
+  { href: '/admin/fnb',          label: 'F&B Inventory',  icon: CupSoda },
   { href: '/admin/users',    label: 'Users',          icon: Users },
   { href: '/admin/settings', label: 'Settings',       icon: Settings },
   { href: '/admin/analytics', label: 'Analytics',     icon: Activity },
