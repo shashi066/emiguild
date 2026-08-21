@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   BookOpen, Search, CheckCircle, XCircle,
   AlertCircle, RefreshCw, Trash2, Globe, UserPlus, Phone, LogIn,
-  Pencil, X, Gamepad2, Plus, Minus, Award,
+  Pencil, X, Gamepad2, Plus, Minus, Award, CupSoda, Trash,
   IndianRupee,
 } from 'lucide-react';
 import {
@@ -647,6 +647,172 @@ function EditModal({
   );
 }
 
+type FnbProduct = {
+  id: string;
+  name: string;
+  category: string;
+  sellingPrice: number;
+  currentStock: number;
+  isActive: boolean;
+};
+
+type BookingFnbItem = {
+  id: string;
+  productName: string;
+  unitPrice: number;
+  quantity: number;
+  subtotal: number;
+  status: 'ACTIVE' | 'VOID';
+  voidReason: string | null;
+  createdAt: string;
+};
+
+function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
+  const [items, setItems] = useState<BookingFnbItem[]>([]);
+  const [products, setProducts] = useState<FnbProduct[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [voidingId, setVoidingId] = useState('');
+  const [voidCandidate, setVoidCandidate] = useState<BookingFnbItem | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [itemsResponse, productsResponse] = await Promise.all([
+        fetch(`/api/admin/bookings/${booking.id}/fnb-items`),
+        fetch('/api/admin/fnb/products'),
+      ]);
+      const [itemsData, productsData] = await Promise.all([itemsResponse.json(), productsResponse.json()]);
+      if (!itemsResponse.ok) throw new Error(itemsData.error ?? 'Could not load booking F&B items.');
+      if (!productsResponse.ok) throw new Error(productsData.error ?? 'Could not load F&B products.');
+      setItems(itemsData.items ?? []);
+      setProducts((productsData.products ?? []).filter((product: FnbProduct) => product.currentStock > 0));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not load F&B details.');
+    } finally {
+      setLoading(false);
+    }
+  }, [booking.id]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const addItem = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setAdding(true);
+    try {
+      const response = await fetch(`/api/admin/bookings/${booking.id}/fnb-items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: selectedProductId, quantity: Number(quantity) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Could not add F&B item.');
+      setSelectedProductId('');
+      setQuantity('1');
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not add F&B item.');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const voidItem = async () => {
+    if (!voidCandidate || !voidReason.trim()) return;
+    setVoidingId(voidCandidate.id);
+    setError('');
+    try {
+      const response = await fetch(`/api/admin/fnb/booking-items/${voidCandidate.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: voidReason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Could not void F&B item.');
+      setVoidCandidate(null);
+      setVoidReason('');
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not void F&B item.');
+    } finally {
+      setVoidingId('');
+    }
+  };
+
+  const activeSubtotal = items.filter((item) => item.status === 'ACTIVE').reduce((total, item) => total + item.subtotal, 0);
+  const isCancelled = booking.status === 'CANCELLED';
+
+  if (voidCandidate) {
+    return (
+      <AdminBookingModalShell onClose={onClose} labelledBy="void-fnb-item-title">
+        <div className="admin-modal-header">
+          <div>
+            <h2 id="void-fnb-item-title"><Trash size={19} style={{ display: 'inline', marginRight: 7, color: 'var(--color-accent-danger)' }} />Void F&amp;B item</h2>
+            <p>Review this correction before restoring stock.</p>
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setVoidCandidate(null)} aria-label="Close void confirmation"><X size={18} /></button>
+        </div>
+        {error && <div className="fnb-error" role="alert">{error}</div>}
+        <div className="booking-fnb-void-summary">
+          <strong>{voidCandidate.quantity} × {voidCandidate.productName}</strong>
+          <span>{formatCurrency(voidCandidate.subtotal)} will be removed from F&amp;B revenue and {voidCandidate.quantity} unit(s) will return to stock.</span>
+        </div>
+        <label className="booking-fnb-void-reason">Reason for voiding<textarea className="form-input" required autoFocus rows={4} value={voidReason} onChange={(event) => setVoidReason(event.target.value)} placeholder="For example: entered against the wrong booking" /></label>
+        <div className="fnb-modal-actions"><button type="button" className="btn btn-ghost" onClick={() => { setVoidCandidate(null); setVoidReason(''); }}>Keep item</button><button type="button" className="btn btn-danger" disabled={!voidReason.trim() || voidingId === voidCandidate.id} onClick={() => void voidItem()}><Trash size={15} /> {voidingId === voidCandidate.id ? 'Voiding…' : 'Void & restore stock'}</button></div>
+      </AdminBookingModalShell>
+    );
+  }
+
+  return (
+    <AdminBookingModalShell onClose={onClose} labelledBy="booking-fnb-title" size="wide">
+      <div className="admin-modal-header">
+        <div>
+          <h2 id="booking-fnb-title"><CupSoda size={19} style={{ display: 'inline', marginRight: 7 }} />F&amp;B consumed</h2>
+          <p>{booking.customerName ?? booking.user?.name ?? 'Customer'} · #{booking.id.slice(-8).toUpperCase()} · Separate from gaming charge</p>
+        </div>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close F&B details"><X size={18} /></button>
+      </div>
+      {error && <div className="fnb-error" role="alert">{error}</div>}
+      {!isCancelled && (
+        <form className="booking-fnb-add" onSubmit={addItem}>
+          <select className="form-input" required value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)}>
+            <option value="">Select in-stock F&amp;B item</option>
+            {products.map((product) => <option key={product.id} value={product.id}>{product.name} · ₹{product.sellingPrice} · {product.currentStock} left</option>)}
+          </select>
+          <input className="form-input" aria-label="Quantity" type="number" min="1" step="1" required value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+          <button className="btn btn-primary" disabled={adding || !selectedProductId}>{adding ? 'Adding…' : <><Plus size={15} /> Add item</>}</button>
+        </form>
+      )}
+      {isCancelled && <p className="booking-fnb-note">This booking is cancelled, so no additional F&amp;B items can be added.</p>}
+      {loading ? <div className="loading-state"><div className="spinner" />Loading consumed items…</div> : (
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead><tr><th>Item</th><th>Unit price</th><th>Quantity</th><th>F&amp;B subtotal</th><th>Status</th><th aria-label="Actions" /></tr></thead>
+            <tbody>
+              {items.length === 0 ? <tr><td colSpan={6} className="fnb-empty">No F&amp;B items have been recorded for this booking.</td></tr> : items.map((item) => (
+                <tr key={item.id} style={{ opacity: item.status === 'VOID' ? 0.6 : 1 }}>
+                  <td><strong>{item.productName}</strong><div className="fnb-table-meta">{new Date(item.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}</div></td>
+                  <td>{formatCurrency(item.unitPrice)}</td><td>{item.quantity}</td><td><strong>{formatCurrency(item.subtotal)}</strong></td>
+                  <td><span className={`badge ${item.status === 'ACTIVE' ? 'badge-confirmed' : 'badge-cancelled'}`}>{item.status === 'ACTIVE' ? 'Recorded' : 'Voided'}</span>{item.voidReason && <div className="fnb-table-meta">{item.voidReason}</div>}</td>
+                  <td>{item.status === 'ACTIVE' && <button className="btn btn-ghost btn-sm" disabled={voidingId === item.id} onClick={() => { setVoidReason(''); setVoidCandidate(item); }} style={{ color: 'var(--color-accent-danger)' }}><Trash size={14} /> Void</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr className="booking-fnb-total"><td colSpan={3}>F&amp;B subtotal (not included in gaming revenue)</td><td><strong>{formatCurrency(activeSubtotal)}</strong></td><td colSpan={2} /></tr></tfoot>
+          </table>
+        </div>
+      )}
+      <div className="fnb-modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Close</button></div>
+    </AdminBookingModalShell>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AdminBookingsPage() {
   const [bookings, setBookings]         = useState<Booking[]>([]);
@@ -665,6 +831,7 @@ export default function AdminBookingsPage() {
   const [cancelModal, setCancelModal]     = useState<{ id: string; name: string } | null>(null);
   const [cancelComment, setCancelComment] = useState('');
   const [editModal, setEditModal]         = useState<Booking | null>(null);
+  const [fnbModal, setFnbModal]           = useState<Booking | null>(null);
 
   useEffect(() => {
     fetch('/api/stations').then((r) => r.json()).then((d) => setStations(d.stations ?? []));
@@ -800,6 +967,7 @@ export default function AdminBookingsPage() {
       {editModal && (
         <EditModal booking={editModal} stations={stations} onClose={() => setEditModal(null)} onSaved={handleEditSaved} />
       )}
+      {fnbModal && <BookingFnbModal booking={fnbModal} onClose={() => setFnbModal(null)} />}
 
       <div className="page-header">
         <div>
@@ -1020,6 +1188,15 @@ export default function AdminBookingsPage() {
                             <Pencil size={13} />
                           </button>
                         )}
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setFnbModal(b)}
+                          disabled={isBusy}
+                          title="View or record F&B consumed"
+                          style={{ color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}
+                        >
+                          <CupSoda size={13} /> F&amp;B
+                        </button>
                         {transitions.includes('CONFIRMED') && (
                           <button className="btn btn-success btn-sm" onClick={() => handleStatusChange(b.id, 'CONFIRMED')} disabled={isBusy} id={`confirm-${b.id}`}>
                             <CheckCircle size={13} /> Confirm
