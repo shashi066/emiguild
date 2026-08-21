@@ -18,11 +18,9 @@ export async function POST(req: NextRequest) {
       role: session.user.role,
     });
     return NextResponse.json({
-      token: {
-        expiresAt: result.token.expiresAt,
-        expired: isTowerTokenExpired(result.token.expiresAt),
-      },
       created: result.created,
+      expiresAt: result.token.expiresAt,
+      expired: isTowerTokenExpired(result.token.expiresAt),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const friendly = friendlyTowerError(error);

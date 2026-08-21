@@ -9,6 +9,19 @@ export function getTowerRedCardRevealDelay(result: 'SAFE' | 'LOSS', reducedMotio
   return result === 'LOSS' && !reducedMotion ? TOWER_RED_CARD_REVEAL_MS : 0;
 }
 
+export function isTowerSafeReplayStale(input: {
+  result: 'SAFE' | 'LOSS';
+  requestedLevel: number;
+  latestResolvedLevel?: number;
+  attemptStatus: string;
+  attemptCanClaim: boolean;
+}) {
+  if (input.result !== 'SAFE') return false;
+  if (input.latestResolvedLevel !== input.requestedLevel) return true;
+  if (input.attemptStatus === 'IN_PROGRESS') return !input.attemptCanClaim;
+  return input.attemptStatus !== 'COMPLETED';
+}
+
 export function getTowerScrollBehavior(reason: TowerScrollReason, reducedMotion: boolean): ScrollBehavior {
   return reason === 'climb' && !reducedMotion ? 'smooth' : 'auto';
 }

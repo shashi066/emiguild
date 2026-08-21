@@ -29,6 +29,7 @@ import {
   getTowerRedCardRevealDelay,
   getTowerScrollBehavior,
   getTowerScreen,
+  isTowerSafeReplayStale,
   orderTowerFloors,
   shouldShowTowerAttemptExpiry,
   TOWER_RED_CARD_REVEAL_MS,
@@ -377,9 +378,17 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
       });
       const data: PickResult & { error?: string } = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Unable to pick card.');
-      setResult(data);
+      const staleSafeReplay = isTowerSafeReplayStale({
+        result: data.result,
+        requestedLevel: attempt.level,
+        latestResolvedLevel: data.attempt.history.at(-1)?.level,
+        attemptStatus: data.attempt.status,
+        attemptCanClaim: data.attempt.canClaim,
+      });
+      setResult(staleSafeReplay ? null : data);
+      if (staleSafeReplay) setSelectedCard('');
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const redCardRevealDelay = getTowerRedCardRevealDelay(data.result, reducedMotion);
+      const redCardRevealDelay = staleSafeReplay ? 0 : getTowerRedCardRevealDelay(data.result, reducedMotion);
       if (redCardRevealDelay > 0) {
         if (redCardRevealTimerRef.current !== null) window.clearTimeout(redCardRevealTimerRef.current);
         setRedCardReveal({ cardId });
@@ -483,7 +492,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
           </div>
         </header>
 
-        {error && attempt && <div className="alert alert-error tower-alert"><ShieldAlert size={16} /><span>{error}</span><button type="button" onClick={() => refresh().catch(() => undefined)} disabled={loading} aria-label="Retry"><RefreshCw size={15} /></button></div>}
+        {error && attempt && <div className="alert alert-error tower-alert"><ShieldAlert size={16} /><span>{error}</span><button type="button" onClick={() => refresh(attempt.attemptId).catch(() => undefined)} disabled={loading} aria-label="Retry"><RefreshCw size={15} /></button></div>}
         <p className="sr-only" aria-live="polite">{announcement}</p>
         <p className="sr-only" aria-live="assertive">{timerAnnouncement}</p>
 

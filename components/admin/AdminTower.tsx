@@ -169,8 +169,8 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
       setNotice({
         type: 'success',
         text: data.created
-          ? `Tower Token added for ${selectedUser.name}. Valid until ${formatDate(data.token.expiresAt)}.`
-          : `Tower Token was already stored for ${selectedUser.name}. It expires ${formatDate(data.token.expiresAt)}.`,
+          ? `Tower Token added for ${selectedUser.name}. Valid until ${formatDate(data.expiresAt)}.`
+          : `Tower Token was already stored for ${selectedUser.name}. It expires ${formatDate(data.expiresAt)}.`,
       });
       requestIdRef.current = newRequestId();
       setSelectedUser(null);

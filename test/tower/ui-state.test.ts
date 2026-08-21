@@ -8,6 +8,7 @@ import {
   getTowerRedCardRevealDelay,
   getTowerScrollBehavior,
   getTowerScreen,
+  isTowerSafeReplayStale,
   orderTowerFloors,
   shouldShowTowerAttemptExpiry,
   TOWER_RED_CARD_REVEAL_MS,
@@ -33,6 +34,27 @@ test('orders the mobile tower top-down and focuses a safe floor until Climb', ()
   assert.equal(getTowerFocusedLevel({ attemptLevel: 5, attemptStatus: 'IN_PROGRESS', pendingSafeLevel: 4 }), 4);
   assert.equal(getTowerFocusedLevel({ attemptLevel: 5, attemptStatus: 'IN_PROGRESS' }), 5);
   assert.equal(getTowerFocusedLevel({ attemptLevel: 5, attemptStatus: 'CLAIMED', pendingSafeLevel: 4 }), 5);
+});
+
+test('ignores delayed safe responses after the player has committed upward', () => {
+  const normalSafe = {
+    result: 'SAFE' as const,
+    requestedLevel: 1,
+    latestResolvedLevel: 1,
+    attemptStatus: 'IN_PROGRESS',
+    attemptCanClaim: true,
+  };
+  assert.equal(isTowerSafeReplayStale(normalSafe), false);
+  assert.equal(isTowerSafeReplayStale({ ...normalSafe, attemptCanClaim: false }), true);
+  assert.equal(isTowerSafeReplayStale({ ...normalSafe, latestResolvedLevel: 2 }), true);
+  assert.equal(isTowerSafeReplayStale({ ...normalSafe, attemptStatus: 'CLAIMED', attemptCanClaim: false }), true);
+  assert.equal(isTowerSafeReplayStale({ ...normalSafe, result: 'LOSS' }), false);
+  assert.equal(isTowerSafeReplayStale({
+    ...normalSafe,
+    requestedLevel: 10,
+    latestResolvedLevel: 10,
+    attemptStatus: 'COMPLETED',
+  }), false);
 });
 
 test('classifies active, cleared, lost, and terminal Tower floors', () => {
@@ -77,12 +99,19 @@ test('uses one local countdown interval without polling Tower state', () => {
 
 test('keeps booking check-in grants automatic without a redundant row action', () => {
   const source = readFileSync(new URL('../../app/admin/bookings/page.tsx', import.meta.url), 'utf8');
+  const grantRoute = readFileSync(new URL('../../app/api/tower/grant-token/route.ts', import.meta.url), 'utf8');
+  const adminGrantRoute = readFileSync(new URL('../../app/api/admin/tower/tokens/route.ts', import.meta.url), 'utf8');
+  const adminSource = readFileSync(new URL('../../components/admin/AdminTower.tsx', import.meta.url), 'utf8');
   assert.equal(source.match(/\/api\/tower\/grant-token/g)?.length, 1);
   assert.equal(source.includes("newStatus === 'CHECKED_IN'"), true);
   assert.equal(source.includes('Grant one manually from Admin > Tower.'), true);
   assert.equal(source.includes('ensureTowerToken'), false);
   assert.equal(source.includes('tower-token-${b.id}'), false);
   assert.equal(source.includes('title="Ensure Tower Token"'), false);
+  assert.equal(grantRoute.includes('token: {'), false);
+  assert.equal(adminGrantRoute.includes('token: {'), false);
+  assert.equal(source.includes('data?.token?.'), false);
+  assert.equal(adminSource.includes('data.token.'), false);
 });
 
 test('keeps the Admin Tower editor readable and compact on mobile', () => {
@@ -306,7 +335,7 @@ test('stages one lightweight red card before the terminal tower reveal', () => {
   const pickSource = source.slice(pickStart, pickEnd);
 
   assert.equal(source.includes('useState<TowerRedCardReveal | null>(null)'), true);
-  assert.equal(pickSource.includes('const redCardRevealDelay = getTowerRedCardRevealDelay(data.result, reducedMotion);'), true);
+  assert.equal(pickSource.includes('const redCardRevealDelay = staleSafeReplay ? 0 : getTowerRedCardRevealDelay(data.result, reducedMotion);'), true);
   assert.equal(pickSource.includes('if (redCardRevealDelay > 0)'), true);
   assert.equal(pickSource.includes('setRedCardReveal({ cardId });'), true);
   assert.equal(pickSource.includes('redCardRevealTimerRef.current = window.setTimeout(() => {'), true);

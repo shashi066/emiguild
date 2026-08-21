@@ -87,9 +87,9 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
 };
 
 function towerTokenGrantNotice(data: any) {
-  const expired = Boolean(data?.token?.expired);
-  const expiresAt = data?.token?.expiresAt
-    ? new Date(data.token.expiresAt).toLocaleString('en-IN', {
+  const expired = Boolean(data?.expired);
+  const expiresAt = data?.expiresAt
+    ? new Date(data.expiresAt).toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
     })
     : '';

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { friendlyTowerError, grantManualTowerToken } from '@/lib/tower';
+import { friendlyTowerError, grantManualTowerToken, isTowerTokenExpired } from '@/lib/tower';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,9 +16,8 @@ export async function POST(req: NextRequest) {
     const result = await grantManualTowerToken(userId, requestId, session.user.id);
     return NextResponse.json({
       created: result.created,
-      token: {
-        expiresAt: result.token.expiresAt,
-      },
+      expiresAt: result.token.expiresAt,
+      expired: isTowerTokenExpired(result.token.expiresAt),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const friendly = friendlyTowerError(error);
