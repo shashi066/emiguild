@@ -50,7 +50,15 @@ export default function AdminSettingsPage() {
   useEffect(() => { load(); }, []);
 
   const openModal = (id: ModalId) => {
-    setDraft({ ...settings });   // seed draft with current saved values
+    const indiaClock = getIndiaClock();
+    const nextDraft = { ...settings };
+
+    if (id === 'opening_boost' && nextDraft[SPECIAL_OPENING_DATE_KEY] !== indiaClock.date) {
+      nextDraft[SPECIAL_OPENING_ENABLED_KEY] = 'false';
+      nextDraft[SPECIAL_OPENING_DATE_KEY] = indiaClock.date;
+    }
+
+    setDraft(nextDraft);   // seed draft with current saved values
     setModalId(id);
   };
 
@@ -87,12 +95,14 @@ export default function AdminSettingsPage() {
   const indiaClock         = getIndiaClock();
   const controllerPrice    = settings['controller_price'] ?? '0';
   const venueCapacity      = settings['venue_capacity']   ?? '2';
-  const specialEnabled     = settings[SPECIAL_OPENING_ENABLED_KEY] === 'true';
+  const specialStoredDate  = settings[SPECIAL_OPENING_DATE_KEY];
+  const specialStoredEnabled = settings[SPECIAL_OPENING_ENABLED_KEY] === 'true';
+  const specialEnabled     = specialStoredEnabled && specialStoredDate === indiaClock.date;
   const specialTime        = settings[SPECIAL_OPENING_TIME_KEY]    ?? '11:00';
   const activeSpecial      = getActiveSpecialOpening(
     {
       [SPECIAL_OPENING_ENABLED_KEY]: specialEnabled,
-      [SPECIAL_OPENING_DATE_KEY]:    indiaClock.date,
+      [SPECIAL_OPENING_DATE_KEY]:    specialStoredDate,
       [SPECIAL_OPENING_TIME_KEY]:    specialTime,
     },
     indiaClock.date,
@@ -100,12 +110,14 @@ export default function AdminSettingsPage() {
   const showStationsAvailability = settings['show_stations_availability'] !== 'false';
 
   // Draft variants (inside modal)
-  const draftSpecialEnabled = draft[SPECIAL_OPENING_ENABLED_KEY] === 'true';
+  const draftSpecialDate    = draft[SPECIAL_OPENING_DATE_KEY];
+  const draftSpecialEnabled = draft[SPECIAL_OPENING_ENABLED_KEY] === 'true'
+    && draftSpecialDate === indiaClock.date;
   const draftSpecialTime    = draft[SPECIAL_OPENING_TIME_KEY]    ?? '11:00';
   const draftActiveSpecial  = getActiveSpecialOpening(
     {
       [SPECIAL_OPENING_ENABLED_KEY]: draftSpecialEnabled,
-      [SPECIAL_OPENING_DATE_KEY]:    indiaClock.date,
+      [SPECIAL_OPENING_DATE_KEY]:    draftSpecialDate,
       [SPECIAL_OPENING_TIME_KEY]:    draftSpecialTime,
     },
     indiaClock.date,
