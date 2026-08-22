@@ -544,7 +544,7 @@ test('admin can bulk archive finalized and cancelled watch parties without hidin
     await settleWatchParty(admin.id, settledParty.id, 'HOME');
     await voidWatchParty(admin.id, voidPartyRow.id);
 
-    const result = await archiveCompletedWatchParties({ titleContains: suffix });
+    const result = await archiveCompletedWatchParties({ titleContains: suffix.toUpperCase() });
     assert.equal(result.success, true);
     assert.equal(result.archivedCount >= 2, true);
 

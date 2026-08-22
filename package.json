@@ -28,7 +28,8 @@
     "test:station-availability": "tsx --test test/station-availability/availability.test.ts test/station-availability/display-copy.test.ts",
     "test:watch-party": "tsx --test test/watch-party/*.test.ts",
     "test:game-request": "tsx --test test/game-request/game-request.test.ts",
-    "test:analytics": "tsx --test test/analytics/*.test.ts"
+    "test:analytics": "tsx --test test/analytics/*.test.ts",
+    "test:tower": "tsx --env-file=.env.local --test test/tower/*.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

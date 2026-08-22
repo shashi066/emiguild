@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { caseInsensitiveContains } from '@/lib/prisma-search';
 import { runSerializableTransaction } from '@/lib/prisma-transaction';
 import premierLeagueFixtures from '@/data/watch-party/premier-league-2026-27-fixtures.json';
 
@@ -775,7 +776,7 @@ export async function archiveCompletedWatchParties(input: { titleContains?: stri
     where: {
       status: { not: 'ARCHIVED' },
       predictionStatus: { in: ['SETTLED', 'VOID'] },
-      ...(input.titleContains ? { title: { contains: input.titleContains } } : {}),
+      ...(input.titleContains ? { title: caseInsensitiveContains(input.titleContains) } : {}),
     },
     data: { status: 'ARCHIVED' },
   });
