@@ -763,24 +763,29 @@ function ArtifactGuideModal({ onClose }: { onClose: () => void }) {
     {
       title: 'Forge one artifact each day',
       description: 'Tap Forge Artifact to receive one random artifact.',
+      visual: { kind: 'icon', icon: Sparkles, label: 'Forge artifact' },
     },
     {
       title: 'Build one matching set',
       description: 'Collect Headgear, Armor, Gloves, and Boots from the same set.',
+      visual: { kind: 'icon', icon: Package, label: 'Matching artifact set' },
     },
     {
       title: 'Equip all four pieces',
       description: 'Open Artifact Vault and equip one matching artifact in each slot.',
+      visual: { kind: 'icon', icon: Shield, label: 'Equipped artifact set' },
     },
     {
       title: 'Claim your reward',
       description: 'Claiming permanently consumes all four equipped pieces and gives you a counter-redeemable reward ticket plus 1 Guild Gem.',
+      visual: { kind: 'icon', icon: Ticket, label: 'Artifact Reward Ticket' },
     },
     {
       title: 'Use duplicate artifacts',
       description: 'Craft 3 unequipped copies of the same artifact into its next rarity, or use extras in Artifact Exchange.',
+      visual: { kind: 'icon', icon: Store, label: 'Artifact crafting and exchange' },
     },
-  ];
+  ] as const;
 
   return (
     <InfoGuideModal

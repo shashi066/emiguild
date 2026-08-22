@@ -1,5 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { caseInsensitiveContains } from '@/lib/prisma-search';
 import { auth } from '@/auth';
 import { bookingSchema } from '@/lib/validations';
 import { addHours } from '@/lib/utils';
@@ -68,10 +69,10 @@ export async function GET(req: NextRequest) {
 
   if (search && isAdmin) {
     where.OR = [
-      { customerName: { contains: search } },
-      { user: { name: { contains: search } } },
-      { user: { email: { contains: search } } },
-      { station: { name: { contains: search } } },
+      { customerName: caseInsensitiveContains(search) },
+      { user: { name: caseInsensitiveContains(search) } },
+      { user: { email: caseInsensitiveContains(search) } },
+      { station: { name: caseInsensitiveContains(search) } },
     ];
   }
 

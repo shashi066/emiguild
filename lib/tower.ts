@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { caseInsensitiveContains } from '@/lib/prisma-search';
 import { runSerializableTransaction } from '@/lib/prisma-transaction';
 import { getArmoryToday } from '@/lib/armory';
 import {
@@ -13,7 +14,7 @@ export { getTowerTokenExpiry } from '@/lib/tower-clock';
 
 export const TOWER_TOTAL_LEVELS = 10;
 export const TOWER_CARD_SLOTS = ['A', 'B', 'C'] as const;
-export const TOWER_PASS_TYPES = ['BRONZE', 'SILVER', 'GOLD'] as const;
+export const TOWER_MANUAL_GRANT_MAX = 10;
 
 const TOWER_REWARDS_KEY = 'tower_rewards';
 const TOWER_ENABLED_KEY = 'tower_enabled';
@@ -26,9 +27,15 @@ export type TowerRewardConfig = {
   name: string;
   type: TowerRewardType;
   value?: number;
+};
+export type TowerPublicReward = {
+  id: string;
+  name: string;
+  type: TowerRewardType;
+  value?: number;
+  // Historical Tower tickets may still carry the old tiered pass label.
   passType?: string;
 };
-export type TowerPublicReward = Omit<TowerRewardConfig, 'level'>;
 export type TowerCard = { id: string };
 
 type TowerPickRecord = {
@@ -63,7 +70,7 @@ export const DEFAULT_TOWER_REWARDS: TowerRewardConfig[] = [
   { id: 'tower_l7_30m_racing', level: 7, name: '30 Minutes Racing', type: 'RACING_TIME', value: 30 },
   { id: 'tower_l8_60m_gaming', level: 8, name: '60 Minutes Gaming', type: 'GAMING_TIME', value: 60 },
   { id: 'tower_l9_20_discount', level: 9, name: '20% Booking Discount', type: 'DISCOUNT', value: 20 },
-  { id: 'tower_l10_bronze_pass', level: 10, name: 'Bronze Pass', type: 'PASS', value: 600, passType: 'BRONZE' },
+  { id: 'tower_l10_pass', level: 10, name: 'Bronze Pass', type: 'PASS' },
 ];
 
 let towerConfigReady = false;
@@ -150,25 +157,33 @@ export function normalizeTowerRewards(raw: unknown): TowerRewardConfig[] {
     const row = reward as Partial<TowerRewardConfig>;
     const level = Number(row.level);
     const type = row.type;
-    const name = typeof row.name === 'string' ? row.name.trim() : '';
-    const value = row.value == null ? undefined : Number(row.value);
-    const passType = typeof row.passType === 'string' ? row.passType.trim().toUpperCase() : undefined;
+    const value = Number(row.value);
+    const configuredName = typeof row.name === 'string' ? row.name.trim() : '';
     if (
-      !Number.isInteger(level) || level < 1 || level > TOWER_TOTAL_LEVELS || !name
+      !Number.isInteger(level) || level < 1 || level > TOWER_TOTAL_LEVELS
       || !['DISCOUNT', 'GAMING_TIME', 'RACING_TIME', 'PASS'].includes(String(type))
-      || !Number.isFinite(value) || Number(value) <= 0
-      || (type === 'DISCOUNT' && Number(value) > 100)
-      || (type === 'PASS' && !TOWER_PASS_TYPES.includes(passType as typeof TOWER_PASS_TYPES[number]))
+      || (type === 'PASS' && (!configuredName || configuredName.length > 80))
+      || (type !== 'PASS' && (!Number.isInteger(value) || Number(value) <= 0 || Number(value) > 10000))
+      || (type === 'DISCOUNT' && value > 100)
     ) throw new TowerError('INVALID_TOWER_CONFIG');
     return {
       id: typeof row.id === 'string' && row.id.trim() ? row.id.trim() : `tower_l${level}`,
-      level, name, type: type as TowerRewardType,
-      ...(value !== undefined ? { value } : {}),
-      ...(passType ? { passType } : {}),
+      level,
+      name: towerRewardName(type as TowerRewardType, value, configuredName),
+      type: type as TowerRewardType,
+      ...(type === 'PASS' ? {} : { value }),
     };
   }).sort((a, b) => a.level - b.level);
   if (!normalized.every((reward, index) => reward.level === index + 1)) throw new TowerError('INVALID_TOWER_CONFIG');
   return normalized;
+}
+
+export function towerRewardName(type: TowerRewardType, value: number, configuredName = '') {
+  if (type === 'PASS') return configuredName.trim();
+  if (type === 'DISCOUNT') return `${value}% Booking Discount`;
+  if (type === 'GAMING_TIME') return `${value} ${value === 1 ? 'Minute' : 'Minutes'} Gaming`;
+  if (type === 'RACING_TIME') return `${value} ${value === 1 ? 'Minute' : 'Minutes'} Racing`;
+  return configuredName.trim();
 }
 
 export async function updateTowerAdminConfig(body: unknown) {
@@ -193,9 +208,10 @@ export async function updateTowerAdminConfig(body: unknown) {
 
 function publicReward(reward: TowerRewardConfig): TowerPublicReward {
   return {
-    id: reward.id, name: reward.name, type: reward.type,
+    id: reward.id,
+    name: reward.name,
+    type: reward.type,
     ...(reward.value !== undefined ? { value: reward.value } : {}),
-    ...(reward.passType ? { passType: reward.passType } : {}),
   };
 }
 
@@ -382,43 +398,92 @@ export async function grantTowerToken(checkInId: string, actor: { id: string; ro
   }
 }
 
-export async function grantManualTowerToken(userId: string, requestId: string, adminId: string, now: Date = new Date()) {
+function manualGrantSourceRefs(requestId: string, quantity: number) {
+  const base = `ADMIN:${requestId}`;
+  return Array.from({ length: quantity }, (_, index) => index === 0 ? base : `${base}:${index + 1}`);
+}
+
+function validateManualGrantBatch<T extends { sourceRefId: string | null; userId: string }>(
+  tokens: T[],
+  sourceRefs: string[],
+  userId: string,
+) {
+  const tokensByRef = new Map(tokens.map((token) => [token.sourceRefId, token]));
+  if (tokens.length !== sourceRefs.length || tokens.some((token) => token.userId !== userId)) {
+    throw new TowerError('INVALID_GRANT_REQUEST');
+  }
+  const ordered = sourceRefs.map((sourceRefId) => tokensByRef.get(sourceRefId));
+  if (ordered.some((token) => !token)) throw new TowerError('INVALID_GRANT_REQUEST');
+  return ordered as T[];
+}
+
+export async function grantManualTowerTokens(
+  userId: string,
+  requestId: string,
+  quantity: number,
+  adminId: string,
+  now: Date = new Date(),
+) {
   const cleanRequestId = requestId.trim();
-  if (!userId || !/^[a-zA-Z0-9-]{8,100}$/.test(cleanRequestId)) throw new TowerError('INVALID_GRANT_REQUEST');
-  const sourceRefId = `ADMIN:${cleanRequestId}`;
+  if (
+    !userId
+    || !/^[a-zA-Z0-9-]{8,100}$/.test(cleanRequestId)
+    || !Number.isInteger(quantity)
+    || quantity < 1
+    || quantity > TOWER_MANUAL_GRANT_MAX
+  ) throw new TowerError('INVALID_GRANT_REQUEST');
+  const sourceRefs = manualGrantSourceRefs(cleanRequestId, quantity);
+  const sourceRefBase = sourceRefs[0];
+  const findBatch = (store: TowerStore) => store.towerToken.findMany({
+    where: {
+      OR: [
+        { sourceRefId: sourceRefBase },
+        { sourceRefId: { startsWith: `${sourceRefBase}:` } },
+      ],
+    },
+  });
   try {
     return await runSerializableTransaction(async (tx) => {
       const grantor = await tx.user.findFirst({ where: { id: adminId, role: 'ADMIN' }, select: { id: true } });
       if (!grantor) throw new TowerError('FORBIDDEN', undefined, 403);
-      const existing = await tx.towerToken.findUnique({ where: { sourceRefId } });
-      if (existing) {
-        if (existing.userId !== userId) throw new TowerError('INVALID_GRANT_REQUEST');
-        return { token: existing, created: false };
+      const existing = await findBatch(tx);
+      if (existing.length > 0) {
+        const tokens = validateManualGrantBatch(existing, sourceRefs, userId);
+        return { tokens, created: false, createdCount: 0 };
       }
       const user = await tx.user.findFirst({ where: { id: userId, role: 'USER' }, select: { id: true } });
       if (!user) throw new TowerError('USER_NOT_FOUND', undefined, 404);
-      const token = await tx.towerToken.create({
-        data: {
-          userId, source: 'ADMIN', sourceRefId, grantedById: adminId,
-          earnedAt: now, expiresAt: getTowerTokenExpiry(now),
-        },
-      });
-      return { token, created: true };
+      const expiresAt = getTowerTokenExpiry(now);
+      const tokens = [];
+      for (const sourceRefId of sourceRefs) {
+        tokens.push(await tx.towerToken.create({
+          data: {
+            userId, source: 'ADMIN', sourceRefId, grantedById: adminId,
+            earnedAt: now, expiresAt,
+          },
+        }));
+      }
+      return { tokens, created: true, createdCount: tokens.length };
     });
   } catch (error) {
     if (!isUniqueConstraintError(error)) throw error;
-    const token = await prisma.towerToken.findUnique({ where: { sourceRefId } });
-    if (!token) throw error;
-    if (token.userId !== userId) throw new TowerError('INVALID_GRANT_REQUEST');
-    return { token, created: false };
+    const existing = await findBatch(prisma);
+    if (existing.length === 0) throw error;
+    const tokens = validateManualGrantBatch(existing, sourceRefs, userId);
+    return { tokens, created: false, createdCount: 0 };
   }
+}
+
+export async function grantManualTowerToken(userId: string, requestId: string, adminId: string, now: Date = new Date()) {
+  const result = await grantManualTowerTokens(userId, requestId, 1, adminId, now);
+  return { token: result.tokens[0], created: result.created };
 }
 
 export async function searchTowerUsers(query: string) {
   const clean = query.trim().slice(0, 80);
   if (clean.length < 2) return [];
   return prisma.user.findMany({
-    where: { role: 'USER', OR: [{ name: { contains: clean } }, { email: { contains: clean } }] },
+    where: { role: 'USER', OR: [{ name: caseInsensitiveContains(clean) }, { email: caseInsensitiveContains(clean) }] },
     select: { id: true, name: true, email: true }, orderBy: { name: 'asc' }, take: 10,
   });
 }
@@ -430,10 +495,15 @@ export async function getTowerAdminHistory(input: { cursor?: string; take?: numb
   const query = input.query?.trim().slice(0, 80) ?? '';
   const status = input.status?.toUpperCase() ?? 'ALL';
   const where: Prisma.TowerTokenWhereInput = {
-    ...(query ? { user: { OR: [{ name: { contains: query } }, { email: { contains: query } }] } } : {}),
+    ...(query ? { user: { OR: [{ name: caseInsensitiveContains(query) }, { email: caseInsensitiveContains(query) }] } } : {}),
   };
   if (status === 'AVAILABLE') Object.assign(where, { status: 'AVAILABLE', expiresAt: { gt: now } });
   if (status === 'ACTIVE') Object.assign(where, {
+    status: 'USED',
+    expiresAt: { gt: now },
+    attempt: { is: { status: { in: ['IN_PROGRESS', 'COMPLETED'] }, runExpiresAt: { gt: now } } },
+  });
+  if (status === 'IN_CLIMB') Object.assign(where, {
     status: 'USED',
     expiresAt: { gt: now },
     attempt: { is: { status: { in: ['IN_PROGRESS', 'COMPLETED'] }, runExpiresAt: { gt: now } } },
@@ -450,10 +520,21 @@ export async function getTowerAdminHistory(input: { cursor?: string; take?: numb
     expiresAt: { gt: now },
     attempt: { is: { status: { in: ['IN_PROGRESS', 'COMPLETED'] }, runExpiresAt: { lte: now } } },
   });
+  if (status === 'NO_REWARD') Object.assign(where, {
+    OR: [
+      { attempt: { is: { status: 'LOST' } } },
+      {
+        status: 'USED',
+        expiresAt: { gt: now },
+        attempt: { is: { status: { in: ['IN_PROGRESS', 'COMPLETED'] }, runExpiresAt: { lte: now } } },
+      },
+    ],
+  });
   if (status === 'COMPLETED') Object.assign(where, {
     expiresAt: { gt: now },
     attempt: { is: { status: 'COMPLETED', runExpiresAt: { gt: now } } },
   });
+  if (status === 'REWARD_CLAIMED') Object.assign(where, { attempt: { is: { status: 'CLAIMED' } } });
   if (['LOST', 'CLAIMED'].includes(status)) Object.assign(where, { attempt: { is: { status } } });
   const rows = await prisma.towerToken.findMany({
     where,
@@ -476,6 +557,13 @@ export async function getTowerAdminHistory(input: { cursor?: string; take?: numb
         if (isTowerTokenExpired(row.expiresAt, now)) effectiveStatus = 'EXPIRED';
         else if (isTowerDeadlineReached(row.attempt.runExpiresAt, now)) effectiveStatus = 'TIMED_OUT';
       }
+      const adminStatus =
+        effectiveStatus === 'AVAILABLE' ? 'TOKEN_READY'
+        : effectiveStatus === 'CLAIMED' ? 'REWARD_CLAIMED'
+        : ['LOST', 'TIMED_OUT'].includes(effectiveStatus) ? 'NO_REWARD'
+        : effectiveStatus === 'EXPIRED' ? 'EXPIRED'
+        : ['IN_PROGRESS', 'COMPLETED'].includes(effectiveStatus) ? 'IN_CLIMB'
+        : effectiveStatus;
       return {
         id: row.id,
         source: row.source,
@@ -484,6 +572,7 @@ export async function getTowerAdminHistory(input: { cursor?: string; take?: numb
         user: row.user,
         grantedBy: row.grantedBy,
         effectiveStatus,
+        adminStatus,
         attempt: row.attempt ? {
           status: row.attempt.status,
           securedLevel: ['TIMED_OUT', 'EXPIRED'].includes(effectiveStatus) ? 0 : row.attempt.securedLevel,

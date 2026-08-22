@@ -1,6 +1,6 @@
 export type TowerScreen = 'error' | 'loading' | 'disabled' | 'no-ticket' | 'ready' | 'active' | 'lost' | 'completed' | 'claimed' | 'timed-out' | 'expired';
 export type TowerFloorPresentation = 'locked' | 'current' | 'pending-safe' | 'cleared' | 'lost' | 'revealed';
-export type TowerMiniCardPresentation = 'neutral' | 'safe' | 'red';
+export type TowerMiniCardPresentation = 'neutral' | 'safe' | 'selected-safe' | 'red';
 export type TowerScrollReason = 'restore' | 'start' | 'climb';
 
 export const TOWER_RED_CARD_REVEAL_MS = 1200;
@@ -73,10 +73,14 @@ export function getTowerMiniCardPresentation(input: {
   redPosition?: number;
 }): TowerMiniCardPresentation {
   if (input.redPosition !== undefined) {
-    return input.position === input.redPosition ? 'red' : 'safe';
+    if (input.position === input.redPosition) return 'red';
+    if (input.historyResult === 'SAFE' && input.position === input.selectedPosition) {
+      return 'selected-safe';
+    }
+    return 'safe';
   }
   if (input.historyResult === 'SAFE' && input.position === input.selectedPosition) {
-    return 'safe';
+    return 'selected-safe';
   }
   return 'neutral';
 }

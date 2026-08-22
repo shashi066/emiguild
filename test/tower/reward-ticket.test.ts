@@ -35,4 +35,20 @@ test('normalizes Artifact and Tower rewards for one shared ticket card', () => {
   assert.equal(tower.origin, 'Tower of Rewards');
   assert.match(tower.expiry, /^Valid until /);
   assert.equal(JSON.stringify(tower).includes('code'), false);
+
+  const genericPass = getTowerRewardTicketDisplay({
+    id: 'generic-pass-ticket',
+    reward: { name: 'Weekend Pass', type: 'PASS' },
+    expiresAt: '2030-08-22T18:30:00.000Z',
+  });
+  assert.equal(genericPass.label, 'Pass');
+  assert.equal(genericPass.value, 'Weekend Pass');
+
+  const legacyPass = getTowerRewardTicketDisplay({
+    id: 'legacy-pass-ticket',
+    reward: { name: 'Bronze Pass', type: 'PASS', value: 600, passType: 'BRONZE' },
+    expiresAt: '2030-08-22T18:30:00.000Z',
+  });
+  assert.equal(legacyPass.label, 'Bronze Pass');
+  assert.equal(legacyPass.value, '10 hr');
 });

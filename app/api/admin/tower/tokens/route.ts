@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { friendlyTowerError, grantManualTowerToken, isTowerTokenExpired } from '@/lib/tower';
+import { friendlyTowerError, grantManualTowerTokens, isTowerTokenExpired } from '@/lib/tower';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,11 +13,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const userId = typeof body?.userId === 'string' ? body.userId.trim() : '';
     const requestId = typeof body?.requestId === 'string' ? body.requestId.trim() : '';
-    const result = await grantManualTowerToken(userId, requestId, session.user.id);
+    const quantity = body?.quantity === undefined ? 1 : Number(body.quantity);
+    const result = await grantManualTowerTokens(userId, requestId, quantity, session.user.id);
+    const expiresAt = result.tokens[0].expiresAt;
     return NextResponse.json({
       created: result.created,
-      expiresAt: result.token.expiresAt,
-      expired: isTowerTokenExpired(result.token.expiresAt),
+      createdCount: result.createdCount,
+      quantity: result.tokens.length,
+      expiresAt,
+      expired: isTowerTokenExpired(expiresAt),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const friendly = friendlyTowerError(error);

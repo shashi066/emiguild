@@ -1,11 +1,16 @@
 'use client';
 
-import { Info, X } from 'lucide-react';
+import { Info, X, Zap, type LucideIcon } from 'lucide-react';
 import { AdminModalShell } from '@/components/admin/AdminModalShell';
+
+export type InfoGuideStepVisual =
+  | { kind: 'icon'; icon: LucideIcon; label: string }
+  | { kind: 'cards'; state: 'hidden' | 'safe' | 'red'; label: string };
 
 export type InfoGuideStep = {
   title: string;
   description: string;
+  visual?: InfoGuideStepVisual;
 };
 
 export type InfoGuideModalProps = {
@@ -52,15 +57,28 @@ export function InfoGuideModal({
         </header>
 
         <ol className="info-guide-steps" role="list">
-          {steps.map((step, index) => (
-            <li key={`${index}-${step.title}`}>
-              <span className="info-guide-step-number" aria-hidden="true">{index + 1}</span>
-              <div>
-                <strong>{step.title}</strong>
-                <span>{step.description}</span>
-              </div>
-            </li>
-          ))}
+          {steps.map((step, index) => {
+            const StepIcon = step.visual?.kind === 'icon' ? step.visual.icon : null;
+            return (
+              <li key={`${index}-${step.title}`} className={step.visual ? 'has-visual' : undefined}>
+                <span className="info-guide-step-number" aria-hidden="true">{index + 1}</span>
+                {step.visual && (
+                  <span className={`info-guide-step-visual ${step.visual.kind === 'cards' ? step.visual.state : 'icon'}`} role="img" aria-label={step.visual.label}>
+                    {StepIcon && <StepIcon size={21} strokeWidth={1.9} aria-hidden="true" />}
+                    {step.visual.kind === 'cards' && step.visual.state === 'hidden' && (
+                      <span className="info-guide-card-set" aria-hidden="true"><i>?</i><i>?</i><i>?</i></span>
+                    )}
+                    {step.visual.kind === 'cards' && step.visual.state === 'safe' && <Zap size={20} aria-hidden="true" />}
+                    {step.visual.kind === 'cards' && step.visual.state === 'red' && <X size={20} aria-hidden="true" />}
+                  </span>
+                )}
+                <div>
+                  <strong>{step.title}</strong>
+                  <span>{step.description}</span>
+                </div>
+              </li>
+            );
+          })}
         </ol>
 
         <div className="info-guide-actions">
@@ -158,6 +176,10 @@ export function InfoGuideModal({
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        .info-guide-steps li.has-visual {
+          grid-template-columns: 30px 44px minmax(0, 1fr);
+        }
+
         .info-guide-step-number {
           width: 28px;
           height: 28px;
@@ -169,6 +191,51 @@ export function InfoGuideModal({
           color: #8ee8ff;
           font-size: 0.76rem;
           font-weight: 900;
+        }
+
+        .info-guide-step-visual {
+          width: 42px;
+          height: 42px;
+          display: grid;
+          place-items: center;
+          align-self: start;
+          border: 1px solid rgba(97, 232, 255, 0.3);
+          border-radius: 6px;
+          background: #101c29;
+          color: #8ee8ff;
+        }
+
+        .info-guide-step-visual.safe {
+          border-color: #49ad79;
+          background: #17613f;
+          color: #d0f8e1;
+        }
+
+        .info-guide-step-visual.red {
+          border-color: #aa4c5a;
+          background: #571f2a;
+          color: #ffd0d5;
+        }
+
+        .info-guide-card-set {
+          display: grid;
+          grid-template-columns: repeat(3, 9px);
+          gap: 2px;
+        }
+
+        .info-guide-card-set i {
+          width: 9px;
+          height: 20px;
+          display: grid;
+          place-items: center;
+          border: 1px solid #466078;
+          border-radius: 2px;
+          background: #182638;
+          color: #d8e8ed;
+          font-size: 0.55rem;
+          font-style: normal;
+          font-weight: 800;
+          line-height: 1;
         }
 
         .info-guide-steps li > div {
@@ -217,7 +284,9 @@ export function InfoGuideModal({
           .info-guide-heading h2 { font-size: 1.05rem; }
           .info-guide-heading p { font-size: 0.8rem; }
           .info-guide-steps li { grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 10px 0; }
+          .info-guide-steps li.has-visual { grid-template-columns: 28px 38px minmax(0, 1fr); gap: 7px; }
           .info-guide-step-number { width: 26px; height: 26px; }
+          .info-guide-step-visual { width: 36px; height: 36px; }
           .info-guide-actions { display: grid; }
           .info-guide-confirm { width: 100%; min-height: 48px; }
         }

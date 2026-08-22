@@ -85,7 +85,29 @@ test('colors terminal history fully without revealing active red cards', () => {
     selectedPosition: 1,
     historyResult: 'SAFE',
   }));
-  assert.deepEqual(activeCards, ['neutral', 'safe', 'neutral']);
+  assert.deepEqual(activeCards, ['neutral', 'selected-safe', 'neutral']);
+
+  const visitedTerminalCards = [0, 1, 2].map((position) => getTowerMiniCardPresentation({
+    position,
+    selectedPosition: 1,
+    historyResult: 'SAFE',
+    redPosition: 2,
+  }));
+  assert.deepEqual(visitedTerminalCards, ['safe', 'selected-safe', 'red']);
+
+  const unvisitedTerminalCards = [0, 1, 2].map((position) => getTowerMiniCardPresentation({
+    position,
+    redPosition: 2,
+  }));
+  assert.deepEqual(unvisitedTerminalCards, ['safe', 'safe', 'red']);
+
+  const losingTerminalCards = [0, 1, 2].map((position) => getTowerMiniCardPresentation({
+    position,
+    selectedPosition: 2,
+    historyResult: 'LOSS',
+    redPosition: 2,
+  }));
+  assert.deepEqual(losingTerminalCards, ['safe', 'safe', 'red']);
 });
 
 test('uses one local countdown interval without polling Tower state', () => {
@@ -110,16 +132,62 @@ test('keeps booking check-in grants automatic without a redundant row action', (
   assert.equal(source.includes('title="Ensure Tower Token"'), false);
   assert.equal(grantRoute.includes('token: {'), false);
   assert.equal(adminGrantRoute.includes('token: {'), false);
+  assert.equal(adminGrantRoute.includes('tokens: result.tokens'), false);
+  assert.equal(adminGrantRoute.includes("body?.quantity === undefined ? 1 : Number(body.quantity)"), true);
+  assert.equal(adminGrantRoute.includes('createdCount: result.createdCount'), true);
+  assert.equal(adminGrantRoute.includes('quantity: result.tokens.length'), true);
   assert.equal(source.includes('data?.token?.'), false);
   assert.equal(adminSource.includes('data.token.'), false);
 });
 
+test('grants an idempotent 1 to 10 token batch without clearing the selected tester', () => {
+  const source = readFileSync(new URL('../../components/admin/AdminTower.tsx', import.meta.url), 'utf8');
+  const grantStart = source.indexOf('const grant = async () =>');
+  const grantEnd = source.indexOf('\n\n  return (', grantStart);
+  const grantSource = source.slice(grantStart, grantEnd);
+
+  assert.equal(source.includes("useState('1')"), true);
+  assert.equal(source.includes('requestedGrantQuantity >= 1'), true);
+  assert.equal(source.includes('requestedGrantQuantity <= 10'), true);
+  assert.equal(source.includes('id="tower-token-quantity"'), true);
+  assert.equal(source.includes('Number of Tokens'), true);
+  assert.equal(source.includes('min={1} max={10} step={1}'), true);
+  assert.equal(source.includes('!selectedUser || !grantQuantityValid || granting'), true);
+  assert.equal(grantSource.includes('quantity: requestedGrantQuantity'), true);
+  assert.equal(grantSource.includes('requestIdRef.current = newRequestId();'), true);
+  assert.equal(grantSource.includes('setSelectedUser(null)'), false);
+  assert.equal(grantSource.includes("setQuery('')"), false);
+  assert.equal(source.includes("`Grant ${requestedGrantQuantity} Token${requestedGrantQuantity === 1 ? '' : 's'}`"), true);
+  assert.equal(source.includes('This ${grantedQuantity}-token grant was already stored'), true);
+});
+
 test('keeps the Admin Tower editor readable and compact on mobile', () => {
   const source = readFileSync(new URL('../../components/admin/AdminTower.tsx', import.meta.url), 'utf8');
+  const rewardEditorStart = source.indexOf("{activeEditor === 'rewards' && (");
+  const rewardEditorEnd = source.indexOf("{view === 'history' && (", rewardEditorStart);
+  const rewardEditorSource = source.slice(rewardEditorStart, rewardEditorEnd);
+
   assert.equal(source.includes('className="search-leading-icon"'), true);
   assert.equal(source.includes('.tower-user-results { position: absolute; z-index: 3; top: calc(100% + 4px)'), true);
-  assert.equal(source.includes('grid-template-columns: minmax(0,1.35fr) minmax(76px,.65fr)'), true);
-  assert.equal(source.includes('.reward-name-field, .reward-pass-field { grid-column: 1 / -1; }'), true);
+  assert.equal(source.includes('<TowerSummaryCard title="Tower Availability"'), true);
+  assert.equal(source.includes('<TowerSummaryCard title="Floor Rewards"'), true);
+  assert.equal(source.includes("{activeEditor === 'availability' && ("), true);
+  assert.equal(source.includes("{activeEditor === 'rewards' && ("), true);
+  assert.equal(source.includes('setRewardDraft(rewards.map((reward) => ({ ...reward })))'), true);
+  assert.equal(source.includes('setRewardDraft([]);'), true);
+  assert.equal(source.includes("setEditorError(error instanceof Error ? error.message : 'Tower settings could not be saved.')"), true);
+  assert.equal(rewardEditorSource.match(/<select/g)?.length, 1);
+  assert.equal(rewardEditorSource.match(/type="number"/g)?.length, 1);
+  assert.equal(rewardEditorSource.match(/type="text"/g)?.length, 1);
+  assert.equal(rewardEditorSource.includes('Reward Type'), true);
+  assert.equal(rewardEditorSource.includes('Pass Name'), true);
+  assert.equal(rewardEditorSource.includes("reward.type === 'DISCOUNT' ? 'Percent' : 'Minutes'"), true);
+  assert.equal(rewardEditorSource.includes('reward-name-field'), false);
+  assert.equal(rewardEditorSource.includes('reward-pass-field'), false);
+  assert.equal(rewardEditorSource.includes('BRONZE'), false);
+  assert.equal(rewardEditorSource.includes('SILVER'), false);
+  assert.equal(rewardEditorSource.includes('GOLD'), false);
+  assert.equal(source.includes('grid-template-columns: 82px minmax(180px,1fr) minmax(120px,.6fr)'), true);
   assert.equal(source.includes('@media (max-width: 520px)'), true);
   assert.equal(source.includes('.history-row { grid-template-columns: minmax(0,1fr); gap: 8px;'), true);
   assert.equal(source.includes('.history-meta { grid-template-columns: auto minmax(0,1fr);'), true);
@@ -244,6 +312,10 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
   assert.equal(source.includes('.tower-mini-cards.terminal-reveal'), true);
   assert.equal(source.includes('grid-template-columns: repeat(3, 28px)'), true);
   assert.equal(source.includes('width: 28px; height: 22px'), true);
+  assert.equal(source.includes('.tower-mini-card.selected-safe'), true);
+  assert.equal(source.includes("chosenSafe ? <Zap size={iconSize} />"), true);
+  assert.equal(source.includes("role={historyLabel ? 'img' : undefined}"), true);
+  assert.equal(source.includes('You selected card ${selectedPosition + 1} safely.'), true);
   assert.equal(source.includes("terminalReveal = redPosition !== undefined"), true);
   assert.equal(source.includes('const showHistoryCards = !isFocused && !isLocked'), true);
   assert.equal(source.includes('!showHistoryCards && <FloorMarker'), true);
@@ -252,8 +324,8 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
   assert.equal(source.includes("presentation === 'lost') return <span className=\"floor-state"), false);
   assert.equal(source.includes('Fresh climb next time'), false);
   assert.equal(source.includes('Red card ends this climb. Come back stronger next time.'), true);
-  assert.equal(source.includes('You have 120 seconds to climb and take your reward.'), true);
-  assert.equal(source.includes('Time ending means zero.'), true);
+  assert.equal(source.includes('You have 120 seconds to complete your climb and take a reward.'), true);
+  assert.equal(source.includes('When time runs out, your climb ends and all unclaimed rewards are lost.'), true);
   assert.equal(source.includes('<Link href="/my-bookings" className="btn btn-primary btn-lg"><BookOpen size={18} /> View My Bookings</Link>'), true);
   assert.equal(source.includes('Back to Home'), false);
   assert.equal(pageSource.includes('Back to Home'), false);
@@ -285,6 +357,38 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
   assert.equal(source.includes('ticket.code'), false);
   assert.equal(source.includes('RewardTicketCard'), true);
   assert.equal(source.includes('@media (prefers-reduced-motion: reduce)'), true);
+});
+
+test('shows the six-step Tower guide with lightweight optional visuals', () => {
+  const source = readFileSync(new URL('../../components/TowerClient.tsx', import.meta.url), 'utf8');
+  const guideSource = readFileSync(new URL('../../components/InfoGuideModal.tsx', import.meta.url), 'utf8');
+  const guideStart = source.indexOf('const GUIDE_STEPS = [');
+  const guideEnd = source.indexOf('] as const;', guideStart);
+  const towerGuide = source.slice(guideStart, guideEnd);
+
+  for (const title of ['Start Your Climb', 'Climb 10 Floors', 'Pick a Card', 'Green Card', 'Red Card', 'Beat the Clock']) {
+    assert.equal(towerGuide.includes(`title: '${title}'`), true);
+  }
+  assert.equal(towerGuide.includes('1 Tower Token for one climb'), true);
+  assert.equal(towerGuide.includes('counter Reward Ticket'), true);
+  assert.equal(towerGuide.includes('before expiry'), true);
+  assert.equal(towerGuide.includes('120 seconds'), true);
+  assert.equal(towerGuide.includes("state: 'hidden'"), true);
+  assert.equal(towerGuide.includes("state: 'safe'"), true);
+  assert.equal(towerGuide.includes("state: 'red'"), true);
+  assert.equal(towerGuide.includes('icon: Coins'), true);
+  assert.equal(towerGuide.includes('icon: Castle'), true);
+  assert.equal(towerGuide.includes('icon: Timer'), true);
+
+  assert.equal(guideSource.includes('visual?: InfoGuideStepVisual'), true);
+  assert.equal(guideSource.includes("className={step.visual ? 'has-visual' : undefined}"), true);
+  assert.equal(guideSource.match(/<i>\?<\/i>/g)?.length, 3);
+  assert.equal(guideSource.includes("step.visual.state === 'safe' && <Zap"), true);
+  assert.equal(guideSource.includes("step.visual.state === 'red' && <X"), true);
+  assert.equal(guideSource.includes('role="img" aria-label={step.visual.label}'), true);
+  assert.equal(guideSource.includes('grid-template-columns: 30px 44px minmax(0, 1fr)'), true);
+  assert.equal(guideSource.includes('grid-template-columns: 28px 38px minmax(0, 1fr)'), true);
+  assert.equal(guideSource.includes('@keyframes'), false);
 });
 
 test('shows a one-time lightweight confirmation after a successful Tower claim', () => {

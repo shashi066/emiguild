@@ -25,6 +25,7 @@ import {
 import {
   claimArmorySet,
   ensureArmoryDefaults,
+  searchArmoryInventoryUsers,
 } from '../../lib/armory';
 
 test('marketplace timing and equipped-copy rules are exact', () => {
@@ -463,13 +464,20 @@ test('admin controls preserve listing snapshots and audit Gem adjustments', asyn
 
     const adminState = await getArmoryMarketplaceAdminState({
       status: 'OPEN',
-      search: seller.email,
+      search: seller.email.toUpperCase(),
       page: 1,
       limit: 20,
     });
     assert.equal(adminState.settings.enabled, false);
     assert.equal(adminState.pagination.total, 1);
     assert.equal(adminState.listings[0].id, listing.id);
+    const artifactState = await getArmoryMarketplaceAdminState({
+      status: 'OPEN',
+      search: bronze.name.toUpperCase(),
+      page: 1,
+      limit: 20,
+    });
+    assert.equal(artifactState.listings[0].id, listing.id);
 
     const cancellationResults = await Promise.allSettled([
       cancelArmoryTradeListingAsAdmin(listing.id),
@@ -524,12 +532,14 @@ test('admin controls preserve listing snapshots and audit Gem adjustments', asyn
       ),
     );
 
-    const [searchResults, gemAccount] = await Promise.all([
-      searchArmoryMarketplaceGemUsers(buyer.email),
+    const [searchResults, inventoryUsers, gemAccount] = await Promise.all([
+      searchArmoryMarketplaceGemUsers(buyer.email.toUpperCase()),
+      searchArmoryInventoryUsers(buyer.name.toUpperCase()),
       getArmoryMarketplaceGemAccount(buyer.id),
     ]);
     assert.equal(searchResults.length, 1);
     assert.equal(searchResults[0].guildGems, 1);
+    assert.equal(inventoryUsers.some((user) => user.id === buyer.id), true);
     assert.equal(gemAccount.ledger.length, 2);
     assert.equal(gemAccount.ledger[0].actor?.id, admin.id);
     assert.equal(gemAccount.ledger[0].note, 'Counter correction');

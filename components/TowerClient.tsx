@@ -15,6 +15,7 @@ import {
   RefreshCw,
   ShieldAlert,
   Trophy,
+  Timer,
   X,
   Zap,
 } from 'lucide-react';
@@ -90,12 +91,36 @@ type TowerClientProps = { initialState?: TowerState; initialError?: string };
 const TOWER_SAFE_CARD_PULSE_MS = 700;
 
 const GUIDE_STEPS = [
-  { title: 'Get a Tower Token', description: 'Each linked booking check-in adds one token. Use it by the end of the next day.' },
-  { title: 'Pick one card', description: 'Each floor has three cards. One card is red.' },
-  { title: 'Beat the clock', description: 'You have 120 seconds to climb and take your reward. At 60 seconds, the timer warns you. Time ending means zero.' },
-  { title: 'Take it or climb', description: 'After a safe pick, take that reward or climb. Untaken rewards become zero when time ends.' },
-  { title: 'Red means zero', description: 'A red card ends the climb and removes every reward from it.' },
-  { title: 'Redeem at the counter', description: 'Take your reward ticket to the counter before its deadline.' },
+  {
+    title: 'Start Your Climb',
+    description: 'After a successful linked booking check-in, you get 1 Tower Token for one climb. Use it before the shown expiry.',
+    visual: { kind: 'icon', icon: Coins, label: 'Tower Token' },
+  },
+  {
+    title: 'Climb 10 Floors',
+    description: 'The Tower has 10 floors, and each floor has a reward. Climb higher to unlock bigger rewards.',
+    visual: { kind: 'icon', icon: Castle, label: 'Ten-floor Tower' },
+  },
+  {
+    title: 'Pick a Card',
+    description: 'Each floor has 3 cards - 2 Green and 1 Red. Pick one card to reveal your result.',
+    visual: { kind: 'cards', state: 'hidden', label: 'Three hidden cards' },
+  },
+  {
+    title: 'Green Card',
+    description: 'A Green Card unlocks the reward for that floor. Take it to create a counter Reward Ticket and redeem it before expiry, or risk it and climb to the next floor.',
+    visual: { kind: 'cards', state: 'safe', label: 'Green safe card' },
+  },
+  {
+    title: 'Red Card',
+    description: 'A Red Card ends your climb immediately, and you lose all unclaimed rewards.',
+    visual: { kind: 'cards', state: 'red', label: 'Red card' },
+  },
+  {
+    title: 'Beat the Clock',
+    description: 'You have 120 seconds to complete your climb and take a reward. When time runs out, your climb ends and all unclaimed rewards are lost.',
+    visual: { kind: 'icon', icon: Timer, label: '120-second timer' },
+  },
 ] as const;
 
 function rewardLabel(reward: TowerReward | null | undefined) {
@@ -719,6 +744,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         :global(.tower-mini-cards.terminal-reveal) { grid-template-columns: repeat(3, 28px); gap: 4px; }
         :global(.tower-mini-cards.terminal-reveal .tower-mini-card) { width: 28px; height: 22px; }
         :global(.tower-mini-card.safe) { border-color: #49ad79; background: #17613f; color: #d0f8e1; }
+        :global(.tower-mini-card.selected-safe) { border-color: #86efac; background: #238653; color: #ecfdf5; }
         :global(.tower-mini-card.red) { border-color: #aa4c5a; background: #571f2a; color: #ffd0d5; }
         .tower-floor-feedback { display: grid; gap: 7px; }
         .tower-message { min-height: 40px; display: flex; align-items: center; padding: 8px 10px; border-left: 3px solid var(--tower-current-accent); background: #211a38; color: #ddd6fe; font-size: .78rem; font-weight: 700; }
@@ -821,12 +847,23 @@ function MiniCards({ selectedPosition, result, redPosition }: {
   redPosition?: number;
 }) {
   const terminalReveal = redPosition !== undefined;
-  return <div className={`tower-mini-cards ${terminalReveal ? 'terminal-reveal' : ''}`} aria-label={terminalReveal ? `Red card was position ${redPosition + 1}` : undefined}>{[0, 1, 2].map((position) => {
+  const selectedSafe = result === 'SAFE' && selectedPosition !== undefined;
+  const historyLabel = terminalReveal
+    ? selectedSafe
+      ? `You selected card ${selectedPosition + 1} safely. Red card was position ${redPosition + 1}.`
+      : result === 'LOSS' && selectedPosition !== undefined
+        ? `You selected red card ${selectedPosition + 1}.`
+        : `Red card was position ${redPosition + 1}.`
+    : selectedSafe
+      ? `You selected card ${selectedPosition + 1} safely.`
+      : undefined;
+  return <div className={`tower-mini-cards ${terminalReveal ? 'terminal-reveal' : ''}`} role={historyLabel ? 'img' : undefined} aria-label={historyLabel}>{[0, 1, 2].map((position) => {
     const cardPresentation = getTowerMiniCardPresentation({ position, selectedPosition, historyResult: result, redPosition });
     const red = cardPresentation === 'red';
     const safe = cardPresentation === 'safe';
+    const chosenSafe = cardPresentation === 'selected-safe';
     const iconSize = terminalReveal ? 12 : 9;
-    return <span key={position} aria-hidden="true" className={`tower-mini-card ${red ? 'red' : safe ? 'safe' : ''}`}>{red ? <X size={iconSize} /> : safe ? <Check size={iconSize} /> : null}</span>;
+    return <span key={position} aria-hidden="true" className={`tower-mini-card ${red ? 'red' : chosenSafe ? 'selected-safe' : safe ? 'safe' : ''}`}>{red ? <X size={iconSize} /> : chosenSafe ? <Zap size={iconSize} /> : safe ? <Check size={iconSize} /> : null}</span>;
   })}</div>;
 }
 

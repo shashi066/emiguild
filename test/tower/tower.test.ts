@@ -13,12 +13,14 @@ import {
   getTowerHomePrompt,
   getTowerTokenExpiry,
   grantManualTowerToken,
+  grantManualTowerTokens,
   grantTowerToken,
   isTowerTokenExpired,
   normalizeTowerRewards,
   pickTowerCard,
   searchTowerUsers,
   startTowerAttempt,
+  towerRewardName,
   updateTowerAdminConfig,
 } from '../../lib/tower';
 
@@ -69,10 +71,10 @@ test('Tower Tokens expire at the exclusive end of the next IST calendar day', ()
 
 test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', async (suite) => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const users = await Promise.all(['Owner', 'Inventory', 'Loss', 'Complete', 'Expiry', 'Timeout', 'Banner'].map((name) => prisma.user.create({
+  const users = await Promise.all(['Owner', 'Inventory', 'Loss', 'Complete', 'Expiry', 'Timeout', 'Banner', 'Batch'].map((name) => prisma.user.create({
     data: { name: `Tower ${name} ${suffix}`, email: `tower-${name.toLowerCase()}-${suffix}@example.test`, password: 'test-only' },
   })));
-  const [owner, inventoryUser, lossUser, completeUser, expiryUser, timeoutUser, bannerUser] = users;
+  const [owner, inventoryUser, lossUser, completeUser, expiryUser, timeoutUser, bannerUser, batchUser] = users;
   const admin = await prisma.user.create({
     data: { name: `Tower Admin ${suffix}`, email: `tower-admin-${suffix}@example.test`, password: 'test-only', role: 'ADMIN' },
   });
@@ -103,12 +105,28 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
     await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS });
 
     await suite.test('strictly validates all ten configured rewards', () => {
-      assert.equal(normalizeTowerRewards(DEFAULT_TOWER_REWARDS).length, 10);
+      const normalized = normalizeTowerRewards(DEFAULT_TOWER_REWARDS);
+      assert.equal(normalized.length, 10);
+      assert.equal(towerRewardName('GAMING_TIME', 10), '10 Minutes Gaming');
+      assert.equal(towerRewardName('RACING_TIME', 30), '30 Minutes Racing');
+      assert.equal(towerRewardName('DISCOUNT', 10), '10% Booking Discount');
+      assert.equal(towerRewardName('PASS', Number.NaN, 'Bronze Pass'), 'Bronze Pass');
+      assert.equal(normalized[9].name, 'Bronze Pass');
+      assert.equal(Object.hasOwn(normalized[9], 'passType'), false);
+      assert.equal(Object.hasOwn(normalized[9], 'value'), false);
       assert.throws(() => normalizeTowerRewards(DEFAULT_TOWER_REWARDS.slice(0, 9)), /INVALID_TOWER_CONFIG/);
       assert.throws(() => normalizeTowerRewards(DEFAULT_TOWER_REWARDS.map((row) => ({ ...row, level: 1 }))), /INVALID_TOWER_CONFIG/);
       assert.throws(() => normalizeTowerRewards(DEFAULT_TOWER_REWARDS.map((row) => row.level === 5 ? { ...row, value: 101 } : row)), /INVALID_TOWER_CONFIG/);
-      assert.throws(() => normalizeTowerRewards(DEFAULT_TOWER_REWARDS.map((row) => row.level === 10 ? { ...row, value: undefined } : row)), /INVALID_TOWER_CONFIG/);
-      assert.throws(() => normalizeTowerRewards(DEFAULT_TOWER_REWARDS.map((row) => row.level === 10 ? { ...row, passType: 'UNKNOWN' } : row)), /INVALID_TOWER_CONFIG/);
+      assert.throws(() => normalizeTowerRewards(DEFAULT_TOWER_REWARDS.map((row) => row.level === 10 ? { ...row, name: '' } : row)), /INVALID_TOWER_CONFIG/);
+      assert.throws(() => normalizeTowerRewards(DEFAULT_TOWER_REWARDS.map((row) => row.level === 1 ? { ...row, value: 1.5 } : row)), /INVALID_TOWER_CONFIG/);
+      assert.throws(() => normalizeTowerRewards(DEFAULT_TOWER_REWARDS.map((row) => row.level === 1 ? { ...row, value: 10001 } : row)), /INVALID_TOWER_CONFIG/);
+
+      const legacyPass = normalizeTowerRewards(DEFAULT_TOWER_REWARDS.map((row) => row.level === 10
+        ? { ...row, name: 'Gold Pass', value: 1800, passType: 'GOLD' }
+        : row));
+      assert.equal(legacyPass[9].name, 'Gold Pass');
+      assert.equal(Object.hasOwn(legacyPass[9], 'passType'), false);
+      assert.equal(Object.hasOwn(legacyPass[9], 'value'), false);
     });
 
     await suite.test('one booking grants one immutable token and enforces ownership', async () => {
@@ -209,7 +227,36 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.equal(first.token.expiresAt.toISOString(), getTowerTokenExpiry(baseNow).toISOString());
       assert.equal(second.token.expiresAt.toISOString(), getTowerTokenExpiry(new Date(baseNow.getTime() + oneHour)).toISOString());
 
-      const found = await searchTowerUsers(`owner ${suffix}`);
+      for (const quantity of [0, -1, 1.5, Number.NaN, 11]) {
+        await assert.rejects(
+          () => grantManualTowerTokens(batchUser.id, `request-${suffix}-invalid-quantity`, quantity, admin.id, baseNow),
+          (error: TowerError) => error.code === 'INVALID_GRANT_REQUEST',
+        );
+      }
+
+      const batchRequestId = `request-${suffix}-batch-10`;
+      const batch = await grantManualTowerTokens(batchUser.id, batchRequestId, 10, admin.id, baseNow);
+      const batchRetry = await grantManualTowerTokens(batchUser.id, batchRequestId, 10, admin.id, new Date(baseNow.getTime() + oneHour));
+      assert.equal(batch.created, true);
+      assert.equal(batch.createdCount, 10);
+      assert.equal(batch.tokens.length, 10);
+      assert.equal(new Set(batch.tokens.map((token) => token.id)).size, 10);
+      assert.ok(batch.tokens.every((token) => token.source === 'ADMIN' && token.grantedById === admin.id));
+      assert.ok(batch.tokens.every((token) => token.earnedAt.toISOString() === baseNow.toISOString()));
+      assert.ok(batch.tokens.every((token) => token.expiresAt.toISOString() === getTowerTokenExpiry(baseNow).toISOString()));
+      assert.equal(batchRetry.created, false);
+      assert.equal(batchRetry.createdCount, 0);
+      assert.deepEqual(batchRetry.tokens.map((token) => token.id), batch.tokens.map((token) => token.id));
+      await assert.rejects(
+        () => grantManualTowerTokens(batchUser.id, batchRequestId, 9, admin.id, baseNow),
+        (error: TowerError) => error.code === 'INVALID_GRANT_REQUEST',
+      );
+
+      const anotherBatch = await grantManualTowerTokens(batchUser.id, `request-${suffix}-batch-2`, 2, admin.id, baseNow);
+      assert.equal(anotherBatch.createdCount, 2);
+      assert.equal((await getTowerCurrent(batchUser.id, baseNow)).availableTokens, 12);
+
+      const found = await searchTowerUsers(`OWNER ${suffix}`.toUpperCase());
       assert.ok(found.length <= 10);
       assert.ok(found.some((user) => user.id === owner.id));
     });
@@ -515,15 +562,15 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.ok(secondPage.items.length > 0);
       assert.ok(firstPage.items.every((item) => ['ADMIN', 'CHECK_IN'].includes(item.source)));
       const timedOut = await getTowerAdminHistory({
-        status: 'TIMED_OUT',
+        status: 'NO_REWARD',
         query: `timeout ${suffix}`,
         now: new Date(baseNow.getTime() + 120_000),
       });
       assert.ok(timedOut.items.length > 0);
-      assert.ok(timedOut.items.every((item) => item.effectiveStatus === 'TIMED_OUT' && item.attempt?.securedLevel === 0));
+      assert.ok(timedOut.items.every((item) => item.adminStatus === 'NO_REWARD' && item.attempt?.securedLevel === 0));
       const expired = await getTowerAdminHistory({ status: 'EXPIRED', query: suffix, now: getTowerTokenExpiry(baseNow) });
       assert.ok(expired.items.length > 0);
-      assert.ok(expired.items.every((item) => item.effectiveStatus === 'EXPIRED' || item.attempt?.status !== 'IN_PROGRESS'));
+      assert.ok(expired.items.every((item) => item.adminStatus === 'EXPIRED' || item.attempt?.status !== 'IN_PROGRESS'));
     });
   } finally {
     await prisma.station.delete({ where: { id: station.id } });

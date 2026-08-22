@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { caseInsensitiveContains } from '@/lib/prisma-search';
 import { encryptNumber } from '@/lib/crypto';
 import { expireArmoryTradeListings } from '@/lib/armory-marketplace';
 import { getIstDateKey, getNextIstMidnight } from '@/lib/armory-clock';
@@ -1140,8 +1141,8 @@ export async function searchArmoryInventoryUsers(search: string) {
     where: {
       role: 'USER',
       OR: [
-        { name: { contains: query } },
-        { email: { contains: query } },
+        { name: caseInsensitiveContains(query) },
+        { email: caseInsensitiveContains(query) },
       ],
     },
     select: { id: true, name: true, email: true },
