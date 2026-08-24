@@ -86,6 +86,7 @@ type PickResult = {
   attempt: TowerAttemptState;
 };
 type TowerRedCardReveal = { cardId: string };
+type TowerPendingAction = 'start' | 'pick' | 'climb' | 'claim' | 'refresh' | null;
 type TowerClientProps = { initialState?: TowerState; initialError?: string };
 
 const TOWER_SAFE_CARD_PULSE_MS = 700;
@@ -176,7 +177,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const [state, setState] = useState<TowerState>(initialState ?? { enabled: true, availableTokens: 0, nextTokenExpiresAt: null, rewardTickets: [], attempt: null });
   const [settling, setSettling] = useState(true);
   const [result, setResult] = useState<PickResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState<TowerPendingAction>(null);
   const [selectedCard, setSelectedCard] = useState('');
   const [error, setError] = useState(initialError);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -195,6 +196,10 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const warningAttemptRef = useRef('');
   const timeoutAttemptRef = useRef('');
   const attempt = state.attempt;
+  const loading = pendingAction !== null;
+  const isPicking = pendingAction === 'pick';
+  const isClimbing = pendingAction === 'climb';
+  const isClaiming = pendingAction === 'claim';
   const activeAttemptId = attempt?.attemptId;
   const activeAttemptStatus = attempt?.status;
   const screen = getTowerScreen({
@@ -212,6 +217,13 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const timerWarning = Boolean(timedStatus && remainingMs !== null && remainingMs > 0 && remainingMs <= TOWER_WARNING_THRESHOLD_MS);
   const timerEnded = Boolean(timedStatus && remainingMs === 0);
   const announcement = attemptMessage(attempt, result);
+  const pendingAnnouncement = isPicking
+    ? 'Revealing your card.'
+    : isClimbing
+      ? 'Climbing to the next floor.'
+      : isClaiming
+        ? 'Securing your Reward Ticket.'
+        : '';
   const floors = useMemo(() => orderTowerFloors(attempt?.floors ?? []), [attempt?.floors]);
   const historyByLevel = useMemo(() => new Map((attempt?.history ?? []).map((item) => [item.level, item])), [attempt?.history]);
   const revealByLevel = useMemo(() => new Map((attempt?.reveal ?? []).map((item) => [item.level, item.redPosition])), [attempt?.reveal]);
@@ -234,8 +246,12 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const showActions = canClaim || canClimb || canUseNextToken;
   const showInlineFeedback = Boolean(attempt?.status === 'IN_PROGRESS' || canClaim);
 
+  const finishPendingAction = (action: Exclude<TowerPendingAction, null>) => {
+    setPendingAction((current) => current === action ? null : current);
+  };
+
   const refresh = useCallback(async (recoveryAttemptId?: string) => {
-    setLoading(true);
+    setPendingAction('refresh');
     setError('');
     try {
       const endpoint = recoveryAttemptId
@@ -252,7 +268,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
       setError(refreshError instanceof Error ? refreshError.message : 'Unable to refresh Tower.');
       throw refreshError;
     } finally {
-      setLoading(false);
+      setPendingAction((current) => current === 'refresh' ? null : current);
     }
   }, []);
 
@@ -368,7 +384,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   };
 
   const start = async () => {
-    setLoading(true);
+    setPendingAction('start');
     setError('');
     try {
       const response = await fetch('/api/tower/start', { method: 'POST' });
@@ -387,13 +403,13 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : 'Unable to start Tower.');
     } finally {
-      setLoading(false);
+      finishPendingAction('start');
     }
   };
 
   const pick = async (cardId: string) => {
     if (!attempt || !canPick) return;
-    setLoading(true);
+    setPendingAction('pick');
     setError('');
     setSelectedCard(cardId);
     try {
@@ -432,13 +448,13 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
       setError(pickError instanceof Error ? pickError.message : 'Unable to pick card.');
       await refresh(attempt.attemptId).catch(() => undefined);
     } finally {
-      setLoading(false);
+      finishPendingAction('pick');
     }
   };
 
   const continueTower = async () => {
     if (!attempt || !pendingSafeLevel || !canClimb) return;
-    setLoading(true);
+    setPendingAction('climb');
     setError('');
     try {
       const response = await fetch('/api/tower/continue', {
@@ -455,13 +471,13 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
       setError(continueError instanceof Error ? continueError.message : 'Unable to move to the next floor.');
       await refresh(attempt.attemptId).catch(() => undefined);
     } finally {
-      setLoading(false);
+      finishPendingAction('climb');
     }
   };
 
   const claim = async () => {
     if (!attempt?.attemptId || !canClaim) return;
-    setLoading(true);
+    setPendingAction('claim');
     setError('');
     try {
       const response = await fetch('/api/tower/claim', {
@@ -482,7 +498,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
     } catch (claimError) {
       setError(claimError instanceof Error ? claimError.message : 'Unable to take reward.');
     } finally {
-      setLoading(false);
+      finishPendingAction('claim');
     }
   };
 
@@ -518,7 +534,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         </header>
 
         {error && attempt && <div className="alert alert-error tower-alert"><ShieldAlert size={16} /><span>{error}</span><button type="button" onClick={() => refresh(attempt.attemptId).catch(() => undefined)} disabled={loading} aria-label="Retry"><RefreshCw size={15} /></button></div>}
-        <p className="sr-only" aria-live="polite">{announcement}</p>
+        <p className="sr-only" aria-live="polite">{pendingAnnouncement || announcement}</p>
         <p className="sr-only" aria-live="assertive">{timerAnnouncement}</p>
 
         {screen === 'loading' ? (
@@ -585,18 +601,20 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
                       </div>
                     </div>
                     {presentation === 'current' ? (
-                      <div className={`active-cards ${redCardRevealActive ? 'showing-red-card' : ''}`} aria-label={`Floor ${floor.level} cards`}>
+                      <div className={`active-cards ${isPicking ? 'is-picking' : ''} ${redCardRevealActive ? 'showing-red-card' : ''}`} aria-label={`Floor ${floor.level} cards`} aria-busy={isPicking}>
                         {attempt.cards.map((card, index) => {
                           const redCard = redCardReveal?.cardId === card.id;
+                          const pendingCard = isPicking && selectedCard === card.id;
                           return <button
                             key={card.id}
                             type="button"
                             onClick={() => pick(card.id)}
                             disabled={!canPick}
-                            className={`${selectedCard === card.id ? 'selected' : ''}${redCard ? ' red-card-reveal' : ''}`.trim()}
-                            aria-label={redCard ? `Floor ${floor.level} card ${index + 1} was red` : `Choose floor ${floor.level} card ${index + 1}`}
+                            className={`${selectedCard === card.id ? 'selected' : ''}${pendingCard ? ' pending-card' : ''}${redCard ? ' red-card-reveal' : ''}`.trim()}
+                            aria-busy={pendingCard}
+                            aria-label={pendingCard ? `Revealing floor ${floor.level} card ${index + 1}` : redCard ? `Floor ${floor.level} card ${index + 1} was red` : `Choose floor ${floor.level} card ${index + 1}`}
                           >
-                            <strong aria-hidden="true">{redCard ? <X size={27} /> : '?'}</strong>
+                            <strong aria-hidden="true">{pendingCard ? <span className="spinner tower-pending-spinner tower-card-spinner" /> : redCard ? <X size={27} /> : '?'}</strong>
                           </button>;
                         })}
                       </div>
@@ -608,8 +626,8 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
                         <div className="tower-message"><span>{announcement}</span></div>
                         {(canClaim || canClimb) && (
                           <div className={`tower-decision-actions ${canClaim && canClimb ? '' : 'single'}`} aria-label="Climb choices">
-                            {canClaim && <button className="tower-main-button" type="button" onClick={claim} disabled={loading} aria-label={`Take ${rewardLabel(attempt.securedReward)}`}><Gift size={16} />{loading ? 'Taking...' : 'Take Reward'}</button>}
-                            {canClimb && <button className="tower-secondary-button" type="button" onClick={continueTower} disabled={loading}><ArrowUp size={16} /> Next Floor</button>}
+                            {canClaim && <button className="tower-main-button" type="button" onClick={claim} disabled={loading} aria-busy={isClaiming} aria-label={`Take ${rewardLabel(attempt.securedReward)}`}>{isClaiming ? <><span className="spinner tower-pending-spinner tower-button-spinner" aria-hidden="true" /> Securing...</> : <><Gift size={16} /> Take Reward</>}</button>}
+                            {canClimb && <button className="tower-secondary-button" type="button" onClick={continueTower} disabled={loading} aria-busy={isClimbing}>{isClimbing ? <><span className="spinner tower-pending-spinner tower-button-spinner" aria-hidden="true" /> Climbing...</> : <><ArrowUp size={16} /> Next Floor</>}</button>}
                           </div>
                         )}
                       </div>
@@ -733,9 +751,15 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         .active-cards button:not(:disabled):focus-visible, .active-cards button:not(:disabled):hover { outline: 2px solid var(--tower-current-accent); outline-offset: 2px; }
         .active-cards button.selected { transform: translateY(2px); border-color: var(--tower-current-accent); background: #211a38; }
         .active-cards button:disabled { cursor: default; opacity: .72; }
+        .active-cards.is-picking button:not(.pending-card) { opacity: .32; }
+        .active-cards button.pending-card { border-color: var(--tower-current-accent); background: #211a38; opacity: 1; }
         .active-cards.showing-red-card button:not(.red-card-reveal) { opacity: .32; }
         .active-cards button.red-card-reveal { border-color: #e55d6d; background: #681f2c; opacity: 1; animation: towerRedCardPulse ${TOWER_RED_CARD_REVEAL_MS}ms ease-out forwards; }
         .active-cards button.red-card-reveal strong { color: #ffd9de; }
+        .tower-pending-spinner { flex: 0 0 auto; width: 16px; height: 16px; border-width: 2px; border-color: rgba(217,231,239,.25); border-top-color: currentColor; }
+        .tower-card-spinner { width: 25px; height: 25px; border-color: rgba(221,214,254,.22); border-top-color: #ddd6fe; }
+        .tower-main-button .tower-button-spinner { border-color: rgba(6,33,22,.25); border-top-color: #062116; }
+        .tower-secondary-button .tower-button-spinner { border-color: rgba(217,231,239,.22); border-top-color: #d9e7ef; }
         :global(.decision-card) { border-color: #345a48; background: #14251d; color: #759083; }
         :global(.decision-card.selected) { border-color: #4ac488; background: #17452f; color: #b7efcf; animation: towerSafeCardPulse ${TOWER_SAFE_CARD_PULSE_MS}ms ease-out forwards; }
         :global(.decision-card.selected strong) { color: #b7efcf; }
@@ -807,6 +831,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
           .active-cards button { transition: none; }
           .active-cards button.red-card-reveal { animation: none; }
           :global(.decision-card.selected) { animation: none; }
+          .tower-pending-spinner { animation: none; }
         }
       `}</style>
     </main>

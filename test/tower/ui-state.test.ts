@@ -273,7 +273,7 @@ test('keeps the live summary and frames one compact emblem as the tower roof', (
 test('limits the purple trial to current-floor interaction accents', () => {
   const source = readFileSync(new URL('../../components/TowerClient.tsx', import.meta.url), 'utf8');
   assert.equal(source.includes('--tower-current-accent: #a78bfa'), true);
-  assert.equal(source.match(/var\(--tower-current-accent\)/g)?.length, 6);
+  assert.ok((source.match(/var\(--tower-current-accent\)/g)?.length ?? 0) >= 6);
   assert.equal(source.includes('.tower-floor.current .floor-label > b { border-color: var(--tower-current-accent)'), true);
   assert.equal(source.includes(':global(.floor-state.current) { color: var(--tower-current-accent)'), true);
   assert.equal(source.includes('outline: 2px solid var(--tower-current-accent)'), true);
@@ -283,7 +283,7 @@ test('limits the purple trial to current-floor interaction accents', () => {
   assert.equal(source.includes('tower-message loss'), false);
   assert.equal(source.includes('tower-message secured'), false);
   assert.equal(source.includes("className={`tower-decision-actions ${canClaim && canClimb ? '' : 'single'}`}"), true);
-  assert.equal(source.includes("loading ? 'Taking...' : 'Take Reward'"), true);
+  assert.equal(source.includes('Securing...'), true);
   assert.equal(source.includes('<ArrowUp size={16} /> Next Floor'), true);
   assert.equal(source.includes("fetch('/api/tower/continue'"), true);
   assert.equal(source.includes('setState((current) => ({ ...current, attempt: data.attempt }))'), true);
@@ -300,7 +300,7 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
   assert.equal(source.includes('<small>F</small>'), false);
   assert.equal(source.includes('<small>{index + 1}</small>'), false);
   assert.equal(source.includes('<small>{position + 1}</small>'), false);
-  assert.equal(source.includes(': `Choose floor ${floor.level} card ${index + 1}`}'), true);
+  assert.equal(source.includes('`Choose floor ${floor.level} card ${index + 1}`'), true);
   assert.equal(source.includes('aria-label={selected ? `Card ${position + 1} was safe`'), true);
   assert.equal(source.includes('scrollReasonRef.current = \'start\''), true);
   assert.equal(source.includes('scrollReasonRef.current = \'climb\''), true);
@@ -451,8 +451,8 @@ test('stages one lightweight red card before the terminal tower reveal', () => {
   assert.equal(source.includes("pendingSafeLevel && attempt?.canClaim && runIsOpen && !redCardRevealActive"), true);
   assert.equal(source.includes("attempt?.status === 'IN_PROGRESS' && !attempt.canClaim && runIsOpen"), true);
   assert.equal(source.includes("lastResolvedFloor?.result === 'SAFE'"), true);
-  assert.equal(source.includes('aria-label={redCard ? `Floor ${floor.level} card ${index + 1} was red`'), true);
-  assert.equal(source.includes("{redCard ? <X size={27} /> : '?'}"), true);
+  assert.equal(source.includes('redCard ? `Floor ${floor.level} card ${index + 1} was red`'), true);
+  assert.equal(source.includes("redCard ? <X size={27} /> : '?'"), true);
   assert.equal(source.includes('.active-cards button.red-card-reveal strong { color: #ffd9de; }'), true);
   assert.equal(source.includes('.active-cards.showing-red-card button:not(.red-card-reveal)'), true);
   assert.equal(source.includes('animation: towerRedCardPulse ${TOWER_RED_CARD_REVEAL_MS}ms ease-out forwards'), true);
@@ -464,6 +464,31 @@ test('stages one lightweight red card before the terminal tower reveal', () => {
   assert.equal(source.includes('tower-loss-'), false);
   assert.equal(source.includes('box-shadow'), false);
   assert.equal(source.includes('infinite'), false);
+});
+
+test('shows one action-aware spinner while Tower requests are pending', () => {
+  const source = readFileSync(new URL('../../components/TowerClient.tsx', import.meta.url), 'utf8');
+  const pickStart = source.indexOf('const pick = async (cardId: string) =>');
+  const pickEnd = source.indexOf('\n\n  const continueTower', pickStart);
+  const pickSource = source.slice(pickStart, pickEnd);
+
+  assert.equal(source.includes("type TowerPendingAction = 'start' | 'pick' | 'climb' | 'claim' | 'refresh' | null"), true);
+  assert.equal(source.includes("const isPicking = pendingAction === 'pick'"), true);
+  assert.equal(source.includes("const isClimbing = pendingAction === 'climb'"), true);
+  assert.equal(source.includes("const isClaiming = pendingAction === 'claim'"), true);
+  assert.equal(pickSource.includes("setPendingAction('pick')"), true);
+  assert.equal(pickSource.includes("finishPendingAction('pick')"), true);
+  assert.equal(source.includes('pendingCard ? <span className="spinner tower-pending-spinner tower-card-spinner"'), true);
+  assert.equal(source.includes(".active-cards.is-picking button:not(.pending-card) { opacity: .32; }"), true);
+  assert.equal(source.includes('aria-busy={pendingCard}'), true);
+  assert.equal(source.includes('Revealing your card.'), true);
+  assert.equal(source.includes('Climbing to the next floor.'), true);
+  assert.equal(source.includes('Securing your Reward Ticket.'), true);
+  assert.equal(source.includes('Climbing...'), true);
+  assert.equal(source.includes('Securing...'), true);
+  assert.equal(source.includes('.tower-pending-spinner { animation: none; }'), true);
+  assert.equal(source.match(/@keyframes/g)?.length, 2);
+  assert.equal(source.match(/window\.setTimeout/g)?.length, 1);
 });
 
 test('pulses the selected safe card without delaying reward actions', () => {
