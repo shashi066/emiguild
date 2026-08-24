@@ -856,6 +856,10 @@ input.form-input[type="time"]:focus {
   margin-bottom: 0;
 }
 
+.hero-eyebrow-row.has-tower-banner {
+  margin-bottom: 10px;
+}
+
 .hero-opening-pill {
   display: inline-flex;
   align-items: center;
@@ -911,17 +915,86 @@ input.form-input[type="time"]:focus {
   color: #a7f3d0;
 }
 
-.tower-token-pill {
-  border-color: rgba(97, 232, 255, 0.5);
-  background: #0b1723;
-  color: #8ee8ff;
+.tower-home-banner {
+  --tower-banner-bg: #071b2a;
+  --tower-banner-hover: #0a2538;
+  --tower-banner-border: #22d3ee;
+  --tower-banner-accent: #22d3ee;
+  --tower-banner-copy: #a5f3fc;
+  --tower-banner-ink: #04131d;
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  margin-bottom: var(--space-lg);
+  padding: 9px 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--tower-banner-border);
+  border-left: 4px solid var(--tower-banner-accent);
+  border-radius: var(--radius-md);
+  background: var(--tower-banner-bg);
+  color: #f0f4ff;
   text-decoration: none;
+  transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
 
-.tower-token-pill:hover,
-.tower-token-pill:focus-visible {
-  border-color: #61e8ff;
-  outline: none;
+.tower-home-banner:hover {
+  transform: translateY(-1px);
+  border-color: var(--tower-banner-accent);
+  background: var(--tower-banner-hover);
+}
+
+.tower-home-banner:active {
+  transform: scale(0.995);
+}
+
+.tower-home-banner:focus-visible {
+  outline: 2px solid var(--tower-banner-accent);
+  outline-offset: 3px;
+  border-color: var(--tower-banner-accent);
+}
+
+.tower-home-banner-visual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: var(--tower-banner-accent);
+  color: var(--tower-banner-ink);
+}
+
+.tower-home-banner-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tower-home-banner-copy strong {
+  color: #ffffff;
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.tower-home-banner-copy > span {
+  color: var(--tower-banner-copy);
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+.tower-home-banner-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  color: var(--tower-banner-accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .hero-title {
@@ -2836,6 +2909,43 @@ input.form-input[type="time"]:focus {
 
   .booking-steps { overflow-x: auto; padding-bottom: 8px; }
   .booking-step-label { display: none; }
+}
+
+@media (max-width: 480px) {
+  .tower-home-banner {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 9px 10px;
+  }
+
+  .tower-home-banner-visual {
+    grid-row: auto;
+  }
+
+  .tower-home-banner-action {
+    grid-column: 3;
+    justify-content: flex-end;
+    font-size: 0.72rem;
+  }
+
+  .tower-home-banner-copy strong {
+    font-size: 0.82rem;
+  }
+
+  .tower-home-banner-copy > span {
+    font-size: 0.7rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tower-home-banner {
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  .tower-home-banner:hover,
+  .tower-home-banner:active {
+    transform: none;
+  }
 }
 
 @media (max-width: 480px) {
