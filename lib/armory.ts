@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { caseInsensitiveContains } from '@/lib/prisma-search';
 import { encryptNumber } from '@/lib/crypto';
 import { expireArmoryTradeListings } from '@/lib/armory-marketplace';
 import { getIstDateKey, getNextIstMidnight } from '@/lib/armory-clock';
@@ -511,7 +512,7 @@ export async function getArmoryState(userId: string) {
       include: { artifact: { include: { set: true } } },
     }),
     prisma.armoryTicket.findMany({
-      where: { userId, claimDate: today },
+      where: { userId, claimDate: today, source: 'ARMORY' },
       select: {
         id: true,
         setId: true,
@@ -685,6 +686,18 @@ const checkInBookingInclude = {
   station: { select: { id: true, name: true } },
 } as const;
 
+async function markBookingCheckedIn(bookingId: string, checkedInAt: Date) {
+  await prisma.booking.updateMany({
+    where: { id: bookingId, checkedInAt: null },
+    data: { status: 'CHECKED_IN', checkedInAt },
+  });
+  return prisma.booking.update({
+    where: { id: bookingId },
+    data: { status: 'CHECKED_IN' },
+    include: checkInBookingInclude,
+  });
+}
+
 export async function checkInBookingWithArtifact(bookingId: string) {
   const claimId = `checkin_${bookingId}`;
   const [booking, existingClaim] = await Promise.all([
@@ -695,15 +708,13 @@ export async function checkInBookingWithArtifact(bookingId: string) {
     }),
   ]);
   if (!booking) throw new Error('BOOKING_NOT_FOUND');
+  const checkedInAt = booking.checkedInAt
+    ?? (booking.status === 'CHECKED_IN' ? booking.updatedAt : new Date());
 
   if (existingClaim) {
-    const updatedBooking = booking.status === 'CHECKED_IN'
+    const updatedBooking = booking.status === 'CHECKED_IN' && booking.checkedInAt
       ? booking
-      : await prisma.booking.update({
-        where: { id: bookingId },
-        data: { status: 'CHECKED_IN' },
-        include: checkInBookingInclude,
-      });
+      : await markBookingCheckedIn(bookingId, checkedInAt);
     return {
       booking: updatedBooking,
       artifactAward: {
@@ -715,18 +726,17 @@ export async function checkInBookingWithArtifact(bookingId: string) {
   }
 
   if (booking.status === 'CHECKED_IN') {
+    const checkedInBooking = booking.checkedInAt
+      ? booking
+      : await markBookingCheckedIn(bookingId, checkedInAt);
     return {
-      booking,
+      booking: checkedInBooking,
       artifactAward: { awarded: false, reason: 'ALREADY_CHECKED_IN' } satisfies CheckInArtifactAward,
     };
   }
 
   if (!booking.userId) {
-    const updatedBooking = await prisma.booking.update({
-      where: { id: bookingId },
-      data: { status: 'CHECKED_IN' },
-      include: checkInBookingInclude,
-    });
+    const updatedBooking = await markBookingCheckedIn(bookingId, checkedInAt);
     return {
       booking: updatedBooking,
       artifactAward: { awarded: false, reason: 'NO_USER_ACCOUNT' } satisfies CheckInArtifactAward,
@@ -735,11 +745,7 @@ export async function checkInBookingWithArtifact(bookingId: string) {
 
   const config = await getArmoryForgeConfig();
   if (!config.enabled) {
-    const updatedBooking = await prisma.booking.update({
-      where: { id: bookingId },
-      data: { status: 'CHECKED_IN' },
-      include: checkInBookingInclude,
-    });
+    const updatedBooking = await markBookingCheckedIn(bookingId, checkedInAt);
     return {
       booking: updatedBooking,
       artifactAward: { awarded: false, reason: 'ARMORY_DISABLED' } satisfies CheckInArtifactAward,
@@ -754,6 +760,10 @@ export async function checkInBookingWithArtifact(bookingId: string) {
 
   try {
     const updatedBooking = await prisma.$transaction(async (tx) => {
+      await tx.booking.updateMany({
+        where: { id: bookingId, checkedInAt: null },
+        data: { status: 'CHECKED_IN', checkedInAt },
+      });
       const updated = await tx.booking.update({
         where: { id: bookingId },
         data: { status: 'CHECKED_IN' },
@@ -1131,8 +1141,8 @@ export async function searchArmoryInventoryUsers(search: string) {
     where: {
       role: 'USER',
       OR: [
-        { name: { contains: query } },
-        { email: { contains: query } },
+        { name: caseInsensitiveContains(query) },
+        { email: caseInsensitiveContains(query) },
       ],
     },
     select: { id: true, name: true, email: true },
@@ -1186,23 +1196,27 @@ export async function lookupArmoryTicket(code: string) {
       claimedAt: true,
       expiresAt: true,
       redeemedAt: true,
+      source: true,
       user: { select: { name: true, email: true, phone: true } },
       set: { select: { id: true, name: true, rarity: true } },
     },
   });
 }
 
-export async function redeemArmoryTicket(ticketId: string) {
+export async function redeemArmoryTicket(ticketId: string, now: Date = new Date()) {
   const ticket = await prisma.armoryTicket.findUnique({
     where: { id: ticketId },
-    select: { id: true, status: true, claimDate: true, expiresAt: true },
+    select: { id: true, status: true, source: true, claimDate: true, expiresAt: true },
   });
   if (!ticket) throw new Error('TICKET_NOT_FOUND');
   if (ticket.status === 'REDEEMED') throw new Error('TICKET_REDEEMED');
-  if (ticket.claimDate !== getArmoryToday()) throw new Error('TICKET_EXPIRED');
+  const expired = ticket.source === 'TOWER'
+    ? ticket.expiresAt.getTime() <= now.getTime()
+    : ticket.claimDate !== getIstDateKey(now);
+  if (expired) throw new Error('TICKET_EXPIRED');
   return prisma.armoryTicket.update({
     where: { id: ticketId },
-    data: { status: 'REDEEMED', redeemedAt: new Date() },
+    data: { status: 'REDEEMED', redeemedAt: now },
     select: {
       id: true,
       rewardSnapshot: true,
@@ -1212,6 +1226,7 @@ export async function redeemArmoryTicket(ticketId: string) {
       claimedAt: true,
       expiresAt: true,
       redeemedAt: true,
+      source: true,
       user: { select: { name: true, email: true, phone: true } },
       set: { select: { id: true, name: true, rarity: true } },
     },

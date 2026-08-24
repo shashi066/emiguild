@@ -8,6 +8,7 @@ import { auth } from '@/auth';
 import { formatCurrency } from '@/lib/utils';
 import { getIndiaClock, getSpecialOpeningNotice } from '@/lib/public-booking-time';
 import { loadActiveSpecialOpening } from '@/lib/special-opening-server';
+import { getTowerHomePrompt } from '@/lib/tower';
 import {
   Gamepad2,
   Calendar,
@@ -23,7 +24,7 @@ import {
   Instagram,
   Award,
   RotateCcw,
-  Gift,
+  Castle,
 } from 'lucide-react';
 
 async function getStations() {
@@ -179,12 +180,20 @@ const AVAILABLE_GAMES = [
 
 export default async function HomePage() {
   const now = new Date();
-  const [stations, stats, session, specialOpening, showAvailabilitySetting] = await Promise.all([
+  const sessionPromise = auth();
+  const towerPromptPromise = sessionPromise.then((currentSession) => (
+    currentSession?.user?.id ? getTowerHomePrompt(currentSession.user.id, now) : null
+  )).catch((error) => {
+    console.error('Tower homepage prompt failed:', error);
+    return null;
+  });
+  const [stations, stats, session, specialOpening, showAvailabilitySetting, towerPrompt] = await Promise.all([
     getStations(),
     getStats(),
-    auth(),
+    sessionPromise,
     loadActiveSpecialOpening(now),
     prisma.setting.findUnique({ where: { key: 'show_stations_availability' } }),
+    towerPromptPromise,
   ]);
   const showStationsAvailability = showAvailabilitySetting?.value !== 'false';
   const indiaClock = getIndiaClock(now);
@@ -192,6 +201,7 @@ export default async function HomePage() {
     specialOpening,
     indiaClock.minutes,
   );
+  const towerPromptTitle = towerPrompt?.kind === 'ATTEMPT' ? 'Continue Your Tower' : 'Tower Token Ready';
 
   return (
     <>
@@ -206,7 +216,7 @@ export default async function HomePage() {
 
         <div className="container">
           <div className="hero-content animate-fade-in-up" style={{ maxWidth: 680 }}>
-            <div className="hero-eyebrow-row">
+            <div className={`hero-eyebrow-row${towerPrompt ? ' has-tower-banner' : ''}`}>
               <div className="hero-eyebrow">
                 <Zap size={14} />
                 Premium Gaming Experience
@@ -222,6 +232,21 @@ export default async function HomePage() {
                 </div>
               )}
             </div>
+
+            {towerPrompt && (
+              <Link href="/tower" className="tower-home-banner">
+                <span className="tower-home-banner-visual" aria-hidden="true">
+                  <Castle size={22} />
+                </span>
+                <span className="tower-home-banner-copy">
+                  <strong>{towerPromptTitle}</strong>
+                  <span>How high can you climb?</span>
+                </span>
+                <span className="tower-home-banner-action">
+                  Climb Now <ChevronRight size={17} />
+                </span>
+              </Link>
+            )}
 
             <h1 className="hero-title">
               Level Up Your

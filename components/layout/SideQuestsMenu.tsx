@@ -9,11 +9,19 @@ import {
   Gift,
   RotateCw,
   Shield,
+  Trophy,
 } from 'lucide-react';
 
 const CLOSE_DELAY_MS = 125;
 
 const SIDE_QUESTS = [
+  {
+    href: '/tower',
+    title: 'Tower',
+    subtitle: 'Use check-in Tower Tokens',
+    icon: Trophy,
+    accent: 'side-quest-accent-cyan',
+  },
   {
     href: '/armory',
     title: 'Artifacts',

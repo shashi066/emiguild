@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   BookOpen, Search, CheckCircle, XCircle,
   AlertCircle, RefreshCw, Trash2, Globe, UserPlus, Phone, LogIn,
@@ -85,6 +85,27 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED:  [],
   COMPLETED:  [],
 };
+
+function towerTokenGrantNotice(data: any) {
+  const expired = Boolean(data?.expired);
+  const expiresAt = data?.expiresAt
+    ? new Date(data.expiresAt).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    })
+    : '';
+  if (expired) {
+    return {
+      text: data.created
+        ? 'Tower Token was stored, but its claim window has already expired.'
+        : 'Tower Token already exists, but its claim window has expired.',
+      success: false,
+    };
+  }
+  if (data?.created) {
+    return { text: `Tower Token added${expiresAt ? `. Expires ${expiresAt}` : ' until the end of the next day'}.`, success: true };
+  }
+  return { text: `Tower Token already stored${expiresAt ? `. Expires ${expiresAt}` : ''}.`, success: true };
+}
 
 // ── Edit Modal ────────────────────────────────────────────────────────────────
 function EditModal({
@@ -671,6 +692,7 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
   const [items, setItems] = useState<BookingFnbItem[]>([]);
   const [products, setProducts] = useState<FnbProduct[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [productSearch, setProductSearch] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -747,6 +769,30 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
 
   const activeSubtotal = items.filter((item) => item.status === 'ACTIVE').reduce((total, item) => total + item.subtotal, 0);
   const isCancelled = booking.status === 'CANCELLED';
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase();
+    return products
+      .filter((product) =>
+        !query || `${product.name} ${product.category}`.toLowerCase().includes(query),
+      )
+      .sort((left, right) =>
+        left.sellingPrice - right.sellingPrice || left.name.localeCompare(right.name),
+      );
+  }, [productSearch, products]);
+  const selectedProduct = products.find((product) => product.id === selectedProductId) ?? null;
+  const quantityNumber = Number(quantity);
+  const quantityValid = Boolean(
+    selectedProduct &&
+      Number.isInteger(quantityNumber) &&
+      quantityNumber >= 1 &&
+      quantityNumber <= selectedProduct.currentStock,
+  );
+
+  const changeQuantity = (change: number) => {
+    const maximum = selectedProduct?.currentStock ?? 1;
+    const current = Number.isInteger(quantityNumber) ? quantityNumber : 1;
+    setQuantity(String(Math.min(maximum, Math.max(1, current + change))));
+  };
 
   if (voidCandidate) {
     return (
@@ -781,31 +827,122 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
       {error && <div className="fnb-error" role="alert">{error}</div>}
       {!isCancelled && (
         <form className="booking-fnb-add" onSubmit={addItem}>
-          <select className="form-input" required value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)}>
-            <option value="">Select in-stock F&amp;B item</option>
-            {products.map((product) => <option key={product.id} value={product.id}>{product.name} · ₹{product.sellingPrice} · {product.currentStock} left</option>)}
-          </select>
-          <input className="form-input" aria-label="Quantity" type="number" min="1" step="1" required value={quantity} onChange={(event) => setQuantity(event.target.value)} />
-          <button className="btn btn-primary" disabled={adding || !selectedProductId}>{adding ? 'Adding…' : <><Plus size={15} /> Add item</>}</button>
+          <div className="booking-fnb-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              className="form-input"
+              type="search"
+              aria-label="Search in-stock F&B products"
+              placeholder="Search products"
+              value={productSearch}
+              onChange={(event) => {
+                setProductSearch(event.target.value);
+                setSelectedProductId('');
+                setQuantity('1');
+              }}
+            />
+          </div>
+          <div className="booking-fnb-product-grid" role="radiogroup" aria-label="In-stock F&B products">
+            {filteredProducts.length === 0 ? (
+              <p className="booking-fnb-product-empty">
+                {products.length === 0 ? 'No products are currently in stock.' : 'No products match this search.'}
+              </p>
+            ) : filteredProducts.map((product) => {
+              const selected = selectedProductId === product.id;
+              return (
+                <button
+                  key={product.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className={`booking-fnb-product-option${selected ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    setSelectedProductId(product.id);
+                    setQuantity('1');
+                  }}
+                >
+                  <span className="booking-fnb-product-name">{product.name}</span>
+                  <span className="booking-fnb-product-category">{product.category}</span>
+                  <strong>{formatCurrency(product.sellingPrice)}</strong>
+                  <span>{product.currentStock} left</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="booking-fnb-add-controls">
+            <div className="booking-fnb-quantity">
+              <span>Quantity</span>
+              <div className="booking-fnb-stepper">
+                <button
+                  type="button"
+                  aria-label="Decrease quantity"
+                  onClick={() => changeQuantity(-1)}
+                  disabled={!selectedProduct || quantityNumber <= 1}
+                >
+                  <Minus size={16} />
+                </button>
+                <input
+                  className="form-input"
+                  aria-label="Quantity"
+                  type="number"
+                  min="1"
+                  max={selectedProduct?.currentStock}
+                  step="1"
+                  required
+                  value={quantity}
+                  onChange={(event) => setQuantity(event.target.value)}
+                />
+                <button
+                  type="button"
+                  aria-label="Increase quantity"
+                  onClick={() => changeQuantity(1)}
+                  disabled={!selectedProduct || quantityNumber >= selectedProduct.currentStock}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+            <button className="btn btn-primary" disabled={adding || !quantityValid}>
+              {adding ? 'Adding…' : <><Plus size={15} /> Add Item</>}
+            </button>
+          </div>
         </form>
       )}
       {isCancelled && <p className="booking-fnb-note">This booking is cancelled, so no additional F&amp;B items can be added.</p>}
       {loading ? <div className="loading-state"><div className="spinner" />Loading consumed items…</div> : (
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead><tr><th>Item</th><th>Unit price</th><th>Quantity</th><th>F&amp;B subtotal</th><th>Status</th><th aria-label="Actions" /></tr></thead>
-            <tbody>
-              {items.length === 0 ? <tr><td colSpan={6} className="fnb-empty">No F&amp;B items have been recorded for this booking.</td></tr> : items.map((item) => (
-                <tr key={item.id} style={{ opacity: item.status === 'VOID' ? 0.6 : 1 }}>
-                  <td><strong>{item.productName}</strong><div className="fnb-table-meta">{new Date(item.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}</div></td>
-                  <td>{formatCurrency(item.unitPrice)}</td><td>{item.quantity}</td><td><strong>{formatCurrency(item.subtotal)}</strong></td>
-                  <td><span className={`badge ${item.status === 'ACTIVE' ? 'badge-confirmed' : 'badge-cancelled'}`}>{item.status === 'ACTIVE' ? 'Recorded' : 'Voided'}</span>{item.voidReason && <div className="fnb-table-meta">{item.voidReason}</div>}</td>
-                  <td>{item.status === 'ACTIVE' && <button className="btn btn-ghost btn-sm" disabled={voidingId === item.id} onClick={() => { setVoidReason(''); setVoidCandidate(item); }} style={{ color: 'var(--color-accent-danger)' }}><Trash size={14} /> Void</button>}</td>
-                </tr>
+        <div className="booking-fnb-items">
+          {items.length === 0 ? (
+            <div className="fnb-empty">No F&amp;B items have been recorded for this booking.</div>
+          ) : (
+            <div className="booking-fnb-item-list">
+              {items.map((item) => (
+                <article className={`booking-fnb-item${item.status === 'VOID' ? ' is-void' : ''}`} key={item.id}>
+                  <div className="booking-fnb-item-main">
+                    <strong>{item.productName}</strong>
+                    <span>{new Date(item.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}</span>
+                  </div>
+                  <dl className="booking-fnb-item-values">
+                    <div><dt>Unit price</dt><dd>{formatCurrency(item.unitPrice)}</dd></div>
+                    <div><dt>Quantity</dt><dd>{item.quantity}</dd></div>
+                    <div><dt>Subtotal</dt><dd>{formatCurrency(item.subtotal)}</dd></div>
+                  </dl>
+                  <div className="booking-fnb-item-status">
+                    <span className={`badge ${item.status === 'ACTIVE' ? 'badge-confirmed' : 'badge-cancelled'}`}>{item.status === 'ACTIVE' ? 'Recorded' : 'Voided'}</span>
+                    {item.voidReason && <span className="fnb-table-meta">{item.voidReason}</span>}
+                  </div>
+                  {item.status === 'ACTIVE' && (
+                    <button className="btn btn-ghost btn-sm" disabled={voidingId === item.id} onClick={() => { setVoidReason(''); setVoidCandidate(item); }} style={{ color: 'var(--color-accent-danger)' }}>
+                      <Trash size={14} /> Void
+                    </button>
+                  )}
+                </article>
               ))}
-            </tbody>
-            <tfoot><tr className="booking-fnb-total"><td colSpan={3}>F&amp;B subtotal (not included in gaming revenue)</td><td><strong>{formatCurrency(activeSubtotal)}</strong></td><td colSpan={2} /></tr></tfoot>
-          </table>
+            </div>
+          )}
+          <div className="booking-fnb-total">
+            <span>F&amp;B subtotal <small>Separate from gaming revenue</small></span>
+            <strong>{formatCurrency(activeSubtotal)}</strong>
+          </div>
         </div>
       )}
       <div className="fnb-modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Close</button></div>
@@ -904,6 +1041,33 @@ export default function AdminBookingsPage() {
             setNotice({ text: `Already checked in. The existing ${award.artifact.name} award was kept.`, success: true });
           } else {
             setNotice({ text: 'This booking was already checked in; no additional artifact was awarded.', success: false });
+          }
+        }
+        if (newStatus === 'CHECKED_IN') {
+          try {
+            const towerRes = await fetch('/api/tower/grant-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ checkInId: id }),
+            });
+            const towerData = await towerRes.json();
+            if (towerRes.ok) {
+              const tokenNotice = towerTokenGrantNotice(towerData);
+              setNotice((current) => ({
+                text: `${current?.text ? `${current.text} ` : 'Checked in. '}${tokenNotice.text}`,
+                success: tokenNotice.success,
+              }));
+            } else {
+              setNotice((current) => ({
+                text: `${current?.text ? `${current.text} ` : 'Checked in.'} Tower Token was not added: ${towerData.error ?? 'the grant failed.'} Grant one manually from Admin > Tower.`,
+                success: false,
+              }));
+            }
+          } catch {
+            setNotice((current) => ({
+              text: `${current?.text ? `${current.text} ` : 'Checked in.'} Tower Token grant failed. Grant one manually from Admin > Tower.`,
+              success: false,
+            }));
           }
         }
         return true;

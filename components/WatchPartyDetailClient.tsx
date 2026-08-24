@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle2, Clock, Info, Lock, Phone, Trophy, Tv } from 'lucide-react';
+import { ArrowLeft, Award, CheckCircle2, Clock, Coins, Info, Lock, Phone, Trophy, Tv } from 'lucide-react';
 import { EmicoinAmount } from '@/components/watch-party/EmicoinAmount';
 import InfoGuideModal from '@/components/InfoGuideModal';
 import { readApiResponse } from '@/lib/read-api-response';
@@ -18,26 +18,32 @@ const FAN_PICK_GUIDE_STEPS = [
   {
     title: 'Open Fan Picks',
     description: 'You must be invited, checked in at the counter, and entered into this watch party before you can make a Fan Pick.',
+    visual: { kind: 'icon', icon: Tv, label: 'Open Fan Picks' },
   },
   {
     title: 'Select an EMIC Amount',
     description: 'Choose how much of your EMIC Rewards balance to use. You cannot select more than your current balance.',
+    visual: { kind: 'icon', icon: Coins, label: 'Selected EMIC amount' },
   },
   {
     title: 'Understand the Potential Reward',
+    visual: { kind: 'icon', icon: Trophy, label: 'Potential Fan Pick reward' },
     description: 'Each outcome shows a reward label, such as 2× Reward, and a Potential Reward. For a correct pick, the reward equals the selected EMIC multiplied by the displayed factor and includes the selected EMIC.',
   },
   {
     title: 'Confirm once',
     description: 'Choose one outcome and confirm it before the displayed closing time. The selected EMIC is deducted immediately, and your Fan Pick cannot be changed.',
+    visual: { kind: 'icon', icon: Lock, label: 'Confirmed Fan Pick' },
   },
   {
     title: 'Check the official result',
     description: 'A correct pick receives the displayed reward. If your pick does not match, no reward is credited. If Fan Picks are cancelled, your selected EMIC is restored.',
+    visual: { kind: 'icon', icon: CheckCircle2, label: 'Official Fan Pick result' },
   },
   {
     title: 'EMIC stays in EmiGuild',
     description: 'EMIC is an in-app EmiGuild reward currency. It has no cash value and cannot be withdrawn or exchanged for cash.',
+    visual: { kind: 'icon', icon: Award, label: 'In-app EMIC Rewards' },
   },
 ] as const;
 

@@ -95,6 +95,29 @@ const MOVEMENT_LABELS: Record<string, string> = {
   ADJUSTMENT: 'Correction',
 }
 
+type FnbView = 'products' | 'activity' | 'revenue'
+
+const STOCK_ACTIONS = [
+  {
+    value: 'RESTOCK' as const,
+    label: 'Restock',
+    description: 'Add received stock',
+    icon: PackagePlus,
+  },
+  {
+    value: 'WASTE' as const,
+    label: 'Waste',
+    description: 'Remove damaged stock',
+    icon: AlertTriangle,
+  },
+  {
+    value: 'ADJUSTMENT' as const,
+    label: 'Correction',
+    description: 'Fix the count',
+    icon: SlidersHorizontal,
+  },
+]
+
 function formatRupees(amount: number) {
   return `₹${amount.toLocaleString('en-IN')}`
 }
@@ -387,18 +410,28 @@ function StockModal({
             {error}
           </p>
         )}
-        <label>
-          Action
-          <select
-            className="form-input"
-            value={type}
-            onChange={(event) => setType(event.target.value as typeof type)}
-          >
-            <option value="RESTOCK">Restock</option>
-            <option value="WASTE">Waste / damaged</option>
-            <option value="ADJUSTMENT">Manual correction</option>
-          </select>
-        </label>
+        <fieldset className="fnb-stock-actions">
+          <legend>Action</legend>
+          <div className="fnb-stock-action-grid">
+            {STOCK_ACTIONS.map((action) => {
+              const Icon = action.icon
+              const selected = type === action.value
+              return (
+                <button
+                  key={action.value}
+                  className={`fnb-stock-action fnb-stock-action--${action.value.toLowerCase()}${selected ? ' is-selected' : ''}`}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setType(action.value)}
+                >
+                  <Icon size={18} aria-hidden="true" />
+                  <strong>{action.label}</strong>
+                  <span>{action.description}</span>
+                </button>
+              )
+            })}
+          </div>
+        </fieldset>
         <label>
           {type === 'ADJUSTMENT'
             ? 'Change in units (use - to reduce)'
@@ -456,6 +489,7 @@ function StockModal({
 }
 
 export function AdminFnbInventory() {
+  const [activeView, setActiveView] = useState<FnbView>('products')
   const [overview, setOverview] = useState<Overview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -468,6 +502,7 @@ export function AdminFnbInventory() {
   const [report, setReport] = useState<RevenueReport | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState('')
+  const [reportRequested, setReportRequested] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -517,8 +552,10 @@ export function AdminFnbInventory() {
     }
   }, [reportFrom, reportTo])
   useEffect(() => {
+    if (activeView !== 'revenue' || reportRequested) return
+    setReportRequested(true)
     void loadReport()
-  }, [loadReport])
+  }, [activeView, loadReport, reportRequested])
   const products = useMemo(
     () =>
       (overview?.products ?? []).filter(
@@ -527,6 +564,10 @@ export function AdminFnbInventory() {
           `${product.name} ${product.category} ${product.sku ?? ''}`
             .toLowerCase()
             .includes(search.toLowerCase()),
+      ).sort(
+        (left, right) =>
+          left.sellingPrice - right.sellingPrice ||
+          left.name.localeCompare(right.name),
       ),
     [overview, search, showInactive],
   )
@@ -558,8 +599,10 @@ export function AdminFnbInventory() {
         <div className="fnb-header-actions">
           <button
             className="btn btn-ghost"
-            onClick={() => void load()}
-            disabled={loading}
+            onClick={() =>
+              activeView === 'revenue' ? void loadReport() : void load()
+            }
+            disabled={activeView === 'revenue' ? reportLoading : loading}
           >
             <RefreshCw size={16} /> Refresh
           </button>
@@ -583,6 +626,36 @@ export function AdminFnbInventory() {
         </div>
       ) : (
         <>
+          <div className="fnb-tabs" role="tablist" aria-label="F&B views">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeView === 'products'}
+              className={activeView === 'products' ? 'is-active' : ''}
+              onClick={() => setActiveView('products')}
+            >
+              <CupSoda size={16} /> Products
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeView === 'activity'}
+              className={activeView === 'activity' ? 'is-active' : ''}
+              onClick={() => setActiveView('activity')}
+            >
+              <SlidersHorizontal size={16} /> Activity
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeView === 'revenue'}
+              className={activeView === 'revenue' ? 'is-active' : ''}
+              onClick={() => setActiveView('revenue')}
+            >
+              <IndianRupee size={16} /> Revenue
+            </button>
+          </div>
+          {activeView === 'revenue' && (
           <section className="card fnb-panel" aria-label="F&B revenue report">
             <div className="fnb-report-heading">
               <div>
@@ -618,8 +691,16 @@ export function AdminFnbInventory() {
               </div>
             </div>
             {reportError && (
-              <div className="fnb-error" role="alert">
-                {reportError}
+              <div className="fnb-error fnb-error--retry" role="alert">
+                <span>{reportError}</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => void loadReport()}
+                  disabled={reportLoading}
+                >
+                  Retry
+                </button>
               </div>
             )}
             {reportLoading && !report ? (
@@ -669,6 +750,9 @@ export function AdminFnbInventory() {
               )
             )}
           </section>
+          )}
+          {activeView === 'products' && (
+            <>
           <section
             className="fnb-summary-grid"
             aria-label="F&B inventory summary"
@@ -722,26 +806,20 @@ export function AdminFnbInventory() {
                 Show inactive
               </label>
             </div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>Price</th>
-                    <th>In stock</th>
-                    <th>Status</th>
-                    <th aria-label="Actions" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="fnb-empty">
-                        No F&amp;B products match this view.
-                      </td>
-                    </tr>
-                  ) : (
-                    products.map((product) => {
+            <div className="fnb-list fnb-product-list">
+              <div className="fnb-list-head" aria-hidden="true">
+                <span>Product</span>
+                <span>Price</span>
+                <span>Stock</span>
+                <span>Status</span>
+                <span>Actions</span>
+              </div>
+              {products.length === 0 ? (
+                <div className="fnb-empty">
+                  No F&amp;B products match this view.
+                </div>
+              ) : (
+                products.map((product) => {
                       const outOfStock = product.currentStock === 0
                       const lowStock =
                         !outOfStock && product.currentStock <= product.lowStockThreshold
@@ -753,15 +831,15 @@ export function AdminFnbInventory() {
                             ? { label: 'Low stock', className: 'fnb-status--low' }
                             : { label: 'Active', className: 'fnb-status--active' }
                       return (
-                        <tr key={product.id}>
-                          <td>
+                        <article className="fnb-list-row fnb-product-row" key={product.id}>
+                          <div className="fnb-list-cell fnb-product-main" data-label="Product">
                             <strong>{product.name}</strong>
                             <div className="fnb-table-meta">
                               {product.category}
                               {product.sku ? ` · ${product.sku}` : ''}
                             </div>
-                          </td>
-                          <td>
+                          </div>
+                          <div className="fnb-list-cell" data-label="Price">
                             <strong>
                               {formatRupees(product.sellingPrice)}
                             </strong>
@@ -770,19 +848,19 @@ export function AdminFnbInventory() {
                                 Cost {formatRupees(product.costPrice)}
                               </div>
                             )}
-                          </td>
-                          <td>
+                          </div>
+                          <div className="fnb-list-cell" data-label="Stock">
                             <strong>{product.currentStock}</strong>
                             <div className="fnb-table-meta">
                               Alert at {product.lowStockThreshold}
                             </div>
-                          </td>
-                          <td>
+                          </div>
+                          <div className="fnb-list-cell" data-label="Status">
                             <span className={`fnb-status ${status.className}`}>
                               {status.label}
                             </span>
-                          </td>
-                          <td>
+                          </div>
+                          <div className="fnb-list-cell fnb-list-cell--actions" data-label="Actions">
                             <div className="fnb-row-actions">
                               <button
                                 className="btn btn-ghost btn-sm"
@@ -804,64 +882,58 @@ export function AdminFnbInventory() {
                                 {product.isActive ? 'Archive' : 'Activate'}
                               </button>
                             </div>
-                          </td>
-                        </tr>
+                          </div>
+                        </article>
                       )
                     })
-                  )}
-                </tbody>
-              </table>
+              )}
             </div>
           </section>
+            </>
+          )}
+          {activeView === 'activity' && (
           <section className="card fnb-panel">
             <h2 className="fnb-section-title">Recent stock activity</h2>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Product</th>
-                    <th>Action</th>
-                    <th>Change</th>
-                    <th>Staff / note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(overview?.recentMovements ?? []).length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="fnb-empty">
-                        Stock activity will appear here.
-                      </td>
-                    </tr>
-                  ) : (
-                    overview!.recentMovements.map((movement) => (
-                      <tr key={movement.id}>
-                        <td>{formatDateTime(movement.createdAt)}</td>
-                        <td>
-                          <strong>{movement.product.name}</strong>
-                        </td>
-                        <td>
-                          {MOVEMENT_LABELS[movement.type] ?? movement.type}
-                        </td>
-                        <td>
-                          <strong>
-                            {movement.quantityChange > 0 ? '+' : ''}
-                            {movement.quantityChange}
-                          </strong>
-                        </td>
-                        <td>
-                          <div>{movement.actor?.name ?? 'System'}</div>
-                          <div className="fnb-table-meta">
-                            {movement.note ?? '—'}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="fnb-list fnb-activity-list">
+              <div className="fnb-list-head" aria-hidden="true">
+                <span>When</span>
+                <span>Product</span>
+                <span>Action</span>
+                <span>Change</span>
+                <span>Staff / note</span>
+              </div>
+              {(overview?.recentMovements ?? []).length === 0 ? (
+                <div className="fnb-empty">Stock activity will appear here.</div>
+              ) : (
+                overview!.recentMovements.map((movement) => (
+                  <article className="fnb-list-row fnb-activity-row" key={movement.id}>
+                    <div className="fnb-list-cell" data-label="When">
+                      {formatDateTime(movement.createdAt)}
+                    </div>
+                    <div className="fnb-list-cell" data-label="Product">
+                      <strong>{movement.product.name}</strong>
+                    </div>
+                    <div className="fnb-list-cell" data-label="Action">
+                      {MOVEMENT_LABELS[movement.type] ?? movement.type}
+                    </div>
+                    <div className="fnb-list-cell" data-label="Change">
+                      <strong className={movement.quantityChange < 0 ? 'is-negative' : 'is-positive'}>
+                        {movement.quantityChange > 0 ? '+' : ''}
+                        {movement.quantityChange}
+                      </strong>
+                    </div>
+                    <div className="fnb-list-cell" data-label="Staff / note">
+                      <div>{movement.actor?.name ?? 'System'}</div>
+                      <div className="fnb-table-meta">
+                        {movement.note ?? '—'}
+                      </div>
+                    </div>
+                  </article>
+                ))
+              )}
             </div>
           </section>
+          )}
         </>
       )}
       {productModal && (

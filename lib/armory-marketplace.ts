@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { caseInsensitiveContains } from '@/lib/prisma-search';
 import {
   DEFAULT_ARMORY_TRADE_DURATION_HOURS,
   DEFAULT_ARMORY_TRADE_GEM_COST,
@@ -872,12 +873,12 @@ export async function getArmoryMarketplaceAdminState(
     ...(search
       ? {
         OR: [
-          { seller: { is: { name: { contains: search } } } },
-          { seller: { is: { email: { contains: search } } } },
-          { buyer: { is: { name: { contains: search } } } },
-          { buyer: { is: { email: { contains: search } } } },
-          { offeredArtifact: { is: { name: { contains: search } } } },
-          { requestedArtifact: { is: { name: { contains: search } } } },
+          { seller: { is: { name: caseInsensitiveContains(search) } } },
+          { seller: { is: { email: caseInsensitiveContains(search) } } },
+          { buyer: { is: { name: caseInsensitiveContains(search) } } },
+          { buyer: { is: { email: caseInsensitiveContains(search) } } },
+          { offeredArtifact: { is: { name: caseInsensitiveContains(search) } } },
+          { requestedArtifact: { is: { name: caseInsensitiveContains(search) } } },
         ],
       }
       : {}),
@@ -934,8 +935,8 @@ export async function searchArmoryMarketplaceGemUsers(search: string) {
     where: {
       role: 'USER',
       OR: [
-        { name: { contains: query } },
-        { email: { contains: query } },
+        { name: caseInsensitiveContains(query) },
+        { email: caseInsensitiveContains(query) },
       ],
     },
     select: {

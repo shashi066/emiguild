@@ -769,7 +769,7 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                           {row.user?.email && <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>{row.user.email}</div>}
                         </td>
                         <td style={{ padding: 'var(--space-sm)' }}>
-                          <strong style={{ color: ARMORY_RARITY_COLORS[reward.setRarity] ?? 'var(--color-text-primary)' }}>{row.set.name}</strong>
+                          <strong style={{ color: ARMORY_RARITY_COLORS[reward.setRarity] ?? 'var(--color-text-primary)' }}>{row.set?.name ?? reward.source ?? 'Reward ticket'}</strong>
                           {reward.setRarity && <div style={{ fontSize: '0.78rem', color: ARMORY_RARITY_COLORS[reward.setRarity] }}>{reward.setRarity}</div>}
                         </td>
                         <td style={{ padding: 'var(--space-sm)' }}>

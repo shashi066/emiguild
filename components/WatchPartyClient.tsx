@@ -12,22 +12,27 @@ const WATCH_PARTY_GUIDE_STEPS = [
   {
     title: 'Sign in and get invited',
     description: 'Watch parties are invite-only. Sign in and contact EmiGuild if you need an invite.',
+    visual: { kind: 'icon', icon: LogIn, label: 'Watch Party invitation' },
   },
   {
     title: 'Check in at the counter',
     description: 'Visit the counter before the event. Staff check-in confirms your entry and adds the displayed Watch Party Reward to your EMIC balance.',
+    visual: { kind: 'icon', icon: TicketCheck, label: 'Counter check-in' },
   },
   {
     title: 'Enter the watch party',
     description: 'After check-in, tap Enter to open the event page and its optional Fan Pick activity.',
+    visual: { kind: 'icon', icon: Tv, label: 'Watch Party event' },
   },
   {
     title: 'Understand EMIC Rewards',
     description: 'EMIC is an in-app EmiGuild reward currency. It has no cash value and cannot be withdrawn or exchanged for cash.',
+    visual: { kind: 'icon', icon: Award, label: 'EMIC Rewards' },
   },
   {
     title: 'Redeem EMIC Rewards',
     description: 'Use EMIC for Gaming Passes or Food & Drink Rewards. Open My Tickets and show a ready collection ticket to staff.',
+    visual: { kind: 'icon', icon: ShoppingBag, label: 'EMIC Reward redemption' },
   },
 ] as const;
 
