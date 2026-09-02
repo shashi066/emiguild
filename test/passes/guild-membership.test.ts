@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   DEFAULT_GUILD_MEMBERSHIP_PLANS,
+  GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE,
+  getGuildMembershipDiscountedTotal,
   getGuildMembershipEligibility,
   isGuildMembershipActive,
   isGuildMembershipType,
@@ -36,6 +39,13 @@ test('keeps the required Guild plan defaults', () => {
   assert.equal(DEFAULT_GUILD_MEMBERSHIP_PLANS.GUILD_MASTER.price, 999);
   assert.equal(DEFAULT_GUILD_MEMBERSHIP_PLANS.GUILD_HERO.validityDays, 30);
   assert.equal(DEFAULT_GUILD_MEMBERSHIP_PLANS.GUILD_MASTER.validityDays, 30);
+  assert.equal(GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE, 50);
+});
+
+test('discounts the entire eligible booking total with currency rounding', () => {
+  assert.equal(getGuildMembershipDiscountedTotal(400), 200);
+  assert.equal(getGuildMembershipDiscountedTotal(475), 238);
+  assert.equal(getGuildMembershipDiscountedTotal(0), 0);
 });
 
 test('normalizes editable settings without changing fixed discount rules', () => {
@@ -237,4 +247,33 @@ test('accepts only the matching server-resolved membership at exactly 50 percent
   if (result.valid) {
     assert.equal(result.benefitType, 'GUILD_MASTER');
   }
+});
+
+test('wires explicit Guild Membership selection through public booking and confirmation', () => {
+  const bookingClient = readFileSync(new URL('../../app/book/BookPageInner.tsx', import.meta.url), 'utf8');
+  const bookingRoute = readFileSync(new URL('../../app/api/bookings/route.ts', import.meta.url), 'utf8');
+  const confirmation = readFileSync(new URL('../../app/book/confirm/ConfirmationContent.tsx', import.meta.url), 'utf8');
+  const myBookings = readFileSync(new URL('../../app/my-bookings/page.tsx', import.meta.url), 'utf8');
+  const notifications = readFileSync(new URL('../../lib/notify.ts', import.meta.url), 'utf8');
+
+  assert.equal(bookingClient.includes("useState<BookingBenefitMode>('STANDARD')"), true);
+  assert.equal(bookingClient.includes("setBenefitMode('GUILD')"), true);
+  assert.equal(bookingClient.includes("setBenefitMode('HOUR_PASS')"), true);
+  assert.equal(bookingClient.includes("setBenefitMode('STANDARD')"), true);
+  assert.equal(bookingClient.includes('aria-pressed={usesGuildMembership}'), true);
+  assert.equal(bookingClient.includes('aria-pressed={usesHourPass}'), true);
+  assert.equal(bookingClient.includes("appliedBenefitType: usesGuildMembership ? activeMembership?.passType ?? null : null"), true);
+  assert.equal(bookingClient.includes('getGuildMembershipDiscountedTotal(normalPrice)'), true);
+
+  assert.equal(bookingRoute.includes("type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD'"), true);
+  assert.equal(bookingRoute.includes('validateGuildBenefitApplication({'), true);
+  assert.equal(bookingRoute.includes('getGuildMembershipDiscountedTotal(normalPrice)'), true);
+  assert.equal(bookingRoute.includes('appliedBenefitType,'), true);
+  assert.equal(bookingRoute.includes("paymentStatus: benefitMode === 'HOUR_PASS' ? 'PAID' : 'UNPAID'"), true);
+  assert.equal(bookingRoute.includes("code: 'BENEFIT_STACKING'"), true);
+
+  assert.equal(confirmation.includes('booking.discount}% discount applied'), true);
+  assert.equal(myBookings.includes('Select this membership during an eligible booking.'), true);
+  assert.equal(`${bookingClient}${myBookings}${notifications}`.includes('verify and manually apply'), false);
+  assert.equal(`${bookingClient}${myBookings}${notifications}`.includes('verify and apply the eligible discount'), false);
 });

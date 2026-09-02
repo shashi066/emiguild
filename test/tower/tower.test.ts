@@ -10,12 +10,16 @@ import {
   continueTowerAttempt,
   getTowerAdminHistory,
   getTowerCurrent,
+  getTowerConfig,
   getTowerHomePrompt,
+  getTowerPromotionPreview,
   getTowerTokenExpiry,
   grantManualTowerToken,
   grantManualTowerTokens,
+  grantPromotionalTowerTokens,
   grantTowerToken,
   isTowerTokenExpired,
+  normalizeTowerRunDuration,
   normalizeTowerRewards,
   pickTowerCard,
   searchTowerUsers,
@@ -71,10 +75,10 @@ test('Tower Tokens expire at the exclusive end of the next IST calendar day', ()
 
 test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', async (suite) => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const users = await Promise.all(['Owner', 'Inventory', 'Loss', 'Complete', 'Expiry', 'Timeout', 'Banner', 'Batch'].map((name) => prisma.user.create({
+  const users = await Promise.all(['Owner', 'Inventory', 'Loss', 'Complete', 'Expiry', 'Timeout', 'Banner', 'Batch', 'Timer'].map((name) => prisma.user.create({
     data: { name: `Tower ${name} ${suffix}`, email: `tower-${name.toLowerCase()}-${suffix}@example.test`, password: 'test-only' },
   })));
-  const [owner, inventoryUser, lossUser, completeUser, expiryUser, timeoutUser, bannerUser, batchUser] = users;
+  const [owner, inventoryUser, lossUser, completeUser, expiryUser, timeoutUser, bannerUser, batchUser, timerUser] = users;
   const admin = await prisma.user.create({
     data: { name: `Tower Admin ${suffix}`, email: `tower-admin-${suffix}@example.test`, password: 'test-only', role: 'ADMIN' },
   });
@@ -102,7 +106,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
   });
 
   try {
-    await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS });
+    await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 120 });
 
     await suite.test('strictly validates all ten configured rewards', () => {
       const normalized = normalizeTowerRewards(DEFAULT_TOWER_REWARDS);
@@ -259,6 +263,131 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       const found = await searchTowerUsers(`OWNER ${suffix}`.toUpperCase());
       assert.ok(found.length <= 10);
       assert.ok(found.some((user) => user.id === owner.id));
+    });
+
+    await suite.test('admin timer presets govern new climbs without changing an active deadline', async () => {
+      for (const seconds of [60, 90, 120, 150, 180, 210, 240, 270, 300]) {
+        assert.equal(normalizeTowerRunDuration(seconds), seconds);
+      }
+      for (const seconds of [0, 59, 61, 301, 150.5, 'two minutes']) {
+        assert.throws(() => normalizeTowerRunDuration(seconds), /INVALID_TOWER_TIMER/);
+      }
+
+      const customRewards = DEFAULT_TOWER_REWARDS.map((reward) => reward.level === 1
+        ? { ...reward, value: 11, name: '11 Minutes Gaming' }
+        : reward);
+      const configured = await updateTowerAdminConfig({
+        enabled: true,
+        rewards: customRewards,
+        runDurationSeconds: 150,
+      });
+      assert.equal(configured.runDurationSeconds, 150);
+      assert.equal(configured.rewards[0].value, 11);
+
+      await prisma.setting.delete({ where: { key: 'tower_run_duration_seconds' } });
+      const fallback = await getTowerConfig();
+      assert.equal(fallback.runDurationSeconds, 120);
+      assert.equal(fallback.rewards[0].value, 11);
+      const seededTimer = await prisma.setting.findUnique({ where: { key: 'tower_run_duration_seconds' } });
+      assert.equal(seededTimer?.value, '120');
+
+      await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 150 });
+      await grantManualTowerToken(timerUser.id, `request-${suffix}-timer`, admin.id, baseNow);
+      const attempt = await startTowerAttempt(timerUser.id, baseNow);
+      assert.equal(attempt.runExpiresAt, new Date(baseNow.getTime() + 150_000).toISOString());
+      assert.equal(attempt.climbDurationSeconds, 150);
+
+      await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 60 });
+      const restored = await getTowerCurrent(timerUser.id, baseNow);
+      assert.equal(restored.runDurationSeconds, 60);
+      assert.equal(restored.attempt?.runExpiresAt, attempt.runExpiresAt);
+      assert.equal(restored.attempt?.climbDurationSeconds, 150);
+
+      await prisma.towerAttempt.update({
+        where: { id: attempt.attemptId },
+        data: { redCards: JSON.stringify(Array(10).fill('A')) },
+      });
+      const beforeBoundary = new Date(baseNow.getTime() + 149_999);
+      const safe = await pickTowerCard(timerUser.id, attempt.attemptId, attempt.cards[1].id, beforeBoundary);
+      assert.equal(safe.result, 'SAFE');
+      await assert.rejects(
+        () => claimTowerReward(timerUser.id, attempt.attemptId, new Date(baseNow.getTime() + 150_000)),
+        (error: TowerError) => error.code === 'TOWER_RUN_EXPIRED',
+      );
+
+      await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 120 });
+    });
+
+    await suite.test('promotional grants add one token to every user and deduplicate campaign retries', async () => {
+      const firstRequestId = `promotion-${suffix}-first`;
+      const secondRequestId = `promotion-${suffix}-second`;
+      const cleanupPrefix = `PROMOTION:promotion-${suffix}-`;
+      try {
+        const recipientIds = (await prisma.user.findMany({
+          where: { role: 'USER' },
+          select: { id: true },
+          orderBy: { id: 'asc' },
+        })).map((user) => user.id);
+        const ownerTokensBefore = await prisma.towerToken.count({ where: { userId: owner.id } });
+        const preview = await getTowerPromotionPreview(baseNow);
+        assert.equal(preview.enabled, true);
+        assert.equal(preview.recipientCount, recipientIds.length);
+        assert.equal(preview.expiresAt.toISOString(), getTowerTokenExpiry(baseNow).toISOString());
+
+        await assert.rejects(
+          () => grantPromotionalTowerTokens(`promotion-${suffix}-forbidden`, lossUser.id, baseNow),
+          (error: TowerError) => error.code === 'FORBIDDEN',
+        );
+        await assert.rejects(
+          () => grantPromotionalTowerTokens('bad', admin.id, baseNow),
+          (error: TowerError) => error.code === 'INVALID_PROMOTION_REQUEST',
+        );
+
+        const first = await grantPromotionalTowerTokens(firstRequestId, admin.id, baseNow);
+        const retry = await grantPromotionalTowerTokens(firstRequestId, admin.id, new Date(baseNow.getTime() + oneHour));
+        assert.equal(first.created, true);
+        assert.equal(first.createdCount, recipientIds.length);
+        assert.equal(first.recipientCount, recipientIds.length);
+        assert.equal(retry.created, false);
+        assert.equal(retry.createdCount, 0);
+        assert.equal(retry.recipientCount, recipientIds.length);
+        assert.equal(retry.expiresAt.toISOString(), first.expiresAt.toISOString());
+
+        const firstTokens = await prisma.towerToken.findMany({
+          where: { source: 'PROMOTION', sourceRefId: { startsWith: `PROMOTION:${firstRequestId}:` } },
+          orderBy: { userId: 'asc' },
+        });
+        assert.deepEqual(firstTokens.map((token) => token.userId), recipientIds);
+        assert.ok(firstTokens.every((token) => token.grantedById === admin.id));
+        assert.ok(firstTokens.every((token) => token.earnedAt.toISOString() === baseNow.toISOString()));
+        assert.ok(firstTokens.every((token) => token.expiresAt.toISOString() === getTowerTokenExpiry(baseNow).toISOString()));
+        assert.equal(new Set(firstTokens.map((token) => token.sourceRefId)).size, recipientIds.length);
+        assert.equal(await prisma.towerToken.count({ where: { userId: admin.id, source: 'PROMOTION' } }), 0);
+        assert.equal(await prisma.towerToken.count({ where: { userId: owner.id } }), ownerTokensBefore + 1);
+
+        const concurrent = await Promise.all([
+          grantPromotionalTowerTokens(secondRequestId, admin.id, baseNow),
+          grantPromotionalTowerTokens(secondRequestId, admin.id, baseNow),
+        ]);
+        assert.equal(concurrent.filter((result) => result.created).length, 1);
+        assert.ok(concurrent.every((result) => result.recipientCount === recipientIds.length));
+        assert.equal(await prisma.towerToken.count({
+          where: { source: 'PROMOTION', sourceRefId: { startsWith: `PROMOTION:${secondRequestId}:` } },
+        }), recipientIds.length);
+
+        const history = await getTowerAdminHistory({ query: owner.email, take: 50, now: baseNow });
+        assert.ok(history.items.some((item) => item.source === 'PROMOTION' && item.grantedBy?.name === admin.name));
+
+        await updateTowerAdminConfig({ enabled: false, rewards: DEFAULT_TOWER_REWARDS });
+        assert.equal((await getTowerPromotionPreview(baseNow)).enabled, false);
+        await assert.rejects(
+          () => grantPromotionalTowerTokens(`promotion-${suffix}-disabled`, admin.id, baseNow),
+          (error: TowerError) => error.code === 'TOWER_DISABLED',
+        );
+      } finally {
+        await prisma.towerToken.deleteMany({ where: { source: 'PROMOTION', sourceRefId: { startsWith: cleanupPrefix } } });
+        await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS });
+      }
     });
 
     await suite.test('active response stays private and a safe floor can be cashed out', async () => {
@@ -560,7 +689,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.ok(firstPage.items.every((item) => item.earnedAt instanceof Date));
       const secondPage = await getTowerAdminHistory({ take: 2, query: suffix, cursor: firstPage.nextCursor!, now: baseNow });
       assert.ok(secondPage.items.length > 0);
-      assert.ok(firstPage.items.every((item) => ['ADMIN', 'CHECK_IN'].includes(item.source)));
+      assert.ok(firstPage.items.every((item) => ['ADMIN', 'CHECK_IN', 'PROMOTION'].includes(item.source)));
       const timedOut = await getTowerAdminHistory({
         status: 'NO_REWARD',
         query: `timeout ${suffix}`,
@@ -573,6 +702,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.ok(expired.items.every((item) => item.adminStatus === 'EXPIRED' || item.attempt?.status !== 'IN_PROGRESS'));
     });
   } finally {
+    await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 120 });
     await prisma.station.delete({ where: { id: station.id } });
     await prisma.user.deleteMany({ where: { id: { in: [...users.map((user) => user.id), admin.id] } } });
   }

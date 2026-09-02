@@ -38,6 +38,7 @@ import {
   type TowerScrollReason,
 } from '@/lib/tower-view';
 import {
+  DEFAULT_TOWER_RUN_DURATION_SECONDS,
   TOWER_WARNING_THRESHOLD_MS,
   createTowerClockAnchor,
   formatTowerCountdown,
@@ -66,6 +67,7 @@ type TowerAttemptState = {
   canClaim: boolean;
   expiresAt: string;
   runExpiresAt: string;
+  climbDurationSeconds: number;
   serverNow: string;
   floors: TowerFloor[];
   history: TowerHistory[];
@@ -74,6 +76,7 @@ type TowerAttemptState = {
 };
 type TowerState = {
   enabled: boolean;
+  runDurationSeconds: number;
   availableTokens: number;
   nextTokenExpiresAt: string | null;
   rewardTickets: TowerRewardTicket[];
@@ -91,7 +94,17 @@ type TowerClientProps = { initialState?: TowerState; initialError?: string };
 
 const TOWER_SAFE_CARD_PULSE_MS = 700;
 
-const GUIDE_STEPS = [
+function formatGuideDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const minuteLabel = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  if (!seconds) return minuteLabel;
+  return `${minuteLabel} ${seconds} seconds`;
+}
+
+function getTowerGuideSteps(runDurationSeconds: number) {
+  const duration = formatGuideDuration(runDurationSeconds);
+  return [
   {
     title: 'Start Your Climb',
     description: 'After a successful linked booking check-in, you get 1 Tower Token for one climb. Use it before the shown expiry.',
@@ -119,10 +132,11 @@ const GUIDE_STEPS = [
   },
   {
     title: 'Beat the Clock',
-    description: 'You have 120 seconds to complete your climb and take a reward. When time runs out, your climb ends and all unclaimed rewards are lost.',
-    visual: { kind: 'icon', icon: Timer, label: '120-second timer' },
+    description: `You have ${duration} to complete your climb and take a reward. When time runs out, your climb ends and all unclaimed rewards are lost.`,
+    visual: { kind: 'icon', icon: Timer, label: `${duration} timer` },
   },
-] as const;
+  ] as const;
+}
 
 function rewardLabel(reward: TowerReward | null | undefined) {
   if (!reward) return 'Ready to climb';
@@ -174,7 +188,14 @@ function attemptMessage(attempt: TowerAttemptState | null, result: PickResult | 
 }
 
 export function TowerClient({ initialState, initialError = '' }: TowerClientProps) {
-  const [state, setState] = useState<TowerState>(initialState ?? { enabled: true, availableTokens: 0, nextTokenExpiresAt: null, rewardTickets: [], attempt: null });
+  const [state, setState] = useState<TowerState>(initialState ?? {
+    enabled: true,
+    runDurationSeconds: DEFAULT_TOWER_RUN_DURATION_SECONDS,
+    availableTokens: 0,
+    nextTokenExpiresAt: null,
+    rewardTickets: [],
+    attempt: null,
+  });
   const [settling, setSettling] = useState(true);
   const [result, setResult] = useState<PickResult | null>(null);
   const [pendingAction, setPendingAction] = useState<TowerPendingAction>(null);
@@ -217,6 +238,10 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const timerWarning = Boolean(timedStatus && remainingMs !== null && remainingMs > 0 && remainingMs <= TOWER_WARNING_THRESHOLD_MS);
   const timerEnded = Boolean(timedStatus && remainingMs === 0);
   const announcement = attemptMessage(attempt, result);
+  const guideSteps = useMemo(
+    () => getTowerGuideSteps(attempt?.climbDurationSeconds ?? state.runDurationSeconds),
+    [attempt?.climbDurationSeconds, state.runDurationSeconds],
+  );
   const pendingAnnouncement = isPicking
     ? 'Revealing your card.'
     : isClimbing
@@ -660,7 +685,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         )}
       </section>
 
-      {guideOpen && <InfoGuideModal eyebrow="Tower Guide" title="How Tower Works" subtitle="Pick. Take. Or risk the climb." titleId="tower-guide-title" steps={GUIDE_STEPS} onClose={() => setGuideOpen(false)} closeLabel="Close Tower guide" />}
+      {guideOpen && <InfoGuideModal eyebrow="Tower Guide" title="How Tower Works" subtitle="Pick. Take. Or risk the climb." titleId="tower-guide-title" steps={guideSteps} onClose={() => setGuideOpen(false)} closeLabel="Close Tower guide" />}
 
       {claimedTicket && (
         <div className="tower-claim-modal-root">

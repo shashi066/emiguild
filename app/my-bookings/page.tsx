@@ -354,7 +354,7 @@ export default function MyBookingsPage() {
                                 : '50% OFF eligible solo PS5 bookings every day.'}
                             </div>
                             <div style={{ marginTop: 5, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                              GameZone verifies and manually applies the discount. Cannot be combined with other offers.
+                              Select this membership during an eligible booking. It cannot be combined with another offer.
                             </div>
                           </div>
                         ) : (

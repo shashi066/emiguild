@@ -275,7 +275,7 @@ export async function notifyUserNewBooking(payload: UserBookingEmailPayload) {
           ${notes ? `<tr><td style="padding:8px 0;color:#9ca3af;vertical-align:top;">Game Request</td><td style="padding:8px 0;font-weight:600;color:#bff4ff;">${notes}</td></tr>` : ''}
         </table>
         ${notes ? '<p style="margin:14px 0 0;padding:10px 12px;border-left:3px solid #00d4ff;background:rgba(0,212,255,0.07);color:#d1d5db;line-height:1.5;font-size:0.85rem;">We will do our best to prepare your requested game before the session. Availability and update time may vary.</p>' : ''}
-        ${payload.membershipType && !payload.appliedBenefitType ? '<p style="margin:16px 0 0;padding:12px 14px;border-left:3px solid #f4cf58;background:rgba(244,207,88,0.07);color:#d1d5db;line-height:1.55;">Active Guild Membership found. GameZone will verify and apply the eligible discount. This confirmation keeps the normal booking price until verification.</p>' : ''}
+        ${payload.membershipType && !payload.appliedBenefitType ? '<p style="margin:16px 0 0;padding:12px 14px;border-left:3px solid #f4cf58;background:rgba(244,207,88,0.07);color:#d1d5db;line-height:1.55;">This Guild Membership was not applied to this booking.</p>' : ''}
         <p style="margin:20px 0;text-align:center;color:#d1d5db;line-height:1.55;">Arrive a few minutes early and step straight into the game.</p>
         <div style="text-align:center;">
           <a href="${bookingsUrl}" style="display:inline-block;margin:4px;padding:12px 20px;background:#00e676;color:#0b0b12;text-decoration:none;border-radius:6px;font-weight:800;">VIEW MY BOOKINGS</a>

@@ -5,6 +5,8 @@ import { caseInsensitiveContains } from '@/lib/prisma-search';
 import { runSerializableTransaction } from '@/lib/prisma-transaction';
 import { getArmoryToday } from '@/lib/armory';
 import {
+  DEFAULT_TOWER_RUN_DURATION_SECONDS,
+  TOWER_RUN_DURATION_OPTIONS_SECONDS,
   getTowerRunExpiry,
   getTowerTokenExpiry,
   isTowerDeadlineReached,
@@ -18,6 +20,7 @@ export const TOWER_MANUAL_GRANT_MAX = 10;
 
 const TOWER_REWARDS_KEY = 'tower_rewards';
 const TOWER_ENABLED_KEY = 'tower_enabled';
+const TOWER_RUN_DURATION_KEY = 'tower_run_duration_seconds';
 const TOWER_DEFAULTS_VERSION_KEY = 'tower_defaults_version';
 const TOWER_DEFAULTS_VERSION = 'tower_rewards_v1';
 export type TowerRewardType = 'DISCOUNT' | 'GAMING_TIME' | 'RACING_TIME' | 'PASS';
@@ -94,6 +97,8 @@ export function friendlyTowerError(error: unknown) {
     NO_LINKED_USER: { error: 'This check-in has no linked user account.', status: 400 },
     USER_NOT_FOUND: { error: 'User account not found.', status: 404 },
     INVALID_GRANT_REQUEST: { error: 'The manual token request is invalid.', status: 400 },
+    INVALID_PROMOTION_REQUEST: { error: 'The promotional token request is invalid.', status: 400 },
+    NO_PROMOTION_RECIPIENTS: { error: 'No user accounts are available for this promotion.', status: 409 },
     NO_TOWER_TOKEN: { error: 'No valid Tower Token is available.', status: 404 },
     TOKEN_USED: { error: 'This Tower Token has already been used.', status: 409 },
     ACTIVE_ATTEMPT_EXISTS: { error: 'You already have an active Tower attempt.', status: 409 },
@@ -106,6 +111,7 @@ export function friendlyTowerError(error: unknown) {
     TICKET_CODE_FAILED: { error: 'The reward ticket could not be created. Please retry.', status: 500 },
     BAD_TOWER_CONFIG: { error: 'Tower rewards need admin configuration.', status: 500 },
     INVALID_TOWER_CONFIG: { error: 'Enter a valid reward for every Tower floor.', status: 400 },
+    INVALID_TOWER_TIMER: { error: 'Choose a Tower climb time between 1 and 5 minutes.', status: 400 },
   };
   return map[code] ?? { error: 'Tower action failed.', status: 500 };
 }
@@ -116,6 +122,15 @@ export function isTowerTokenExpired(expiresAt: Date | string, now: Date = new Da
 
 export async function ensureTowerDefaults(store: TowerStore = prisma) {
   if (towerConfigReady) return;
+  await store.setting.upsert({
+    where: { key: TOWER_RUN_DURATION_KEY },
+    update: {},
+    create: {
+      key: TOWER_RUN_DURATION_KEY,
+      value: String(DEFAULT_TOWER_RUN_DURATION_SECONDS),
+      label: 'Tower climb duration in seconds',
+    },
+  });
   const version = await store.setting.findUnique({ where: { key: TOWER_DEFAULTS_VERSION_KEY } });
   if (version?.value === TOWER_DEFAULTS_VERSION) {
     towerConfigReady = true;
@@ -128,7 +143,7 @@ export async function ensureTowerDefaults(store: TowerStore = prisma) {
   });
   await store.setting.upsert({
     where: { key: TOWER_REWARDS_KEY },
-    update: { value: JSON.stringify(DEFAULT_TOWER_REWARDS) },
+    update: {},
     create: { key: TOWER_REWARDS_KEY, value: JSON.stringify(DEFAULT_TOWER_REWARDS), label: 'Tower Rewards' },
   });
   await store.setting.upsert({
@@ -141,9 +156,42 @@ export async function ensureTowerDefaults(store: TowerStore = prisma) {
 
 export async function getTowerConfig(store: TowerStore = prisma) {
   await ensureTowerDefaults(store);
-  const settings = await store.setting.findMany({ where: { key: { in: [TOWER_ENABLED_KEY, TOWER_REWARDS_KEY] } } });
+  const settings = await store.setting.findMany({
+    where: { key: { in: [TOWER_ENABLED_KEY, TOWER_REWARDS_KEY, TOWER_RUN_DURATION_KEY] } },
+  });
   const map = Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
-  return { enabled: map[TOWER_ENABLED_KEY] !== 'false', rewards: normalizeTowerRewards(map[TOWER_REWARDS_KEY]) };
+  if (map[TOWER_RUN_DURATION_KEY] === undefined) {
+    await store.setting.upsert({
+      where: { key: TOWER_RUN_DURATION_KEY },
+      update: {},
+      create: {
+        key: TOWER_RUN_DURATION_KEY,
+        value: String(DEFAULT_TOWER_RUN_DURATION_SECONDS),
+        label: 'Tower climb duration in seconds',
+      },
+    });
+    map[TOWER_RUN_DURATION_KEY] = String(DEFAULT_TOWER_RUN_DURATION_SECONDS);
+  }
+  return {
+    enabled: map[TOWER_ENABLED_KEY] !== 'false',
+    rewards: normalizeTowerRewards(map[TOWER_REWARDS_KEY]),
+    runDurationSeconds: storedTowerRunDuration(map[TOWER_RUN_DURATION_KEY]),
+  };
+}
+
+function storedTowerRunDuration(raw: unknown) {
+  const value = Number(raw);
+  return TOWER_RUN_DURATION_OPTIONS_SECONDS.includes(value as typeof TOWER_RUN_DURATION_OPTIONS_SECONDS[number])
+    ? value
+    : DEFAULT_TOWER_RUN_DURATION_SECONDS;
+}
+
+export function normalizeTowerRunDuration(raw: unknown) {
+  const value = Number(raw);
+  if (!TOWER_RUN_DURATION_OPTIONS_SECONDS.includes(value as typeof TOWER_RUN_DURATION_OPTIONS_SECONDS[number])) {
+    throw new TowerError('INVALID_TOWER_TIMER');
+  }
+  return value;
 }
 
 export function normalizeTowerRewards(raw: unknown): TowerRewardConfig[] {
@@ -187,9 +235,13 @@ export function towerRewardName(type: TowerRewardType, value: number, configured
 }
 
 export async function updateTowerAdminConfig(body: unknown) {
-  const input = body as { enabled?: unknown; rewards?: unknown } | null;
+  const input = body as { enabled?: unknown; rewards?: unknown; runDurationSeconds?: unknown } | null;
+  const current = await getTowerConfig();
   const enabled = input?.enabled !== false;
   const rewards = normalizeTowerRewards(input?.rewards);
+  const runDurationSeconds = input?.runDurationSeconds === undefined
+    ? current.runDurationSeconds
+    : normalizeTowerRunDuration(input.runDurationSeconds);
   await prisma.$transaction(async (tx) => {
     await tx.setting.upsert({
       where: { key: TOWER_ENABLED_KEY },
@@ -200,6 +252,15 @@ export async function updateTowerAdminConfig(body: unknown) {
       where: { key: TOWER_REWARDS_KEY },
       update: { value: JSON.stringify(rewards), label: 'Tower Rewards' },
       create: { key: TOWER_REWARDS_KEY, value: JSON.stringify(rewards), label: 'Tower Rewards' },
+    });
+    await tx.setting.upsert({
+      where: { key: TOWER_RUN_DURATION_KEY },
+      update: { value: String(runDurationSeconds), label: 'Tower climb duration in seconds' },
+      create: {
+        key: TOWER_RUN_DURATION_KEY,
+        value: String(runDurationSeconds),
+        label: 'Tower climb duration in seconds',
+      },
     });
   });
   towerConfigReady = false;
@@ -345,6 +406,7 @@ function serializeAttempt(
       && (status === 'IN_PROGRESS' || status === 'COMPLETED'),
     expiresAt: attempt.token.expiresAt.toISOString(),
     runExpiresAt: attempt.runExpiresAt.toISOString(),
+    climbDurationSeconds: Math.max(0, Math.ceil((attempt.runExpiresAt.getTime() - attempt.startedAt.getTime()) / 1000)),
     serverNow: now.toISOString(),
     floors: publicFloors(rewards),
     history: publicHistory(attempt),
@@ -477,6 +539,96 @@ export async function grantManualTowerTokens(
 export async function grantManualTowerToken(userId: string, requestId: string, adminId: string, now: Date = new Date()) {
   const result = await grantManualTowerTokens(userId, requestId, 1, adminId, now);
   return { token: result.tokens[0], created: result.created };
+}
+
+function promotionSourcePrefix(requestId: string) {
+  return `PROMOTION:${requestId}:`;
+}
+
+function promotionResult(
+  tokens: Array<{ userId: string; sourceRefId: string | null; expiresAt: Date }>,
+  sourcePrefix: string,
+) {
+  if (
+    tokens.length === 0
+    || new Set(tokens.map((token) => token.userId)).size !== tokens.length
+    || tokens.some((token) => token.sourceRefId !== `${sourcePrefix}${token.userId}`)
+    || tokens.some((token) => token.expiresAt.getTime() !== tokens[0].expiresAt.getTime())
+  ) throw new TowerError('INVALID_PROMOTION_REQUEST');
+
+  return {
+    created: false,
+    createdCount: 0,
+    recipientCount: tokens.length,
+    expiresAt: tokens[0].expiresAt,
+  };
+}
+
+export async function getTowerPromotionPreview(now: Date = new Date()) {
+  const [config, recipientCount] = await Promise.all([
+    getTowerConfig(),
+    prisma.user.count({ where: { role: 'USER' } }),
+  ]);
+  return { enabled: config.enabled, recipientCount, expiresAt: getTowerTokenExpiry(now) };
+}
+
+export async function grantPromotionalTowerTokens(
+  requestId: string,
+  adminId: string,
+  now: Date = new Date(),
+) {
+  const cleanRequestId = requestId.trim();
+  if (!/^[a-zA-Z0-9-]{8,100}$/.test(cleanRequestId)) {
+    throw new TowerError('INVALID_PROMOTION_REQUEST');
+  }
+
+  const sourcePrefix = promotionSourcePrefix(cleanRequestId);
+  const findPromotion = (store: TowerStore) => store.towerToken.findMany({
+    where: { source: 'PROMOTION', sourceRefId: { startsWith: sourcePrefix } },
+    select: { userId: true, sourceRefId: true, expiresAt: true },
+    orderBy: { userId: 'asc' },
+  });
+
+  try {
+    return await runSerializableTransaction(async (tx) => {
+      const grantor = await tx.user.findFirst({ where: { id: adminId, role: 'ADMIN' }, select: { id: true } });
+      if (!grantor) throw new TowerError('FORBIDDEN', undefined, 403);
+
+      const existing = await findPromotion(tx);
+      if (existing.length > 0) return promotionResult(existing, sourcePrefix);
+
+      const config = await getTowerConfig(tx);
+      if (!config.enabled) throw new TowerError('TOWER_DISABLED', undefined, 403);
+
+      const users = await tx.user.findMany({ where: { role: 'USER' }, select: { id: true }, orderBy: { id: 'asc' } });
+      if (users.length === 0) throw new TowerError('NO_PROMOTION_RECIPIENTS', undefined, 409);
+
+      const expiresAt = getTowerTokenExpiry(now);
+      const created = await tx.towerToken.createMany({
+        data: users.map((user) => ({
+          userId: user.id,
+          source: 'PROMOTION',
+          sourceRefId: `${sourcePrefix}${user.id}`,
+          grantedById: adminId,
+          earnedAt: now,
+          expiresAt,
+        })),
+      });
+      if (created.count !== users.length) throw new TowerError('INVALID_PROMOTION_REQUEST');
+
+      return {
+        created: true,
+        createdCount: created.count,
+        recipientCount: users.length,
+        expiresAt,
+      };
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+    const existing = await findPromotion(prisma);
+    if (existing.length === 0) throw error;
+    return promotionResult(existing, sourcePrefix);
+  }
 }
 
 export async function searchTowerUsers(query: string) {
@@ -641,6 +793,7 @@ export async function getTowerCurrent(
   ]);
   return {
     enabled: config.enabled,
+    runDurationSeconds: config.runDurationSeconds,
     availableTokens,
     nextTokenExpiresAt: nextToken?.expiresAt.toISOString() ?? null,
     rewardTickets: rewardTickets.map(serializeTowerRewardTicket),
@@ -687,7 +840,7 @@ export async function startTowerAttempt(userId: string, now: Date = new Date()) 
         userId,
         redCards: JSON.stringify(generateRedCards()),
         startedAt: now,
-        runExpiresAt: getTowerRunExpiry(now, token.expiresAt),
+        runExpiresAt: getTowerRunExpiry(now, token.expiresAt, config.runDurationSeconds),
       },
       include: { token: true },
     });
