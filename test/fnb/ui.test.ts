@@ -46,6 +46,11 @@ function fnbProductModel(schema: string) {
 
 test('admin F&B is one searchable price-sorted catalog', () => {
   assert.match(catalogSource, /F&amp;B Items/)
+  assert.match(catalogSource, /className="fnb-config-card"/)
+  assert.match(catalogSource, /> Configure Items/)
+  assert.match(catalogSource, /catalogOpen &&/)
+  assert.match(catalogSource, /labelledBy="fnb-catalog-modal-title"/)
+  assert.match(catalogSource, /size="wide"/)
   assert.match(catalogSource, /aria-label="Search F&B items"/)
   assert.match(catalogSource, /product\.name\.toLowerCase\(\)\.includes\(query\)/)
   assert.match(catalogSource, /left\.sellingPrice - right\.sellingPrice/)
@@ -53,6 +58,17 @@ test('admin F&B is one searchable price-sorted catalog', () => {
   assert.match(catalogSource, /> Hide</)
   assert.match(catalogSource, /> Restore</)
   assert.doesNotMatch(catalogSource, /role="tablist"|Revenue|Activity/)
+})
+
+test('catalog add and edit use one popup at a time and return to the manager', () => {
+  assert.match(catalogSource, /setCatalogOpen\(false\)[\s\S]*?setModalProduct\(product\)/)
+  assert.match(catalogSource, /setModalProduct\(null\)[\s\S]*?setCatalogOpen\(true\)/)
+  assert.match(catalogSource, /onClose=\{returnToCatalog\}/)
+  const managerSource = catalogSource.slice(
+    catalogSource.indexOf('{catalogOpen && ('),
+    catalogSource.indexOf('{modalProduct && ('),
+  )
+  assert.doesNotMatch(managerSource, /FnbProductModal/)
 })
 
 test('admin item popup edits only name and selling price', () => {
@@ -132,11 +148,11 @@ test('modal load, add, and remove synchronize the existing booking row locally',
   assert.doesNotMatch(modalSource, /fetchBookings/)
 })
 
-test('catalog stays bounded while booking add-ons use only the modal scroll', () => {
-  assert.match(
-    styles,
-    /\.fnb-catalog-list \{[\s\S]*?max-height: 560px;[\s\S]*?overflow-y: auto;/,
-  )
+test('F&B popups use only the modal scroll', () => {
+  const catalogListStyles = styles.match(/\.fnb-catalog-list \{[^}]*\}/)?.[0] ?? ''
+  assert.doesNotMatch(catalogListStyles, /max-height|overflow|overscroll/)
+  const catalogHeadStyles = styles.match(/\.fnb-catalog-head \{[^}]*\}/)?.[0] ?? ''
+  assert.doesNotMatch(catalogHeadStyles, /position:\s*sticky|top:\s*0/)
   const productGridStyles = styles.match(/\.booking-fnb-product-grid \{[^}]*\}/)?.[0] ?? ''
   assert.doesNotMatch(productGridStyles, /max-height|overflow|overscroll/)
   assert.doesNotMatch(styles, /\.booking-fnb-item-list \{[^}]*overflow/)

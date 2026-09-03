@@ -218,6 +218,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const timeoutAttemptRef = useRef('');
   const attempt = state.attempt;
   const loading = pendingAction !== null;
+  const isStarting = pendingAction === 'start';
   const isPicking = pendingAction === 'pick';
   const isClimbing = pendingAction === 'climb';
   const isClaiming = pendingAction === 'claim';
@@ -227,7 +228,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
     enabled: state.enabled,
     availableTokens: state.availableTokens,
     attemptStatus: attempt?.status,
-    loading: loading && !attempt,
+    loading: isStarting || (loading && !attempt),
     error: attempt ? '' : error,
   });
   const timedStatus = shouldShowTowerAttemptExpiry(attempt?.status);

@@ -27,6 +27,10 @@ test('maps every Tower UI state deterministically', () => {
   assert.equal(getTowerScreen({ ...base, attemptStatus: 'CLAIMED' }), 'claimed');
   assert.equal(getTowerScreen({ ...base, attemptStatus: 'TIMED_OUT' }), 'timed-out');
   assert.equal(getTowerScreen({ ...base, attemptStatus: 'EXPIRED' }), 'expired');
+  assert.equal(
+    getTowerScreen({ ...base, attemptStatus: 'LOST', availableTokens: 1, loading: true }),
+    'loading',
+  );
 });
 
 test('orders the mobile tower top-down and focuses a safe floor until Climb', () => {
@@ -521,6 +525,8 @@ test('shows one action-aware spinner while Tower requests are pending', () => {
   const pickSource = source.slice(pickStart, pickEnd);
 
   assert.equal(source.includes("type TowerPendingAction = 'start' | 'pick' | 'climb' | 'claim' | 'refresh' | null"), true);
+  assert.equal(source.includes("const isStarting = pendingAction === 'start'"), true);
+  assert.equal(source.includes('loading: isStarting || (loading && !attempt)'), true);
   assert.equal(source.includes("const isPicking = pendingAction === 'pick'"), true);
   assert.equal(source.includes("const isClimbing = pendingAction === 'climb'"), true);
   assert.equal(source.includes("const isClaiming = pendingAction === 'claim'"), true);
