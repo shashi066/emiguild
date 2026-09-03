@@ -26,6 +26,7 @@ import {
   meetsStationMinimumDuration,
 } from '@/lib/booking-availability';
 import { runSerializableTransaction } from '@/lib/prisma-transaction';
+import { getActiveFnbSubtotals } from '@/lib/fnb';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
@@ -115,9 +116,16 @@ export async function GET(req: NextRequest) {
       : Promise.resolve(null),
   ]);
 
+  const fnbSubtotals = isAdmin
+    ? await getActiveFnbSubtotals(bookings.map((booking) => booking.id))
+    : null;
+
   const encryptedBookings = bookings.map((booking) => ({
     ...booking,
     customerPhone: encryptPhone(booking.customerPhone),
+    ...(fnbSubtotals
+      ? { fnbSubtotal: fnbSubtotals.get(booking.id) ?? 0 }
+      : {}),
   }));
 
   return NextResponse.json({

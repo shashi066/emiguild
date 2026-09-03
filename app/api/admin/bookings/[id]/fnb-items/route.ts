@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import {
   addBookingFnbItem,
-  FnbInventoryError,
+  FnbError,
   getFnbBookingItems,
   parseBookingFnbItem,
-} from '@/lib/fnb-inventory';
+} from '@/lib/fnb';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -29,10 +29,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   try {
     const { id } = await params;
-    const item = await addBookingFnbItem(id, session.user.id, parseBookingFnbItem(await req.json()));
+    const item = await addBookingFnbItem(id, parseBookingFnbItem(await req.json()));
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
-    if (error instanceof FnbInventoryError) {
+    if (error instanceof FnbError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
     console.error('Adding F&B item to booking failed:', error);

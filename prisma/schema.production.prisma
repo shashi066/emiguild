@@ -51,7 +51,6 @@ model User {
   watchPartyShopOrders          WatchPartyShopOrder[]  @relation("WatchPartyShopOrderOwner")
   watchPartyShopOrdersGiven     WatchPartyShopOrder[]  @relation("WatchPartyShopOrderGivenActor")
   watchPartyShopOrdersCancelled WatchPartyShopOrder[]  @relation("WatchPartyShopOrderCancelActor")
-  fnbStockMovements             FnbStockMovement[]     @relation("FnbStockMovementActor")
   fnbItemsVoided                BookingFnbItem[]       @relation("BookingFnbItemVoidActor")
 
   @@map("users")
@@ -113,23 +112,16 @@ model Booking {
 }
 
 model FnbProduct {
-  id                String   @id @default(cuid())
-  name              String
-  category          String
-  sku               String?  @unique
-  sellingPrice      Int
-  costPrice         Int?
-  currentStock      Int      @default(0)
-  lowStockThreshold Int      @default(0)
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  sellingPrice Int
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  bookingItems   BookingFnbItem[]
-  stockMovements FnbStockMovement[]
+  bookingItems BookingFnbItem[]
 
-  @@index([isActive, category])
-  @@index([currentStock])
+  @@index([isActive, sellingPrice])
   @@map("fnb_products")
 }
 
@@ -148,36 +140,14 @@ model BookingFnbItem {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  booking        Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  product        FnbProduct         @relation(fields: [productId], references: [id], onDelete: Restrict)
-  voidedBy       User?              @relation("BookingFnbItemVoidActor", fields: [voidedById], references: [id], onDelete: SetNull)
-  stockMovements FnbStockMovement[]
+  booking  Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  product  FnbProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  voidedBy User?      @relation("BookingFnbItemVoidActor", fields: [voidedById], references: [id], onDelete: SetNull)
 
   @@index([bookingId, createdAt])
   @@index([productId, status])
   @@index([status, createdAt])
   @@map("booking_fnb_items")
-}
-
-model FnbStockMovement {
-  id               String   @id @default(cuid())
-  productId        String
-  bookingFnbItemId String?
-  actorId          String?
-  type             String
-  quantityChange   Int
-  unitCost         Int?
-  note             String?
-  createdAt        DateTime @default(now())
-
-  product        FnbProduct      @relation(fields: [productId], references: [id], onDelete: Restrict)
-  bookingFnbItem BookingFnbItem? @relation(fields: [bookingFnbItemId], references: [id], onDelete: SetNull)
-  actor          User?           @relation("FnbStockMovementActor", fields: [actorId], references: [id], onDelete: SetNull)
-
-  @@index([productId, createdAt])
-  @@index([bookingFnbItemId])
-  @@index([type, createdAt])
-  @@map("fnb_stock_movements")
 }
 
 model UserPass {

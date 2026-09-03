@@ -21,7 +21,7 @@ const NAV_ITEMS = [
   { href: '/admin/daily-spin', label: 'Guild Spin', icon: RotateCw },
   { href: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { href: '/admin/watch-parties', label: 'Watch Parties', icon: Tv },
-  { href: '/admin/fnb',          label: 'F&B Inventory',  icon: CupSoda },
+  { href: '/admin/fnb',          label: 'F&B Items',      icon: CupSoda },
   { href: '/admin/users',    label: 'Users',          icon: Users },
   { href: '/admin/settings', label: 'Settings',       icon: Settings },
   { href: '/admin/analytics', label: 'Analytics',     icon: Activity },
