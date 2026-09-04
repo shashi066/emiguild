@@ -1,5 +1,6 @@
 export const GUILD_MEMBERSHIP_TYPES = ['GUILD_HERO', 'GUILD_MASTER'] as const;
 export type GuildMembershipType = (typeof GUILD_MEMBERSHIP_TYPES)[number];
+export const GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE = 50;
 
 export type GuildMembershipPlan = {
   type: GuildMembershipType;
@@ -24,7 +25,7 @@ export const DEFAULT_GUILD_MEMBERSHIP_PLANS: Record<GuildMembershipType, GuildMe
     validityDays: 30,
     description: '50% OFF eligible solo PS5 bookings every day.',
     isActive: true,
-    soloDiscountPercentage: 50,
+    soloDiscountPercentage: GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE,
     squadDiscountPercentage: 0,
   },
   GUILD_MASTER: {
@@ -36,8 +37,8 @@ export const DEFAULT_GUILD_MEMBERSHIP_PLANS: Record<GuildMembershipType, GuildMe
     validityDays: 30,
     description: '50% OFF eligible solo and squad PS5 bookings every day.',
     isActive: true,
-    soloDiscountPercentage: 50,
-    squadDiscountPercentage: 50,
+    soloDiscountPercentage: GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE,
+    squadDiscountPercentage: GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE,
   },
 };
 
@@ -260,7 +261,7 @@ export function validateGuildBenefitApplication({
       reason: 'A Guild Membership cannot be combined with an hour pass or another offer.',
     };
   }
-  if (discount !== 50) {
+  if (discount !== GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE) {
     return {
       valid: false,
       code: 'INVALID_DISCOUNT',
@@ -295,6 +296,10 @@ export function validateGuildBenefitApplication({
     benefitType: requestedBenefit,
     reason: eligibility.reason,
   };
+}
+
+export function getGuildMembershipDiscountedTotal(normalTotal: number) {
+  return Math.round(normalTotal * (1 - GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE / 100));
 }
 
 export function guildMembershipName(type: string) {

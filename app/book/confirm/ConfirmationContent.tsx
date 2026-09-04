@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   CheckCircle, Calendar, Clock, Monitor,
-  IndianRupee, BookOpen, Home, Gamepad2, Loader2, AlertCircle,
+  IndianRupee, BookOpen, Home, Gamepad2, Loader2, AlertCircle, Award,
 } from 'lucide-react';
 import { formatTime, formatDate, formatCurrency } from '@/lib/utils';
+import { guildMembershipName, isGuildMembershipType } from '@/lib/guild-membership';
 
 interface Booking {
   id: string;
@@ -19,6 +20,8 @@ interface Booking {
   notes: string | null;
   status: string;
   paymentStatus: string;
+  discount: number;
+  appliedBenefitType: string | null;
   station: { name: string };
 }
 
@@ -60,6 +63,10 @@ export default function ConfirmationContent() {
       </div>
     );
   }
+
+  const appliedMembership = isGuildMembershipType(booking.appliedBenefitType)
+    ? guildMembershipName(booking.appliedBenefitType)
+    : null;
 
   return (
     <div className="page-wrapper">
@@ -147,6 +154,19 @@ export default function ConfirmationContent() {
                 <div className="booking-detail-value">{booking.notes}</div>
                 <div className="form-helper" style={{ marginTop: 5 }}>
                   We will do our best to prepare it before your session.
+                </div>
+              </div>
+            )}
+            {appliedMembership && (
+              <div
+                className="booking-detail-item"
+                style={{ gridColumn: '1 / -1', background: 'rgba(74,222,128,0.05)', borderColor: 'rgba(74,222,128,0.22)' }}
+              >
+                <div className="booking-detail-label">
+                  <Award size={12} style={{ display: 'inline', marginRight: 4 }} />Guild Membership
+                </div>
+                <div className="booking-detail-value" style={{ color: '#4ade80' }}>
+                  {appliedMembership} · {booking.discount}% discount applied
                 </div>
               </div>
             )}

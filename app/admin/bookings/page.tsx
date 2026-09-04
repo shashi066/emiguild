@@ -30,6 +30,7 @@ import {
   validateAdminWalkinTime,
 } from '@/lib/admin-walkin-time';
 import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
+import { MAX_FNB_QUANTITY } from '@/lib/fnb-rules';
 import AdminBookingModalShell from '@/components/admin/AdminBookingModalShell';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
@@ -54,6 +55,7 @@ type Booking = {
   discount: number;
   passHoursDeducted: number;
   appliedBenefitType: string | null;
+  fnbSubtotal: number;
   user: { id: string; name: string; email: string } | null;
   userPass: HourPassRecord | null;
   station: { id: string; name: string };
@@ -671,9 +673,7 @@ function EditModal({
 type FnbProduct = {
   id: string;
   name: string;
-  category: string;
   sellingPrice: number;
-  currentStock: number;
   isActive: boolean;
 };
 
@@ -688,7 +688,21 @@ type BookingFnbItem = {
   createdAt: string;
 };
 
-function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
+function getActiveFnbSubtotal(items: BookingFnbItem[]) {
+  return items
+    .filter((item) => item.status === 'ACTIVE')
+    .reduce((total, item) => total + item.subtotal, 0);
+}
+
+function BookingFnbModal({
+  booking,
+  onClose,
+  onSubtotalChange,
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onSubtotalChange: (bookingId: string, subtotal: number) => void;
+}) {
   const [items, setItems] = useState<BookingFnbItem[]>([]);
   const [products, setProducts] = useState<FnbProduct[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -696,9 +710,8 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
   const [quantity, setQuantity] = useState('1');
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [voidingId, setVoidingId] = useState('');
-  const [voidCandidate, setVoidCandidate] = useState<BookingFnbItem | null>(null);
-  const [voidReason, setVoidReason] = useState('');
+  const [removingId, setRemovingId] = useState('');
+  const [removeCandidate, setRemoveCandidate] = useState<BookingFnbItem | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -707,19 +720,31 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
     try {
       const [itemsResponse, productsResponse] = await Promise.all([
         fetch(`/api/admin/bookings/${booking.id}/fnb-items`),
-        fetch('/api/admin/fnb/products'),
+        booking.status === 'CANCELLED'
+          ? Promise.resolve(null)
+          : fetch('/api/admin/fnb/products'),
       ]);
-      const [itemsData, productsData] = await Promise.all([itemsResponse.json(), productsResponse.json()]);
+      const [itemsData, productsData] = await Promise.all([
+        itemsResponse.json(),
+        productsResponse?.json() ?? Promise.resolve({ products: [] }),
+      ]);
       if (!itemsResponse.ok) throw new Error(itemsData.error ?? 'Could not load booking F&B items.');
-      if (!productsResponse.ok) throw new Error(productsData.error ?? 'Could not load F&B products.');
-      setItems(itemsData.items ?? []);
-      setProducts((productsData.products ?? []).filter((product: FnbProduct) => product.currentStock > 0));
+      if (productsResponse && !productsResponse.ok) throw new Error(productsData.error ?? 'Could not load F&B items.');
+      const nextItems: BookingFnbItem[] = itemsData.items ?? [];
+      setItems(nextItems);
+      setProducts(productsData.products ?? []);
+      onSubtotalChange(
+        booking.id,
+        typeof itemsData.activeSubtotal === 'number'
+          ? itemsData.activeSubtotal
+          : getActiveFnbSubtotal(nextItems),
+      );
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not load F&B details.');
     } finally {
       setLoading(false);
     }
-  }, [booking.id]);
+  }, [booking.id, booking.status, onSubtotalChange]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -735,9 +760,10 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Could not add F&B item.');
+      setItems((current) => [data.item, ...current]);
+      onSubtotalChange(booking.id, activeSubtotal + data.item.subtotal);
       setSelectedProductId('');
       setQuantity('1');
-      await load();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not add F&B item.');
     } finally {
@@ -745,35 +771,38 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
     }
   };
 
-  const voidItem = async () => {
-    if (!voidCandidate || !voidReason.trim()) return;
-    setVoidingId(voidCandidate.id);
+  const removeItem = async () => {
+    if (!removeCandidate) return;
+    setRemovingId(removeCandidate.id);
     setError('');
     try {
-      const response = await fetch(`/api/admin/fnb/booking-items/${voidCandidate.id}`, {
+      const response = await fetch(`/api/admin/fnb/booking-items/${removeCandidate.id}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: voidReason }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Could not void F&B item.');
-      setVoidCandidate(null);
-      setVoidReason('');
-      await load();
+      if (!response.ok) throw new Error(data.error ?? 'Could not remove F&B item.');
+      setItems((current) => current.map((item) => (
+        item.id === data.item.id ? data.item : item
+      )));
+      onSubtotalChange(
+        booking.id,
+        Math.max(0, activeSubtotal - removeCandidate.subtotal),
+      );
+      setRemoveCandidate(null);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not void F&B item.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not remove F&B item.');
     } finally {
-      setVoidingId('');
+      setRemovingId('');
     }
   };
 
-  const activeSubtotal = items.filter((item) => item.status === 'ACTIVE').reduce((total, item) => total + item.subtotal, 0);
+  const activeSubtotal = getActiveFnbSubtotal(items);
   const isCancelled = booking.status === 'CANCELLED';
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
     return products
       .filter((product) =>
-        !query || `${product.name} ${product.category}`.toLowerCase().includes(query),
+        !query || product.name.toLowerCase().includes(query),
       )
       .sort((left, right) =>
         left.sellingPrice - right.sellingPrice || left.name.localeCompare(right.name),
@@ -785,41 +814,48 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
     selectedProduct &&
       Number.isInteger(quantityNumber) &&
       quantityNumber >= 1 &&
-      quantityNumber <= selectedProduct.currentStock,
+      quantityNumber <= MAX_FNB_QUANTITY,
   );
 
   const changeQuantity = (change: number) => {
-    const maximum = selectedProduct?.currentStock ?? 1;
     const current = Number.isInteger(quantityNumber) ? quantityNumber : 1;
-    setQuantity(String(Math.min(maximum, Math.max(1, current + change))));
+    setQuantity(String(Math.min(MAX_FNB_QUANTITY, Math.max(1, current + change))));
   };
 
-  if (voidCandidate) {
+  if (removeCandidate) {
     return (
-      <AdminBookingModalShell onClose={onClose} labelledBy="void-fnb-item-title">
+      <AdminBookingModalShell
+        onClose={onClose}
+        labelledBy="remove-fnb-item-title"
+        lightweight
+      >
         <div className="admin-modal-header">
           <div>
-            <h2 id="void-fnb-item-title"><Trash size={19} style={{ display: 'inline', marginRight: 7, color: 'var(--color-accent-danger)' }} />Void F&amp;B item</h2>
-            <p>Review this correction before restoring stock.</p>
+            <h2 id="remove-fnb-item-title"><Trash size={19} style={{ display: 'inline', marginRight: 7, color: 'var(--color-accent-danger)' }} />Remove F&amp;B item</h2>
+            <p>Remove this mistaken add-on from the booking.</p>
           </div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setVoidCandidate(null)} aria-label="Close void confirmation"><X size={18} /></button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRemoveCandidate(null)} aria-label="Close remove confirmation"><X size={18} /></button>
         </div>
         {error && <div className="fnb-error" role="alert">{error}</div>}
         <div className="booking-fnb-void-summary">
-          <strong>{voidCandidate.quantity} × {voidCandidate.productName}</strong>
-          <span>{formatCurrency(voidCandidate.subtotal)} will be removed from F&amp;B revenue and {voidCandidate.quantity} unit(s) will return to stock.</span>
+          <strong>{removeCandidate.quantity} × {removeCandidate.productName}</strong>
+          <span>{formatCurrency(removeCandidate.subtotal)} will be removed from this booking&apos;s F&amp;B subtotal.</span>
         </div>
-        <label className="booking-fnb-void-reason">Reason for voiding<textarea className="form-input" required autoFocus rows={4} value={voidReason} onChange={(event) => setVoidReason(event.target.value)} placeholder="For example: entered against the wrong booking" /></label>
-        <div className="fnb-modal-actions"><button type="button" className="btn btn-ghost" onClick={() => { setVoidCandidate(null); setVoidReason(''); }}>Keep item</button><button type="button" className="btn btn-danger" disabled={!voidReason.trim() || voidingId === voidCandidate.id} onClick={() => void voidItem()}><Trash size={15} /> {voidingId === voidCandidate.id ? 'Voiding…' : 'Void & restore stock'}</button></div>
+        <div className="fnb-modal-actions"><button type="button" className="btn btn-ghost" onClick={() => setRemoveCandidate(null)}>Keep Item</button><button type="button" className="btn btn-danger fnb-danger-action" disabled={removingId === removeCandidate.id} onClick={() => void removeItem()}><Trash size={15} /> {removingId === removeCandidate.id ? 'Removing...' : 'Remove Item'}</button></div>
       </AdminBookingModalShell>
     );
   }
 
   return (
-    <AdminBookingModalShell onClose={onClose} labelledBy="booking-fnb-title" size="wide">
+    <AdminBookingModalShell
+      onClose={onClose}
+      labelledBy="booking-fnb-title"
+      size="wide"
+      lightweight
+    >
       <div className="admin-modal-header">
         <div>
-          <h2 id="booking-fnb-title"><CupSoda size={19} style={{ display: 'inline', marginRight: 7 }} />F&amp;B consumed</h2>
+          <h2 id="booking-fnb-title"><CupSoda size={19} style={{ display: 'inline', marginRight: 7 }} />F&amp;B Add-ons</h2>
           <p>{booking.customerName ?? booking.user?.name ?? 'Customer'} · #{booking.id.slice(-8).toUpperCase()} · Separate from gaming charge</p>
         </div>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close F&B details"><X size={18} /></button>
@@ -832,8 +868,8 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
             <input
               className="form-input"
               type="search"
-              aria-label="Search in-stock F&B products"
-              placeholder="Search products"
+              aria-label="Search F&B items"
+              placeholder="Search items"
               value={productSearch}
               onChange={(event) => {
                 setProductSearch(event.target.value);
@@ -842,10 +878,10 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
               }}
             />
           </div>
-          <div className="booking-fnb-product-grid" role="radiogroup" aria-label="In-stock F&B products">
+          <div className="booking-fnb-product-grid" role="radiogroup" aria-label="Available F&B items">
             {filteredProducts.length === 0 ? (
               <p className="booking-fnb-product-empty">
-                {products.length === 0 ? 'No products are currently in stock.' : 'No products match this search.'}
+                {products.length === 0 ? 'No F&B items are available.' : 'No items match this search.'}
               </p>
             ) : filteredProducts.map((product) => {
               const selected = selectedProductId === product.id;
@@ -862,13 +898,17 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
                   }}
                 >
                   <span className="booking-fnb-product-name">{product.name}</span>
-                  <span className="booking-fnb-product-category">{product.category}</span>
                   <strong>{formatCurrency(product.sellingPrice)}</strong>
-                  <span>{product.currentStock} left</span>
                 </button>
               );
             })}
           </div>
+          {selectedProduct && quantityValid && (
+            <div className="booking-fnb-selection-summary" aria-live="polite">
+              <span>{quantityNumber} × {selectedProduct.name}</span>
+              <strong>&middot; {formatCurrency(selectedProduct.sellingPrice * quantityNumber)}</strong>
+            </div>
+          )}
           <div className="booking-fnb-add-controls">
             <div className="booking-fnb-quantity">
               <span>Quantity</span>
@@ -886,7 +926,7 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
                   aria-label="Quantity"
                   type="number"
                   min="1"
-                  max={selectedProduct?.currentStock}
+                  max={MAX_FNB_QUANTITY}
                   step="1"
                   required
                   value={quantity}
@@ -896,20 +936,23 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
                   type="button"
                   aria-label="Increase quantity"
                   onClick={() => changeQuantity(1)}
-                  disabled={!selectedProduct || quantityNumber >= selectedProduct.currentStock}
+                  disabled={!selectedProduct || quantityNumber >= MAX_FNB_QUANTITY}
                 >
                   <Plus size={16} />
                 </button>
               </div>
             </div>
-            <button className="btn btn-primary" disabled={adding || !quantityValid}>
-              {adding ? 'Adding…' : <><Plus size={15} /> Add Item</>}
+            <button
+              className="btn btn-primary fnb-primary-action"
+              disabled={adding || !quantityValid}
+            >
+              {adding ? 'Adding...' : <><Plus size={15} /> Add Item</>}
             </button>
           </div>
         </form>
       )}
       {isCancelled && <p className="booking-fnb-note">This booking is cancelled, so no additional F&amp;B items can be added.</p>}
-      {loading ? <div className="loading-state"><div className="spinner" />Loading consumed items…</div> : (
+      {loading ? <div className="loading-state"><div className="spinner" />Loading add-ons...</div> : (
         <div className="booking-fnb-items">
           {items.length === 0 ? (
             <div className="fnb-empty">No F&amp;B items have been recorded for this booking.</div>
@@ -927,12 +970,12 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
                     <div><dt>Subtotal</dt><dd>{formatCurrency(item.subtotal)}</dd></div>
                   </dl>
                   <div className="booking-fnb-item-status">
-                    <span className={`badge ${item.status === 'ACTIVE' ? 'badge-confirmed' : 'badge-cancelled'}`}>{item.status === 'ACTIVE' ? 'Recorded' : 'Voided'}</span>
+                    <span className={`badge ${item.status === 'ACTIVE' ? 'badge-confirmed' : 'badge-cancelled'}`}>{item.status === 'ACTIVE' ? 'Recorded' : 'Removed'}</span>
                     {item.voidReason && <span className="fnb-table-meta">{item.voidReason}</span>}
                   </div>
                   {item.status === 'ACTIVE' && (
-                    <button className="btn btn-ghost btn-sm" disabled={voidingId === item.id} onClick={() => { setVoidReason(''); setVoidCandidate(item); }} style={{ color: 'var(--color-accent-danger)' }}>
-                      <Trash size={14} /> Void
+                    <button className="btn btn-ghost btn-sm" disabled={adding || Boolean(removingId)} onClick={() => setRemoveCandidate(item)} style={{ color: 'var(--color-accent-danger)' }}>
+                      <Trash size={14} /> Remove
                     </button>
                   )}
                 </article>
@@ -940,7 +983,7 @@ function BookingFnbModal({ booking, onClose }: { booking: Booking; onClose: () =
             </div>
           )}
           <div className="booking-fnb-total">
-            <span>F&amp;B subtotal <small>Separate from gaming revenue</small></span>
+            <span>F&amp;B subtotal <small>Separate from gaming charge</small></span>
             <strong>{formatCurrency(activeSubtotal)}</strong>
           </div>
         </div>
@@ -970,6 +1013,20 @@ export default function AdminBookingsPage() {
   const [editModal, setEditModal]         = useState<Booking | null>(null);
   const [fnbModal, setFnbModal]           = useState<Booking | null>(null);
 
+  const handleFnbSubtotalChange = useCallback((bookingId: string, subtotal: number) => {
+    const nextSubtotal = Number.isFinite(subtotal) ? Math.max(0, subtotal) : 0;
+    setBookings((current) => current.map((booking) => (
+      booking.id === bookingId && booking.fnbSubtotal !== nextSubtotal
+        ? { ...booking, fnbSubtotal: nextSubtotal }
+        : booking
+    )));
+    setFnbModal((current) => (
+      current?.id === bookingId && current.fnbSubtotal !== nextSubtotal
+        ? { ...current, fnbSubtotal: nextSubtotal }
+        : current
+    ));
+  }, []);
+
   useEffect(() => {
     fetch('/api/stations').then((r) => r.json()).then((d) => setStations(d.stations ?? []));
   }, []);
@@ -988,6 +1045,7 @@ export default function AdminBookingsPage() {
       setBookings((data.bookings ?? []).map((booking: Booking) => ({
         ...booking,
         customerPhone: decryptPhone(booking.customerPhone),
+        fnbSubtotal: Number.isFinite(booking.fnbSubtotal) ? booking.fnbSubtotal : 0,
       })));
       setTotal(data.total ?? 0);
       setDayRevenue(
@@ -1131,7 +1189,13 @@ export default function AdminBookingsPage() {
       {editModal && (
         <EditModal booking={editModal} stations={stations} onClose={() => setEditModal(null)} onSaved={handleEditSaved} />
       )}
-      {fnbModal && <BookingFnbModal booking={fnbModal} onClose={() => setFnbModal(null)} />}
+      {fnbModal && (
+        <BookingFnbModal
+          booking={fnbModal}
+          onClose={() => setFnbModal(null)}
+          onSubtotalChange={handleFnbSubtotalChange}
+        />
+      )}
 
       <div className="page-header">
         <div>
@@ -1242,6 +1306,16 @@ export default function AdminBookingsPage() {
                 const canEdit     = !['CHECKED_IN', 'CANCELLED'].includes(b.status);
                 const usedPass    = b.passHoursDeducted > 0;
                 const passLabel   = b.userPass?.passType ? `${b.userPass.passType} Pass` : 'Pass';
+                const fnbActionLabel = b.fnbSubtotal > 0
+                  ? formatCurrency(b.fnbSubtotal)
+                  : b.status === 'CANCELLED'
+                    ? 'View Items'
+                    : 'Add Items';
+                const fnbActionDescription = b.fnbSubtotal > 0
+                  ? `F&B items total ${formatCurrency(b.fnbSubtotal)}. Open add-ons.`
+                  : b.status === 'CANCELLED'
+                    ? 'View F&B item history for this cancelled booking.'
+                    : 'Add F&B items to this booking.';
 
                 return (
                   <tr key={b.id} style={{ opacity: isBusy ? 0.5 : 1 }}>
@@ -1353,13 +1427,14 @@ export default function AdminBookingsPage() {
                           </button>
                         )}
                         <button
-                          className="btn btn-ghost btn-sm"
+                          className="btn btn-ghost btn-sm booking-fnb-total-action"
                           onClick={() => setFnbModal(b)}
                           disabled={isBusy}
-                          title="View or record F&B consumed"
+                          aria-label={fnbActionDescription}
+                          title={fnbActionDescription}
                           style={{ color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}
                         >
-                          <CupSoda size={13} /> F&amp;B
+                          <CupSoda size={13} aria-hidden="true" /> {fnbActionLabel}
                         </button>
                         {transitions.includes('CONFIRMED') && (
                           <button className="btn btn-success btn-sm" onClick={() => handleStatusChange(b.id, 'CONFIRMED')} disabled={isBusy} id={`confirm-${b.id}`}>

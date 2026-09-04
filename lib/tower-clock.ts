@@ -2,7 +2,9 @@ import { getNextIstMidnight } from '@/lib/armory-clock';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export const TOWER_RUN_DURATION_MS = 120_000;
+export const DEFAULT_TOWER_RUN_DURATION_SECONDS = 120;
+export const TOWER_RUN_DURATION_OPTIONS_SECONDS = [60, 90, 120, 150, 180, 210, 240, 270, 300] as const;
+export const TOWER_RUN_DURATION_MS = DEFAULT_TOWER_RUN_DURATION_SECONDS * 1000;
 export const TOWER_WARNING_THRESHOLD_MS = 60_000;
 
 export type TowerClockAnchor = {
@@ -14,9 +16,13 @@ export function getTowerTokenExpiry(earnedAt: Date = new Date()) {
   return new Date(getNextIstMidnight(earnedAt).getTime() + DAY_MS);
 }
 
-export function getTowerRunExpiry(startedAt: Date, tokenExpiresAt: Date) {
+export function getTowerRunExpiry(
+  startedAt: Date,
+  tokenExpiresAt: Date,
+  runDurationSeconds: number = DEFAULT_TOWER_RUN_DURATION_SECONDS,
+) {
   return new Date(Math.min(
-    startedAt.getTime() + TOWER_RUN_DURATION_MS,
+    startedAt.getTime() + runDurationSeconds * 1000,
     tokenExpiresAt.getTime(),
   ));
 }

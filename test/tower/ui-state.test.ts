@@ -27,6 +27,10 @@ test('maps every Tower UI state deterministically', () => {
   assert.equal(getTowerScreen({ ...base, attemptStatus: 'CLAIMED' }), 'claimed');
   assert.equal(getTowerScreen({ ...base, attemptStatus: 'TIMED_OUT' }), 'timed-out');
   assert.equal(getTowerScreen({ ...base, attemptStatus: 'EXPIRED' }), 'expired');
+  assert.equal(
+    getTowerScreen({ ...base, attemptStatus: 'LOST', availableTokens: 1, loading: true }),
+    'loading',
+  );
 });
 
 test('orders the mobile tower top-down and focuses a safe floor until Climb', () => {
@@ -152,13 +156,37 @@ test('grants an idempotent 1 to 10 token batch without clearing the selected tes
   assert.equal(source.includes('id="tower-token-quantity"'), true);
   assert.equal(source.includes('Number of Tokens'), true);
   assert.equal(source.includes('min={1} max={10} step={1}'), true);
-  assert.equal(source.includes('!selectedUser || !grantQuantityValid || granting'), true);
+  assert.equal(source.includes('!selectedUser || !grantQuantityValid || grantBusy'), true);
   assert.equal(grantSource.includes('quantity: requestedGrantQuantity'), true);
   assert.equal(grantSource.includes('requestIdRef.current = newRequestId();'), true);
   assert.equal(grantSource.includes('setSelectedUser(null)'), false);
   assert.equal(grantSource.includes("setQuery('')"), false);
   assert.equal(source.includes("`Grant ${requestedGrantQuantity} Token${requestedGrantQuantity === 1 ? '' : 's'}`"), true);
   assert.equal(source.includes('This ${grantedQuantity}-token grant was already stored'), true);
+});
+
+test('confirms one promotional token for every user through an idempotent private route', () => {
+  const source = readFileSync(new URL('../../components/admin/AdminTower.tsx', import.meta.url), 'utf8');
+  const route = readFileSync(new URL('../../app/api/admin/tower/tokens/promotion/route.ts', import.meta.url), 'utf8');
+  const tower = readFileSync(new URL('../../lib/tower.ts', import.meta.url), 'utf8');
+
+  assert.equal(route.includes('export async function GET()'), true);
+  assert.equal(route.includes('export async function POST(req: NextRequest)'), true);
+  assert.equal(route.includes("session.user.role !== 'ADMIN'"), true);
+  assert.equal(route.includes('tokens:'), false);
+  assert.equal(route.includes('sourceRefId'), false);
+  assert.equal(route.includes('recipientCount: result.recipientCount'), true);
+  assert.equal(tower.includes("source: 'PROMOTION'"), true);
+  assert.equal(tower.includes("where: { role: 'USER' }"), true);
+  assert.equal(tower.includes('tx.towerToken.createMany'), true);
+  assert.equal(source.match(/\/api\/admin\/tower\/tokens\/promotion/g)?.length, 2);
+  assert.equal(source.includes('Grant to All Users'), true);
+  assert.equal(source.includes('Grant one token to every user?'), true);
+  assert.equal(source.includes('Tokens they already have will remain available.'), true);
+  assert.equal(source.includes('disabled={!enabled || grantBusy}'), true);
+  assert.equal(source.includes('promotionRequestIdRef.current = newRequestId();'), true);
+  assert.equal(source.includes("if (item.source === 'PROMOTION') return `Promotion${grantor}`"), true);
+  assert.equal(source.includes('.tower-promotion-actions { display: grid; grid-template-columns:'), true);
 });
 
 test('keeps the Admin Tower editor readable and compact on mobile', () => {
@@ -170,9 +198,15 @@ test('keeps the Admin Tower editor readable and compact on mobile', () => {
   assert.equal(source.includes('className="search-leading-icon"'), true);
   assert.equal(source.includes('.tower-user-results { position: absolute; z-index: 3; top: calc(100% + 4px)'), true);
   assert.equal(source.includes('<TowerSummaryCard title="Tower Availability"'), true);
+  assert.equal(source.includes('<TowerSummaryCard title="Climb Timer"'), true);
   assert.equal(source.includes('<TowerSummaryCard title="Floor Rewards"'), true);
   assert.equal(source.includes("{activeEditor === 'availability' && ("), true);
+  assert.equal(source.includes("{activeEditor === 'timer' && ("), true);
   assert.equal(source.includes("{activeEditor === 'rewards' && ("), true);
+  assert.equal(source.includes('TOWER_RUN_DURATION_OPTIONS_SECONDS.map((seconds)'), true);
+  assert.equal(source.includes('aria-pressed={timerDraft === seconds}'), true);
+  assert.equal(source.includes('runDurationSeconds: nextRunDurationSeconds'), true);
+  assert.equal(source.includes('grid-template-columns: repeat(2, minmax(0,1fr))'), true);
   assert.equal(source.includes('setRewardDraft(rewards.map((reward) => ({ ...reward })))'), true);
   assert.equal(source.includes('setRewardDraft([]);'), true);
   assert.equal(source.includes("setEditorError(error instanceof Error ? error.message : 'Tower settings could not be saved.')"), true);
@@ -324,7 +358,7 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
   assert.equal(source.includes("presentation === 'lost') return <span className=\"floor-state"), false);
   assert.equal(source.includes('Fresh climb next time'), false);
   assert.equal(source.includes('Red card ends this climb. Come back stronger next time.'), true);
-  assert.equal(source.includes('You have 120 seconds to complete your climb and take a reward.'), true);
+  assert.equal(source.includes('You have ${duration} to complete your climb and take a reward.'), true);
   assert.equal(source.includes('When time runs out, your climb ends and all unclaimed rewards are lost.'), true);
   assert.equal(source.includes('<Link href="/my-bookings" className="btn btn-primary btn-lg"><BookOpen size={18} /> View My Bookings</Link>'), true);
   assert.equal(source.includes('Back to Home'), false);
@@ -362,8 +396,8 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
 test('shows the six-step Tower guide with lightweight optional visuals', () => {
   const source = readFileSync(new URL('../../components/TowerClient.tsx', import.meta.url), 'utf8');
   const guideSource = readFileSync(new URL('../../components/InfoGuideModal.tsx', import.meta.url), 'utf8');
-  const guideStart = source.indexOf('const GUIDE_STEPS = [');
-  const guideEnd = source.indexOf('] as const;', guideStart);
+  const guideStart = source.indexOf('function getTowerGuideSteps');
+  const guideEnd = source.indexOf('function rewardLabel', guideStart);
   const towerGuide = source.slice(guideStart, guideEnd);
 
   for (const title of ['Start Your Climb', 'Climb 10 Floors', 'Pick a Card', 'Green Card', 'Red Card', 'Beat the Clock']) {
@@ -372,7 +406,9 @@ test('shows the six-step Tower guide with lightweight optional visuals', () => {
   assert.equal(towerGuide.includes('1 Tower Token for one climb'), true);
   assert.equal(towerGuide.includes('counter Reward Ticket'), true);
   assert.equal(towerGuide.includes('before expiry'), true);
-  assert.equal(towerGuide.includes('120 seconds'), true);
+  assert.equal(towerGuide.includes('formatGuideDuration(runDurationSeconds)'), true);
+  assert.equal(towerGuide.includes('You have ${duration}'), true);
+  assert.equal(towerGuide.includes('120 seconds'), false);
   assert.equal(towerGuide.includes("state: 'hidden'"), true);
   assert.equal(towerGuide.includes("state: 'safe'"), true);
   assert.equal(towerGuide.includes("state: 'red'"), true);
@@ -389,6 +425,22 @@ test('shows the six-step Tower guide with lightweight optional visuals', () => {
   assert.equal(guideSource.includes('grid-template-columns: 30px 44px minmax(0, 1fr)'), true);
   assert.equal(guideSource.includes('grid-template-columns: 28px 38px minmax(0, 1fr)'), true);
   assert.equal(guideSource.includes('@keyframes'), false);
+});
+
+test('keeps Tower duration server-configured and exposes only public timing values', () => {
+  const tower = readFileSync(new URL('../../lib/tower.ts', import.meta.url), 'utf8');
+  const clock = readFileSync(new URL('../../lib/tower-clock.ts', import.meta.url), 'utf8');
+  const settingsRoute = readFileSync(new URL('../../app/api/settings/route.ts', import.meta.url), 'utf8');
+
+  assert.equal(clock.includes('DEFAULT_TOWER_RUN_DURATION_SECONDS = 120'), true);
+  assert.equal(clock.includes('[60, 90, 120, 150, 180, 210, 240, 270, 300]'), true);
+  assert.equal(clock.includes('runDurationSeconds * 1000'), true);
+  assert.equal(tower.includes("const TOWER_RUN_DURATION_KEY = 'tower_run_duration_seconds'"), true);
+  assert.equal(tower.includes("where: { key: TOWER_REWARDS_KEY },\n    update: {},"), true);
+  assert.equal(tower.includes('runExpiresAt: getTowerRunExpiry(now, token.expiresAt, config.runDurationSeconds)'), true);
+  assert.equal(tower.includes('climbDurationSeconds: Math.max(0, Math.ceil('), true);
+  assert.equal(tower.includes('runDurationSeconds: config.runDurationSeconds'), true);
+  assert.equal(settingsRoute.includes("'tower_run_duration_seconds'"), true);
 });
 
 test('shows a one-time lightweight confirmation after a successful Tower claim', () => {
@@ -473,6 +525,8 @@ test('shows one action-aware spinner while Tower requests are pending', () => {
   const pickSource = source.slice(pickStart, pickEnd);
 
   assert.equal(source.includes("type TowerPendingAction = 'start' | 'pick' | 'climb' | 'claim' | 'refresh' | null"), true);
+  assert.equal(source.includes("const isStarting = pendingAction === 'start'"), true);
+  assert.equal(source.includes('loading: isStarting || (loading && !attempt)'), true);
   assert.equal(source.includes("const isPicking = pendingAction === 'pick'"), true);
   assert.equal(source.includes("const isClimbing = pendingAction === 'climb'"), true);
   assert.equal(source.includes("const isClaiming = pendingAction === 'claim'"), true);

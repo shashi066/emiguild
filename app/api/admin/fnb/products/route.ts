@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import {
   createFnbProduct,
-  FnbInventoryError,
+  FnbError,
   getFnbProducts,
   parseFnbProductInput,
-} from '@/lib/fnb-inventory';
+} from '@/lib/fnb';
 
 function forbidden() {
   return NextResponse.json({ error: 'Admin access required.' }, { status: 403 });
@@ -20,15 +20,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || session.user.role !== 'ADMIN') return forbidden();
+  if (!session || session.user.role !== 'ADMIN') return forbidden();
   try {
-    const product = await createFnbProduct(session.user.id, parseFnbProductInput(await req.json()));
+    const product = await createFnbProduct(parseFnbProductInput(await req.json()));
     return NextResponse.json({ product }, { status: 201 });
   } catch (error) {
-    if (error instanceof FnbInventoryError) {
+    if (error instanceof FnbError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
-    console.error('F&B product creation failed:', error);
-    return NextResponse.json({ error: 'Could not create F&B product.' }, { status: 500 });
+    console.error('F&B item creation failed:', error);
+    return NextResponse.json({ error: 'Could not create F&B item.' }, { status: 500 });
   }
 }

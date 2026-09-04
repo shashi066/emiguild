@@ -21,7 +21,9 @@ import {
 } from '@/lib/public-booking-time';
 import { isPassDateEligible } from '@/lib/pass-rules';
 import {
+  GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE,
   getGuildMembershipEligibility,
+  getGuildMembershipDiscountedTotal,
   guildMembershipName,
   isGuildMembershipType,
   selectPreferredGuildMembership,
@@ -40,6 +42,7 @@ type Station = {
 };
 
 type BookedSlot = { startTime: string; endTime: string; status: string };
+type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
 
 const STATION_ICONS: Record<number, string> = {
   1: '🖥️', 2: '💻', 3: '🎮', 4: '🕹️', 5: '⚡',
@@ -85,7 +88,7 @@ export default function BookPageInner({
   const [settingsMap, setSettingsMap]           = useState<Record<string, string>>(initialSettings ?? {});
   const [notes, setNotes]                       = useState('');
 
-  const [usePass, setUsePass]                   = useState(false);
+  const [benefitMode, setBenefitMode]           = useState<BookingBenefitMode>('STANDARD');
   const [activePasses, setActivePasses]         = useState<Array<{
     id: string; passType: string; totalHours: number; usedHours: number;
     status: string; purchasedAt: string; expiresAt: string;
@@ -196,7 +199,15 @@ export default function BookPageInner({
 
   const controllerCharge = extraControllers * controllerPrice * selectedDuration;
   const sessionCost = selectedStation ? selectedStation.hourlyRate * selectedDuration : 0;
-  const totalPrice = (usePass ? 0 : sessionCost) + controllerCharge;
+  const normalPrice = sessionCost + controllerCharge;
+  const usesHourPass = benefitMode === 'HOUR_PASS';
+  const usesGuildMembership = benefitMode === 'GUILD';
+  const guildMembershipPrice = getGuildMembershipDiscountedTotal(normalPrice);
+  const totalPrice = usesHourPass
+    ? controllerCharge
+    : usesGuildMembership
+      ? guildMembershipPrice
+      : normalPrice;
   const stationPassAllowed = selectedStation != null;
   const hourPasses = activePasses.filter((pass) => !isGuildMembershipType(pass.passType));
   const compatiblePass = selectedStation
@@ -214,12 +225,20 @@ export default function BookPageInner({
     hasControllers: selectedStation?.hasControllers ?? false,
     extraControllers,
   });
+  const compatiblePassRemaining = compatiblePass
+    ? compatiblePass.totalHours - compatiblePass.usedHours
+    : 0;
+  const canUseHourPass = Boolean(
+    compatiblePass
+    && compatiblePassRemaining >= selectedDuration
+    && stationPassAllowed
+    && passDateAllowed,
+  );
 
   useEffect(() => {
-    if ((!compatiblePass || !passDateAllowed) && usePass) {
-      setUsePass(false);
-    }
-  }, [compatiblePass, passDateAllowed, usePass]);
+    if (benefitMode === 'HOUR_PASS' && !canUseHourPass) setBenefitMode('STANDARD');
+    if (benefitMode === 'GUILD' && !membershipEligibility.eligible) setBenefitMode('STANDARD');
+  }, [benefitMode, canUseHourPass, membershipEligibility.eligible]);
 
   const handleSubmit = async () => {
     if (!session) {
@@ -239,8 +258,11 @@ export default function BookPageInner({
           duration:        selectedDuration,
           extraControllers,
           notes,
-          usePass,
-          passId: compatiblePass?.id ?? null,
+          benefitMode,
+          hourPassId: usesHourPass ? compatiblePass?.id ?? null : null,
+          appliedBenefitType: usesGuildMembership ? activeMembership?.passType ?? null : null,
+          usePass: usesHourPass,
+          passId: usesHourPass ? compatiblePass?.id ?? null : null,
         }),
       });
       const data = await res.json();
@@ -695,41 +717,7 @@ export default function BookPageInner({
                   </div>
                 )}
 
-                {activeMembership && (
-                  <section
-                    aria-label="Active Guild Membership"
-                    style={{
-                      marginTop: 'var(--space-lg)',
-                      padding: '14px 16px',
-                      borderLeft: `3px solid ${activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#60a5fa'}`,
-                      background: membershipEligibility.eligible
-                        ? 'rgba(74,222,128,0.055)'
-                        : 'rgba(245,158,11,0.055)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                      <strong style={{ color: activeMembership.passType === 'GUILD_MASTER' ? '#f4cf58' : '#93c5fd' }}>
-                        {activeMembership.passType === 'GUILD_MASTER' ? '👑' : '⚔️'} {guildMembershipName(activeMembership.passType)} Active
-                      </strong>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                        Expires {new Date(activeMembership.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                      </span>
-                    </div>
-                    <p style={{ margin: '7px 0 3px', fontSize: '0.82rem', color: membershipEligibility.eligible ? '#4ade80' : '#f59e0b', fontWeight: 700 }}>
-                      {membershipEligibility.eligible
-                        ? 'You may be eligible for 50% OFF this booking.'
-                        : membershipEligibility.reason}
-                    </p>
-                    <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                      Active Guild Membership found. GameZone will verify and apply the eligible discount. Only one offer can be used.
-                    </p>
-                  </section>
-                )}
-
-                {/* Pass payment toggle */}
-                {compatiblePass && (() => {
-                  const remaining = compatiblePass.totalHours - compatiblePass.usedHours;
-                  const canUse = remaining >= selectedDuration && stationPassAllowed && passDateAllowed;
+                {(activeMembership || compatiblePass) && (() => {
                   const PASS_COLOR: Record<string, string> = {
                     BRONZE: '#cd7f32',
                     SILVER: '#c0c0c0',
@@ -744,65 +732,106 @@ export default function BookPageInner({
                     BLACK: '216,222,233',
                     APEX: '103,232,249',
                   };
-                  const color = PASS_COLOR[compatiblePass.passType] ?? '#FFD700';
+                  const passColor = compatiblePass ? PASS_COLOR[compatiblePass.passType] ?? '#FFD700' : '#FFD700';
+                  const membershipColor = activeMembership?.passType === 'GUILD_MASTER' ? '#f4cf58' : '#93c5fd';
                   return (
                     <div style={{ marginTop: 'var(--space-lg)' }}>
                       <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                        Payment Method
+                        Booking Benefit
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {/* Pass option */}
-                        <button
-                          onClick={() => canUse && setUsePass(true)}
-                          disabled={!canUse}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 12,
-                            padding: '14px 16px', borderRadius: 'var(--radius-md)', textAlign: 'left',
-                            border: `2px solid ${usePass ? color : canUse ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
-                            background: usePass ? `rgba(${PASS_BG[compatiblePass.passType] ?? '255,215,0'},0.08)` : 'var(--color-bg-card)',
-                            cursor: canUse ? 'pointer' : 'not-allowed',
-                            opacity: canUse ? 1 : 0.5,
-                            transition: 'all 0.15s',
-                          }}
-                        >
-                          <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {usePass && <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, fontSize: '0.875rem', color: usePass ? color : 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <Award size={14} />
-                              Use {compatiblePass.passType.charAt(0) + compatiblePass.passType.slice(1).toLowerCase()} Pass
-                            </div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              {!passDateAllowed
-                                ? 'Passes are available Monday through Friday only.'
-                                : canUse
-                                ? `${remaining} hrs remaining → ${remaining - selectedDuration} after this session`
-                                : `Only ${remaining} hr(s) left — need ${selectedDuration} hr(s)`}
-                            </div>
-                          </div>
-                          {canUse && <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#4ade80' }}>FREE</div>}
-                        </button>
+                        {activeMembership && (
+                          <button
+                            type="button"
+                            aria-pressed={usesGuildMembership}
+                            onClick={() => membershipEligibility.eligible && setBenefitMode('GUILD')}
+                            disabled={!membershipEligibility.eligible}
+                            style={{
+                              minHeight: 64, display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '12px 14px', borderRadius: 'var(--radius-md)', textAlign: 'left',
+                              border: `2px solid ${usesGuildMembership ? membershipColor : membershipEligibility.eligible ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
+                              background: usesGuildMembership ? 'rgba(244,207,88,0.07)' : 'var(--color-bg-card)',
+                              color: 'inherit', cursor: membershipEligibility.eligible ? 'pointer' : 'not-allowed',
+                              opacity: membershipEligibility.eligible ? 1 : 0.58,
+                              transition: 'border-color 0.15s, background 0.15s',
+                            }}
+                          >
+                            <span style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${membershipColor}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                              {usesGuildMembership && <span style={{ width: 8, height: 8, borderRadius: '50%', background: membershipColor }} />}
+                            </span>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.875rem', color: usesGuildMembership ? membershipColor : 'var(--color-text-primary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <Award size={14} /> Apply {guildMembershipName(activeMembership.passType)}
+                                </span>
+                                {membershipEligibility.eligible && <strong style={{ color: '#4ade80', fontSize: '0.76rem' }}>{GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE}% OFF</strong>}
+                              </span>
+                              <span style={{ display: 'block', fontSize: '0.76rem', color: membershipEligibility.eligible ? 'var(--color-text-muted)' : '#f59e0b', marginTop: 3, lineHeight: 1.4 }}>
+                                {membershipEligibility.eligible
+                                  ? `Save ${formatCurrency(normalPrice - guildMembershipPrice)}. Valid until ${new Date(activeMembership.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}.`
+                                  : membershipEligibility.reason}
+                              </span>
+                            </span>
+                          </button>
+                        )}
 
-                        {/* Pay at counter option */}
+                        {compatiblePass && (
+                          <button
+                            type="button"
+                            aria-pressed={usesHourPass}
+                            onClick={() => canUseHourPass && setBenefitMode('HOUR_PASS')}
+                            disabled={!canUseHourPass}
+                            style={{
+                              minHeight: 64, display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '12px 14px', borderRadius: 'var(--radius-md)', textAlign: 'left',
+                              border: `2px solid ${usesHourPass ? passColor : canUseHourPass ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
+                              background: usesHourPass ? `rgba(${PASS_BG[compatiblePass.passType] ?? '255,215,0'},0.08)` : 'var(--color-bg-card)',
+                              color: 'inherit', cursor: canUseHourPass ? 'pointer' : 'not-allowed',
+                              opacity: canUseHourPass ? 1 : 0.58,
+                              transition: 'border-color 0.15s, background 0.15s',
+                            }}
+                          >
+                            <span style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${passColor}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                              {usesHourPass && <span style={{ width: 8, height: 8, borderRadius: '50%', background: passColor }} />}
+                            </span>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.875rem', color: usesHourPass ? passColor : 'var(--color-text-primary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <Award size={14} /> Use {compatiblePass.passType.charAt(0) + compatiblePass.passType.slice(1).toLowerCase()} Pass
+                                </span>
+                                {canUseHourPass && <strong style={{ color: '#4ade80', fontSize: '0.76rem' }}>SESSION COVERED</strong>}
+                              </span>
+                              <span style={{ display: 'block', fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: 3, lineHeight: 1.4 }}>
+                                {!passDateAllowed
+                                  ? 'Passes are available Monday through Friday only.'
+                                  : canUseHourPass
+                                    ? `${compatiblePassRemaining} hrs remaining - ${compatiblePassRemaining - selectedDuration} after this session`
+                                    : `Only ${compatiblePassRemaining} hr(s) left - need ${selectedDuration} hr(s)`}
+                              </span>
+                            </span>
+                          </button>
+                        )}
+
                         <button
-                          onClick={() => setUsePass(false)}
+                          type="button"
+                          aria-pressed={benefitMode === 'STANDARD'}
+                          onClick={() => setBenefitMode('STANDARD')}
                           style={{
-                            display: 'flex', alignItems: 'center', gap: 12,
-                            padding: '14px 16px', borderRadius: 'var(--radius-md)', textAlign: 'left',
-                            border: `2px solid ${!usePass ? 'var(--color-accent-primary)' : 'rgba(255,255,255,0.12)'}`,
-                            background: !usePass ? 'rgba(108,99,255,0.08)' : 'var(--color-bg-card)',
-                            cursor: 'pointer', transition: 'all 0.15s',
+                            minHeight: 64, display: 'flex', alignItems: 'center', gap: 12,
+                            padding: '12px 14px', borderRadius: 'var(--radius-md)', textAlign: 'left',
+                            border: `2px solid ${benefitMode === 'STANDARD' ? 'var(--color-accent-primary)' : 'rgba(255,255,255,0.12)'}`,
+                            background: benefitMode === 'STANDARD' ? 'rgba(108,99,255,0.08)' : 'var(--color-bg-card)',
+                            color: 'inherit', cursor: 'pointer', transition: 'border-color 0.15s, background 0.15s',
                           }}
                         >
-                          <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid var(--color-accent-primary)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {!usePass && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-accent-primary)' }} />}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, fontSize: '0.875rem', color: !usePass ? 'var(--color-accent-primary)' : 'var(--color-text-primary)' }}>Pay at Counter</div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>Pay when you arrive at the guild</div>
-                          </div>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{formatCurrency(sessionCost + controllerCharge)}</div>
+                          <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid var(--color-accent-primary)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                            {benefitMode === 'STANDARD' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-accent-primary)' }} />}
+                          </span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'block', fontWeight: 700, fontSize: '0.875rem', color: benefitMode === 'STANDARD' ? 'var(--color-accent-primary)' : 'var(--color-text-primary)' }}>Pay Normally</span>
+                            <span style={{ display: 'block', fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: 3 }}>Pay the regular amount when you arrive.</span>
+                          </span>
+                          <strong style={{ flexShrink: 0, fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>{formatCurrency(normalPrice)}</strong>
                         </button>
                       </div>
                     </div>
@@ -821,9 +850,11 @@ export default function BookPageInner({
                     <strong>{formatTime(addHours(selectedTime, selectedDuration))}</strong>
                     <span>·</span>
                     <span>
-                      {usePass
+                      {usesHourPass
                         ? <><strong style={{ color: '#4ade80' }}>Pass Booking</strong>{controllerCharge > 0 ? ` + ${formatCurrency(controllerCharge)} controllers` : ''}</>
-                        : <>Total: <strong>{formatCurrency(totalPrice)}</strong></>
+                        : usesGuildMembership
+                          ? <><strong style={{ color: '#4ade80' }}>{guildMembershipName(activeMembership?.passType ?? '')} applied</strong> · Total: <strong>{formatCurrency(totalPrice)}</strong></>
+                          : <>Total: <strong>{formatCurrency(totalPrice)}</strong></>
                       }
                     </span>
                   </span>
@@ -886,10 +917,10 @@ export default function BookPageInner({
               )}
 
               {/* Pricing breakdown */}
-              <div className="booking-detail-item" style={{ background: usePass ? 'rgba(0,230,118,0.04)' : 'rgba(255,255,255,0.02)', borderColor: usePass ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.06)' }}>
+              <div className="booking-detail-item" style={{ background: usesHourPass ? 'rgba(0,230,118,0.04)' : 'rgba(255,255,255,0.02)', borderColor: usesHourPass ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.06)' }}>
                 <div className="booking-detail-label">Session Cost</div>
                 <div className="booking-detail-value" style={{ fontSize: '0.95rem' }}>
-                  {usePass ? (
+                  {usesHourPass ? (
                     <span>
                       <s style={{ opacity: 0.4, marginRight: 8 }}>{formatCurrency(selectedStation!.hourlyRate)} × {selectedDuration}h = {formatCurrency(sessionCost)}</s>
                       <span style={{ color: 'var(--color-accent-success)', fontWeight: 700 }}>₹0 (Pass)</span>
@@ -908,20 +939,35 @@ export default function BookPageInner({
                 </div>
               )}
 
+              {usesGuildMembership && activeMembership && (
+                <div className="booking-detail-item" style={{ gridColumn: '1 / -1', background: 'rgba(74,222,128,0.05)', borderColor: 'rgba(74,222,128,0.22)' }}>
+                  <div className="booking-detail-label">Guild Membership</div>
+                  <div className="booking-detail-value" style={{ color: '#4ade80' }}>
+                    {guildMembershipName(activeMembership.passType)} · {GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE}% OFF entire booking
+                  </div>
+                </div>
+              )}
+
               {/* Total */}
               <div
                 className="booking-detail-item"
                 style={{
-                  background: usePass ? 'rgba(0,230,118,0.08)' : 'rgba(108,99,255,0.08)',
-                  borderColor: usePass ? 'rgba(0,230,118,0.25)' : 'rgba(108,99,255,0.25)',
+                  background: usesHourPass || usesGuildMembership ? 'rgba(0,230,118,0.08)' : 'rgba(108,99,255,0.08)',
+                  borderColor: usesHourPass || usesGuildMembership ? 'rgba(0,230,118,0.25)' : 'rgba(108,99,255,0.25)',
                 }}
               >
                 <div className="booking-detail-label">Total Price</div>
                 <div
                   className="booking-detail-value"
-                  style={{ color: usePass ? 'var(--color-accent-success)' : 'var(--color-accent-primary)', fontSize: '1.2rem' }}
+                  style={{ color: usesHourPass || usesGuildMembership ? 'var(--color-accent-success)' : 'var(--color-accent-primary)', fontSize: '1.2rem' }}
                 >
-                  {formatCurrency(totalPrice)}{usePass && <span style={{ fontSize: '0.75rem', fontWeight: 400, marginLeft: 8, color: 'var(--color-accent-success)' }}>(Pass applied)</span>}
+                  {usesGuildMembership && <s style={{ marginRight: 8, color: 'var(--color-text-muted)', fontSize: '0.88rem', fontWeight: 400 }}>{formatCurrency(normalPrice)}</s>}
+                  {formatCurrency(totalPrice)}
+                  {(usesHourPass || usesGuildMembership) && (
+                    <span style={{ fontSize: '0.75rem', fontWeight: 400, marginLeft: 8, color: 'var(--color-accent-success)' }}>
+                      ({usesHourPass ? 'Pass' : guildMembershipName(activeMembership?.passType ?? '')} applied)
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

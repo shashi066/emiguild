@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { FnbInventoryError, parseFnbProductUpdate, updateFnbProduct } from '@/lib/fnb-inventory';
+import { FnbError, parseFnbProductUpdate, updateFnbProduct } from '@/lib/fnb';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -12,10 +12,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const product = await updateFnbProduct(id, parseFnbProductUpdate(await req.json()));
     return NextResponse.json({ product });
   } catch (error) {
-    if (error instanceof FnbInventoryError) {
+    if (error instanceof FnbError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
-    console.error('F&B product update failed:', error);
-    return NextResponse.json({ error: 'Could not update F&B product.' }, { status: 500 });
+    console.error('F&B item update failed:', error);
+    return NextResponse.json({ error: 'Could not update F&B item.' }, { status: 500 });
   }
 }

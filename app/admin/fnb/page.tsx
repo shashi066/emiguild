@@ -1,7 +1,7 @@
-import { AdminFnbInventory } from '@/components/admin/AdminFnbInventory';
+import { AdminFnbCatalog } from '@/components/admin/AdminFnbCatalog';
 
-export const metadata = { title: 'F&B Inventory' };
+export const metadata = { title: 'F&B Items' };
 
 export default function AdminFnbPage() {
-  return <AdminFnbInventory />;
+  return <AdminFnbCatalog />;
 }

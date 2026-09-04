@@ -9,19 +9,25 @@ import {
   Coins,
   History,
   LoaderCircle,
+  Megaphone,
   Pencil,
   RefreshCw,
   Save,
   Search,
   SlidersHorizontal,
   User,
+  Users,
   X,
 } from 'lucide-react';
 import { AdminModalShell } from '@/components/admin/AdminModalShell';
 import type { TowerRewardConfig } from '@/lib/tower';
+import {
+  DEFAULT_TOWER_RUN_DURATION_SECONDS,
+  TOWER_RUN_DURATION_OPTIONS_SECONDS,
+} from '@/lib/tower-clock';
 
 type AdminView = 'grant' | 'rewards' | 'history';
-type ConfigEditor = 'availability' | 'rewards' | null;
+type ConfigEditor = 'availability' | 'timer' | 'rewards' | null;
 type UserResult = { id: string; name: string; email: string };
 type HistoryItem = {
   id: string;
@@ -35,9 +41,10 @@ type HistoryItem = {
   attempt?: { status: string; securedLevel: number } | null;
 };
 type HistoryPage = { items: HistoryItem[]; nextCursor: string | null };
+type PromotionPreview = { enabled: boolean; recipientCount: number; expiresAt: string };
 
 type Props = {
-  initialConfig?: { enabled: boolean; rewards: TowerRewardConfig[] };
+  initialConfig?: { enabled: boolean; rewards: TowerRewardConfig[]; runDurationSeconds: number };
   initialHistory?: HistoryPage;
   manualGrantExpiresAt?: string;
   initialError?: string;
@@ -87,6 +94,12 @@ function newRequestId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function formatClimbDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds ? `${minutes} min ${seconds} sec` : `${minutes} min`;
+}
+
 function historyStatusLabel(status: string) {
   const labels: Record<string, string> = {
     TOKEN_READY: 'Token ready',
@@ -115,6 +128,13 @@ function historyDetailForItem(item: HistoryItem) {
   if (status === 'REWARD_CLAIMED') return `Claimed floor ${item.attempt?.securedLevel ?? 0}`;
   if (item.attempt) return `Secured floor ${item.attempt.securedLevel}`;
   return 'Not started';
+}
+
+function historySourceLabel(item: HistoryItem) {
+  const grantor = item.grantedBy?.name ? ` by ${item.grantedBy.name}` : '';
+  if (item.source === 'PROMOTION') return `Promotion${grantor}`;
+  if (item.source === 'ADMIN') return `Manual${grantor}`;
+  return 'Booking check-in';
 }
 
 function TowerConfigModal({
@@ -198,10 +218,14 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
   const [view, setView] = useState<AdminView>('grant');
   const [enabled, setEnabled] = useState(initialConfig?.enabled ?? true);
   const [rewards, setRewards] = useState<TowerRewardConfig[]>(initialConfig?.rewards ?? []);
+  const [runDurationSeconds, setRunDurationSeconds] = useState(
+    initialConfig?.runDurationSeconds ?? DEFAULT_TOWER_RUN_DURATION_SECONDS,
+  );
   const [history, setHistory] = useState<HistoryPage>(initialHistory ?? { items: [], nextCursor: null });
   const [query, setQuery] = useState('');
   const [activeEditor, setActiveEditor] = useState<ConfigEditor>(null);
   const [enabledDraft, setEnabledDraft] = useState(enabled);
+  const [timerDraft, setTimerDraft] = useState(runDurationSeconds);
   const [rewardDraft, setRewardDraft] = useState<TowerRewardConfig[]>([]);
   const [editorError, setEditorError] = useState('');
   const [users, setUsers] = useState<UserResult[]>([]);
@@ -210,6 +234,11 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
   const [saving, setSaving] = useState(false);
   const [granting, setGranting] = useState(false);
   const [grantQuantity, setGrantQuantity] = useState('1');
+  const [promotionOpen, setPromotionOpen] = useState(false);
+  const [promotionPreview, setPromotionPreview] = useState<PromotionPreview | null>(null);
+  const [promotionLoading, setPromotionLoading] = useState(false);
+  const [promotionGranting, setPromotionGranting] = useState(false);
+  const [promotionError, setPromotionError] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyStatus, setHistoryStatus] = useState('ALL');
   const [historyQuery, setHistoryQuery] = useState('');
@@ -217,12 +246,14 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
     initialError ? { type: 'error', text: initialError } : null,
   );
   const requestIdRef = useRef(newRequestId());
+  const promotionRequestIdRef = useRef(newRequestId());
   const configError = validationError(rewards);
   const draftConfigError = activeEditor === 'rewards' ? validationError(rewardDraft) : '';
   const requestedGrantQuantity = Number(grantQuantity);
   const grantQuantityValid = Number.isInteger(requestedGrantQuantity)
     && requestedGrantQuantity >= 1
     && requestedGrantQuantity <= 10;
+  const grantBusy = granting || promotionLoading || promotionGranting;
 
   const openAvailabilityModal = () => {
     setEnabledDraft(enabled);
@@ -236,10 +267,17 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
     setActiveEditor('rewards');
   };
 
+  const openTimerModal = () => {
+    setTimerDraft(runDurationSeconds);
+    setEditorError('');
+    setActiveEditor('timer');
+  };
+
   const closeConfigModal = () => {
     if (saving) return;
     setActiveEditor(null);
     setEnabledDraft(enabled);
+    setTimerDraft(runDurationSeconds);
     setRewardDraft([]);
     setEditorError('');
   };
@@ -273,7 +311,11 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [query, selectedUser]);
 
-  const saveConfig = async (nextEnabled: boolean, nextRewards: TowerRewardConfig[]) => {
+  const saveConfig = async (
+    nextEnabled: boolean,
+    nextRewards: TowerRewardConfig[],
+    nextRunDurationSeconds: number,
+  ) => {
     const error = validationError(nextRewards);
     if (error) return setEditorError(error);
     setSaving(true);
@@ -283,13 +325,19 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
       const response = await fetch('/api/admin/tower/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: nextEnabled, rewards: nextRewards }),
+        body: JSON.stringify({
+          enabled: nextEnabled,
+          rewards: nextRewards,
+          runDurationSeconds: nextRunDurationSeconds,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Tower settings could not be saved.');
       setEnabled(data.enabled !== false);
       setEnabledDraft(data.enabled !== false);
       setRewards(data.rewards ?? nextRewards);
+      setRunDurationSeconds(data.runDurationSeconds ?? nextRunDurationSeconds);
+      setTimerDraft(data.runDurationSeconds ?? nextRunDurationSeconds);
       setRewardDraft([]);
       setActiveEditor(null);
       setNotice({ type: 'success', text: 'Tower settings saved.' });
@@ -329,7 +377,7 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
   }, [view, historyStatus, historyQuery]);
 
   const grant = async () => {
-    if (!selectedUser) return;
+    if (!selectedUser || promotionLoading || promotionGranting) return;
     setGranting(true);
     setNotice(null);
     try {
@@ -354,6 +402,67 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
       setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Token could not be granted.' });
     } finally {
       setGranting(false);
+    }
+  };
+
+  const closePromotionDialog = () => {
+    if (promotionGranting) return;
+    setPromotionOpen(false);
+    setPromotionPreview(null);
+    setPromotionError('');
+  };
+
+  const openPromotionDialog = async () => {
+    if (!enabled || grantBusy) return;
+    setPromotionLoading(true);
+    setPromotionError('');
+    setNotice(null);
+    try {
+      const response = await fetch('/api/admin/tower/tokens/promotion', { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Promotion details could not be loaded.');
+      if (data.enabled === false) throw new Error('Enable Tower before granting promotional tokens.');
+      const recipientCount = Number(data.recipientCount);
+      if (!Number.isInteger(recipientCount) || recipientCount < 1) {
+        throw new Error('No user accounts are available for this promotion.');
+      }
+      setPromotionPreview({ enabled: true, recipientCount, expiresAt: data.expiresAt });
+      setPromotionOpen(true);
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Promotion details could not be loaded.' });
+    } finally {
+      setPromotionLoading(false);
+    }
+  };
+
+  const grantPromotion = async () => {
+    if (!promotionPreview || promotionGranting) return;
+    setPromotionGranting(true);
+    setPromotionError('');
+    try {
+      const response = await fetch('/api/admin/tower/tokens/promotion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: promotionRequestIdRef.current }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Promotional tokens could not be granted.');
+
+      const recipientCount = Number(data.recipientCount);
+      setNotice({
+        type: 'success',
+        text: data.created
+          ? `${recipientCount} promotional Tower Token${recipientCount === 1 ? '' : 's'} added. Valid until ${formatDate(data.expiresAt)}.`
+          : `This promotion was already completed for ${recipientCount} user${recipientCount === 1 ? '' : 's'}. It expires ${formatDate(data.expiresAt)}.`,
+      });
+      promotionRequestIdRef.current = newRequestId();
+      setPromotionOpen(false);
+      setPromotionPreview(null);
+      await loadHistory();
+    } catch (error) {
+      setPromotionError(error instanceof Error ? error.message : 'Promotional tokens could not be granted.');
+    } finally {
+      setPromotionGranting(false);
     }
   };
 
@@ -391,8 +500,13 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
           </div>
           {selectedUser && <div className="selected-user"><User size={18} /><span><strong>{selectedUser.name}</strong><small>{selectedUser.email}</small>{manualGrantExpiresAt && <small>Expires {formatDate(manualGrantExpiresAt)}</small>}</span></div>}
           <div className="tower-grant-controls">
-            <label className="tower-token-quantity" htmlFor="tower-token-quantity">Number of Tokens<input id="tower-token-quantity" className="form-input" type="number" inputMode="numeric" min={1} max={10} step={1} value={grantQuantity} onChange={(event) => setGrantQuantity(event.target.value)} /></label>
-            <button type="button" className="btn btn-primary tower-primary-action" onClick={grant} disabled={!selectedUser || !grantQuantityValid || granting}>{granting ? <LoaderCircle size={16} className="spin" /> : <Coins size={16} />}{granting ? 'Granting...' : grantQuantityValid ? `Grant ${requestedGrantQuantity} Token${requestedGrantQuantity === 1 ? '' : 's'}` : 'Grant Tokens'}</button>
+            <label className="tower-token-quantity" htmlFor="tower-token-quantity">Number of Tokens<input id="tower-token-quantity" className="form-input" type="number" inputMode="numeric" min={1} max={10} step={1} value={grantQuantity} disabled={grantBusy} onChange={(event) => setGrantQuantity(event.target.value)} /></label>
+            <button type="button" className="btn btn-primary tower-primary-action" onClick={grant} disabled={!selectedUser || !grantQuantityValid || grantBusy}>{granting ? <LoaderCircle size={16} className="spin" /> : <Coins size={16} />}{granting ? 'Granting...' : grantQuantityValid ? `Grant ${requestedGrantQuantity} Token${requestedGrantQuantity === 1 ? '' : 's'}` : 'Grant Tokens'}</button>
+          </div>
+          <div className="tower-promotion-row">
+            <span className="tower-promotion-icon" aria-hidden="true"><Megaphone size={20} /></span>
+            <div><strong>Promotional Grant</strong><small>Add one Tower Token to every user account.</small></div>
+            <button type="button" className="btn btn-ghost tower-promotion-action" onClick={openPromotionDialog} disabled={!enabled || grantBusy}>{promotionLoading ? <LoaderCircle size={16} className="spin" /> : <Users size={16} />}{!enabled ? 'Enable Tower First' : promotionLoading ? 'Checking...' : 'Grant to All Users'}</button>
           </div>
         </section>
       )}
@@ -404,6 +518,10 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
             <TowerSummaryCard title="Tower Availability" onEdit={openAvailabilityModal}>
               <strong className={enabled ? 'tower-setting-enabled' : 'tower-setting-disabled'}>{enabled ? 'Enabled' : 'Disabled'}</strong>
               <span>{enabled ? 'Players can start and continue climbs.' : 'New starts and picks are paused.'}</span>
+            </TowerSummaryCard>
+            <TowerSummaryCard title="Climb Timer" onEdit={openTimerModal}>
+              <strong className="tower-timer-summary"><Clock3 size={17} /> {formatClimbDuration(runDurationSeconds)}</strong>
+              <span>New climbs use this limit. The warning starts with one minute left.</span>
             </TowerSummaryCard>
             <TowerSummaryCard title="Floor Rewards" onEdit={openRewardsModal}>
               <div className="reward-summary-list">{rewards.map((reward) => (
@@ -426,12 +544,37 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
           saving={saving}
           error={editorError}
           onClose={closeConfigModal}
-          onSave={() => saveConfig(enabledDraft, rewards)}
+          onSave={() => saveConfig(enabledDraft, rewards, runDurationSeconds)}
         >
           <label className="tower-enable-row">
             <span><strong>Allow Tower climbs</strong><small>Pause new starts and picks when disabled.</small></span>
             <input type="checkbox" checked={enabledDraft} onChange={(event) => setEnabledDraft(event.target.checked)} />
           </label>
+        </TowerConfigModal>
+      )}
+
+      {activeEditor === 'timer' && (
+        <TowerConfigModal
+          title="Climb Timer"
+          titleId="tower-timer-editor-title"
+          saving={saving}
+          error={editorError}
+          onClose={closeConfigModal}
+          onSave={() => saveConfig(enabled, rewards, timerDraft)}
+        >
+          <div className="tower-timer-options" role="group" aria-label="Tower climb duration">
+            {TOWER_RUN_DURATION_OPTIONS_SECONDS.map((seconds) => (
+              <button
+                key={seconds}
+                type="button"
+                aria-pressed={timerDraft === seconds}
+                onClick={() => setTimerDraft(seconds)}
+              >
+                <Clock3 size={16} />
+                {formatClimbDuration(seconds)}
+              </button>
+            ))}
+          </div>
         </TowerConfigModal>
       )}
 
@@ -443,7 +586,7 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
           error={editorError || draftConfigError}
           saveDisabled={Boolean(draftConfigError)}
           onClose={closeConfigModal}
-          onSave={() => saveConfig(enabled, rewardDraft)}
+          onSave={() => saveConfig(enabled, rewardDraft, runDurationSeconds)}
         >
           <div className="reward-editor">{rewardDraft.map((reward, index) => (
             <div key={reward.level} className="reward-row" role="group" aria-labelledby={`tower-floor-${reward.level}-label`}>
@@ -459,12 +602,34 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
         </TowerConfigModal>
       )}
 
+      {promotionOpen && promotionPreview && (
+        <AdminModalShell onClose={closePromotionDialog} labelledBy="tower-promotion-title" describedBy="tower-promotion-description">
+          <div className="tower-promotion-modal">
+            <div className="tower-promotion-modal-head">
+              <span aria-hidden="true"><Megaphone size={22} /></span>
+              <div><small>Promotional Grant</small><h2 id="tower-promotion-title">Grant one token to every user?</h2></div>
+              <button type="button" aria-label="Close promotional grant" onClick={closePromotionDialog} disabled={promotionGranting}><X size={18} /></button>
+            </div>
+            <p id="tower-promotion-description">Each existing user account will receive one additional Tower Token. Tokens they already have will remain available.</p>
+            <div className="tower-promotion-facts">
+              <span><Users size={17} /><small>Recipients</small><strong>{promotionPreview.recipientCount.toLocaleString('en-IN')}</strong></span>
+              <span><Clock3 size={17} /><small>Valid until</small><strong>{formatDate(promotionPreview.expiresAt)}</strong></span>
+            </div>
+            {promotionError && <div className="form-error" role="alert"><AlertCircle size={15} />{promotionError}</div>}
+            <div className="tower-promotion-actions">
+              <button type="button" className="btn btn-ghost" onClick={closePromotionDialog} disabled={promotionGranting}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={grantPromotion} disabled={promotionGranting} autoFocus>{promotionGranting ? <LoaderCircle size={16} className="spin" /> : <Megaphone size={16} />}{promotionGranting ? 'Granting...' : `Grant to ${promotionPreview.recipientCount.toLocaleString('en-IN')} Users`}</button>
+            </div>
+          </div>
+        </AdminModalShell>
+      )}
+
       {view === 'history' && (
         <section className="tower-admin-panel" aria-labelledby="history-title">
           <div className="panel-title"><History size={19} /><div><h2 id="history-title">Recent Tower Activity</h2><p>Newest tokens and attempts first.</p></div></div>
           <div className="history-filters"><div className="search-input-wrap"><span className="search-leading-icon" aria-hidden="true"><Search size={16} /></span><input className="form-input" aria-label="Search Tower history" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="User name or email" /></div><select className="form-input" aria-label="Filter Tower history by status" value={historyStatus} onChange={(event) => setHistoryStatus(event.target.value)}><option value="ALL">All statuses</option><option value="AVAILABLE">Token ready</option><option value="IN_CLIMB">In climb</option><option value="REWARD_CLAIMED">Reward claimed</option><option value="NO_REWARD">No reward</option><option value="EXPIRED">Expired</option></select></div>
           <div className="history-list">{history.items.map((item) => (
-            <article key={item.id} className="history-row"><div className="history-main"><strong>{item.user.name}</strong><small>{item.user.email}</small><span>{item.source === 'ADMIN' ? `Manual${item.grantedBy?.name ? ` by ${item.grantedBy.name}` : ''}` : 'Booking check-in'}</span><small>Earned {formatDate(item.earnedAt)}</small></div><div className="history-meta"><b data-status={historyStatusForItem(item)}>{historyStatusLabel(historyStatusForItem(item))}</b><span>{historyDetailForItem(item)}</span><small><Clock3 size={12} /> Expires {formatDate(item.expiresAt)}</small></div></article>
+            <article key={item.id} className="history-row"><div className="history-main"><strong>{item.user.name}</strong><small>{item.user.email}</small><span>{historySourceLabel(item)}</span><small>Earned {formatDate(item.earnedAt)}</small></div><div className="history-meta"><b data-status={historyStatusForItem(item)}>{historyStatusLabel(historyStatusForItem(item))}</b><span>{historyDetailForItem(item)}</span><small><Clock3 size={12} /> Expires {formatDate(item.expiresAt)}</small></div></article>
           ))}{!history.items.length && !historyLoading && <div className="history-empty">No Tower activity found.</div>}</div>
           {history.nextCursor && <button type="button" className="btn btn-ghost tower-load-more" disabled={historyLoading} onClick={() => loadHistory({ append: true, cursor: history.nextCursor })}>{historyLoading ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}Load More</button>}
         </section>
@@ -506,6 +671,27 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
         .tower-token-quantity { min-width: 0; display: grid; gap: 6px; color: var(--color-text-muted); font-size: .72rem; font-weight: 700; }
         .tower-token-quantity .form-input { width: 100%; min-height: 46px; }
         .tower-primary-action { width: 100%; min-height: 46px; justify-content: center; }
+        .tower-promotion-row { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; align-items: center; padding-top: 16px; border-top: 1px solid var(--color-border); }
+        .tower-promotion-icon { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(250,204,21,.38); border-radius: 7px; background: rgba(250,204,21,.08); color: #fde68a; }
+        .tower-promotion-row > div { min-width: 0; display: grid; gap: 2px; }
+        .tower-promotion-row strong { font-size: .88rem; }
+        .tower-promotion-row small { color: var(--color-text-muted); font-size: .74rem; }
+        .tower-promotion-action { grid-column: 1 / -1; width: 100%; min-height: 46px; justify-content: center; border-color: rgba(250,204,21,.28); color: #fde68a; }
+        .tower-promotion-modal { min-width: 0; display: grid; gap: 16px; padding: 20px; }
+        .tower-promotion-modal-head { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 10px; align-items: start; }
+        .tower-promotion-modal-head > span { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(250,204,21,.4); border-radius: 7px; background: rgba(250,204,21,.08); color: #fde68a; }
+        .tower-promotion-modal-head > div { min-width: 0; }
+        .tower-promotion-modal-head small { color: #fde68a; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
+        .tower-promotion-modal-head h2 { margin: 3px 0 0; font-size: 1.1rem; line-height: 1.25; }
+        .tower-promotion-modal-head button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--color-border); border-radius: 7px; background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+        .tower-promotion-modal > p { margin: 0; color: var(--color-text-secondary); font-size: .84rem; line-height: 1.5; }
+        .tower-promotion-facts { min-width: 0; display: grid; gap: 8px; }
+        .tower-promotion-facts > span { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 2px 8px; align-items: center; padding: 10px; border: 1px solid var(--color-border); border-radius: 7px; }
+        .tower-promotion-facts svg { grid-row: span 2; color: #8ee8ff; }
+        .tower-promotion-facts small { color: var(--color-text-muted); font-size: .68rem; }
+        .tower-promotion-facts strong { min-width: 0; overflow-wrap: anywhere; font-size: .82rem; }
+        .tower-promotion-actions { display: grid; grid-template-columns: minmax(0,.7fr) minmax(0,1.3fr); gap: 8px; }
+        .tower-promotion-actions .btn { min-width: 0; min-height: 46px; justify-content: center; }
         .tower-enable-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px; border: 1px solid var(--color-border); border-radius: 8px; }
         .tower-enable-row span { display: grid; gap: 2px; }
         .tower-enable-row small { color: var(--color-text-muted); }
@@ -513,6 +699,11 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
         .tower-settings-grid { min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; align-items: start; }
         .tower-setting-enabled { color: #86efac; }
         .tower-setting-disabled { color: var(--color-text-muted); }
+        .tower-timer-summary { display: inline-flex; align-items: center; gap: 7px; color: #8ee8ff; }
+        .tower-timer-options { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+        .tower-timer-options button { min-width: 0; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px; border: 1px solid var(--color-border); border-radius: 7px; background: rgba(255,255,255,.025); color: var(--color-text-secondary); font: inherit; font-size: .82rem; font-weight: 800; cursor: pointer; }
+        .tower-timer-options button[aria-pressed="true"] { border-color: rgba(97,232,255,.7); background: rgba(97,232,255,.1); color: #8ee8ff; }
+        .tower-timer-options button:focus-visible { outline: 2px solid #8ee8ff; outline-offset: 2px; }
         .reward-summary-list { display: grid; gap: 8px; }
         .reward-summary-row { min-width: 0; display: grid; grid-template-columns: 36px minmax(0,1fr); gap: 4px 10px; align-items: center; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: rgba(255,255,255,.025); }
         .reward-summary-row > span { grid-row: span 2; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid rgba(97,232,255,.4); border-radius: 6px; color: #8ee8ff; font-weight: 900; }
@@ -549,6 +740,10 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
           .history-filters { grid-template-columns: minmax(0,1fr) 180px; }
           .tower-grant-controls { grid-template-columns: 150px auto; align-items: end; }
           .tower-primary-action { width: auto; min-width: 180px; justify-self: end; }
+          .tower-promotion-row { grid-template-columns: auto minmax(0,1fr) auto; }
+          .tower-promotion-action { grid-column: auto; width: auto; min-width: 190px; }
+          .tower-promotion-facts { grid-template-columns: repeat(2, minmax(0,1fr)); }
+          .tower-timer-options { grid-template-columns: repeat(3, minmax(0,1fr)); }
         }
         @media (max-width: 520px) {
           .admin-tower-page { gap: 14px; }

@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 // Used by the booking page to fetch controller price
 export async function GET() {
   const settings = await prisma.setting.findMany({
-    where: { key: { notIn: ['watch_party_economy_version', 'tower_rewards', 'tower_defaults_version'] } },
+    where: { key: { notIn: ['watch_party_economy_version', 'tower_rewards', 'tower_defaults_version', 'tower_run_duration_seconds'] } },
   });
   const map: Record<string, string> = {};
   for (const s of settings) {

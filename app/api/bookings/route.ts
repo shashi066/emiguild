@@ -8,8 +8,12 @@ import { notifyAdminNewBooking, notifyUserNewBooking } from '@/lib/notify';
 import { encryptPhone } from '@/lib/crypto';
 import { isPassDateEligible, PASS_WEEKDAY_ONLY_ERROR } from '@/lib/pass-rules';
 import {
+  GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE,
   GUILD_MEMBERSHIP_TYPES,
+  getGuildMembershipDiscountedTotal,
+  isGuildMembershipType,
   selectPreferredGuildMembership,
+  validateGuildBenefitApplication,
 } from '@/lib/guild-membership';
 import {
   isBookingStartPastInIndia,
@@ -22,9 +26,11 @@ import {
   meetsStationMinimumDuration,
 } from '@/lib/booking-availability';
 import { runSerializableTransaction } from '@/lib/prisma-transaction';
+import { getActiveFnbSubtotals } from '@/lib/fnb';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
+type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
 
 function isPassTypeAllowedForStation(passType: string, hasControllers: boolean) {
   return hasControllers
@@ -110,9 +116,16 @@ export async function GET(req: NextRequest) {
       : Promise.resolve(null),
   ]);
 
+  const fnbSubtotals = isAdmin
+    ? await getActiveFnbSubtotals(bookings.map((booking) => booking.id))
+    : null;
+
   const encryptedBookings = bookings.map((booking) => ({
     ...booking,
     customerPhone: encryptPhone(booking.customerPhone),
+    ...(fnbSubtotals
+      ? { fnbSubtotal: fnbSubtotals.get(booking.id) ?? 0 }
+      : {}),
   }));
 
   return NextResponse.json({
@@ -156,8 +169,55 @@ export async function POST(req: NextRequest) {
     const extraControllers = Number.isFinite(requestedControllers)
       ? Math.min(3, Math.max(0, Math.trunc(requestedControllers)))
       : 0;
-    const usePass: boolean = body.usePass === true;
-    const passId: string | null = typeof body.passId === 'string' ? body.passId : null;
+    const legacyUsePass = body.usePass === true;
+    const requestedBenefit = body.appliedBenefitType;
+    const rawBenefitMode = body.benefitMode;
+    let benefitMode: BookingBenefitMode;
+    if (rawBenefitMode == null) {
+      benefitMode = legacyUsePass
+        ? 'HOUR_PASS'
+        : requestedBenefit != null
+          ? 'GUILD'
+          : 'STANDARD';
+    } else if (
+      rawBenefitMode === 'STANDARD'
+      || rawBenefitMode === 'HOUR_PASS'
+      || rawBenefitMode === 'GUILD'
+    ) {
+      benefitMode = rawBenefitMode;
+    } else {
+      return NextResponse.json(
+        { error: 'Invalid booking benefit selection.', code: 'INVALID_BENEFIT' },
+        { status: 400 },
+      );
+    }
+    const requestedHourPassId = typeof body.hourPassId === 'string' && body.hourPassId.trim()
+      ? body.hourPassId.trim()
+      : typeof body.passId === 'string' && body.passId.trim()
+        ? body.passId.trim()
+        : null;
+
+    if (benefitMode === 'HOUR_PASS' && requestedBenefit != null) {
+      return NextResponse.json(
+        { error: 'A pass cannot be combined with a Guild Membership.', code: 'BENEFIT_STACKING' },
+        { status: 400 },
+      );
+    }
+    if (
+      benefitMode === 'GUILD'
+      && (legacyUsePass || (typeof body.hourPassId === 'string' && body.hourPassId.trim()))
+    ) {
+      return NextResponse.json(
+        { error: 'A Guild Membership cannot be combined with an hour pass.', code: 'BENEFIT_STACKING' },
+        { status: 400 },
+      );
+    }
+    if (benefitMode === 'STANDARD' && (legacyUsePass || requestedBenefit != null)) {
+      return NextResponse.json(
+        { error: 'Invalid booking benefit selection.', code: 'INVALID_BENEFIT' },
+        { status: 400 },
+      );
+    }
 
     // Check station exists and fetch the booking user's profile in parallel
     const [station, bookingUser] = await Promise.all([
@@ -210,6 +270,31 @@ export async function POST(req: NextRequest) {
 
     // Server-side guard: ignore controller add-ons for stations that don't support them
     const safeExtraControllers = station.hasControllers ? extraControllers : 0;
+    let appliedBenefitType: string | null = null;
+    if (benefitMode === 'GUILD') {
+      const selectedMembership = activeMembership?.passType === requestedBenefit
+        && isGuildMembershipType(requestedBenefit)
+        ? activeMembership
+        : null;
+      const validation = validateGuildBenefitApplication({
+        requestedBenefit,
+        membership: selectedMembership,
+        bookingDate: date,
+        hasControllers: station.hasControllers,
+        extraControllers: safeExtraControllers,
+        discount: GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE,
+        hasLinkedUser: Boolean(bookingUser),
+        hasHourPass: false,
+        now: requestTime,
+      });
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.reason, code: validation.code },
+          { status: 400 },
+        );
+      }
+      appliedBenefitType = validation.benefitType;
+    }
 
     // Reject bookings only if slot start is more than 15 mins in the past (skip for admins)
     if (
@@ -232,14 +317,13 @@ export async function POST(req: NextRequest) {
     }
     const controllerCharge = safeExtraControllers * controllerUnitPrice * duration;
 
-    if (usePass) {
+    if (benefitMode === 'HOUR_PASS') {
       if (!isPassDateEligible(date)) {
         return NextResponse.json(
           { error: PASS_WEEKDAY_ONLY_ERROR, code: 'PASS_WEEKDAY_ONLY' },
           { status: 400 }
         );
       }
-
     }
 
     const outcome = await runSerializableTransaction(async (tx) => {
@@ -273,16 +357,51 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      if (benefitMode === 'GUILD') {
+        const currentMembership = activeMembership
+          ? await tx.userPass.findFirst({
+              where: {
+                id: activeMembership.id,
+                userId: session.user.id!,
+                status: 'ACTIVE',
+                expiresAt: { gte: requestTime },
+              },
+              select: {
+                id: true,
+                passType: true,
+                status: true,
+                purchasedAt: true,
+                expiresAt: true,
+              },
+            })
+          : null;
+        const validation = validateGuildBenefitApplication({
+          requestedBenefit,
+          membership: currentMembership,
+          bookingDate: date,
+          hasControllers: station.hasControllers,
+          extraControllers: safeExtraControllers,
+          discount: GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE,
+          hasLinkedUser: Boolean(bookingUser),
+          hasHourPass: false,
+          now: requestTime,
+        });
+        if (!validation.valid) {
+          throw new BookingCreationError(validation.reason, 400, validation.code);
+        }
+        appliedBenefitType = validation.benefitType;
+      }
+
       let userPassId: string | null = null;
       let passHoursDeducted = 0;
       let usedPassType: string | null = null;
       let sessionPrice = station.hourlyRate * duration;
 
-      if (usePass) {
-        const pass = passId
+      if (benefitMode === 'HOUR_PASS') {
+        const pass = requestedHourPassId
           ? await tx.userPass.findFirst({
               where: {
-                id: passId,
+                id: requestedHourPassId,
                 userId: session.user.id!,
                 status: 'ACTIVE',
                 expiresAt: { gte: requestTime },
@@ -333,6 +452,14 @@ export async function POST(req: NextRequest) {
         sessionPrice = 0;
       }
 
+      const normalPrice = sessionPrice + controllerCharge;
+      const discount = benefitMode === 'GUILD'
+        ? GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE
+        : 0;
+      const totalPrice = benefitMode === 'GUILD'
+        ? getGuildMembershipDiscountedTotal(normalPrice)
+        : normalPrice;
+
       const booking = await tx.booking.create({
         data: {
           userId: session.user.id,
@@ -341,16 +468,17 @@ export async function POST(req: NextRequest) {
           startTime,
           endTime,
           duration,
-          totalPrice: sessionPrice + controllerCharge,
-          discount: 0,
+          totalPrice,
+          discount,
           notes: notes || null,
           status: 'CONFIRMED',
           bookingType: 'ONLINE',
-          paymentStatus: usePass ? 'PAID' : 'UNPAID',
+          paymentStatus: benefitMode === 'HOUR_PASS' ? 'PAID' : 'UNPAID',
           extraControllers: safeExtraControllers,
           controllerCharge,
           userPassId,
           passHoursDeducted,
+          appliedBenefitType,
           customerName: bookingUser?.name ?? null,
           customerPhone: bookingUser?.phone ?? null,
         },
@@ -360,9 +488,9 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      return { booking, passHoursDeducted, usedPassType };
+      return { booking, passHoursDeducted, usedPassType, discount };
     });
-    const { booking, passHoursDeducted, usedPassType } = outcome;
+    const { booking, passHoursDeducted, usedPassType, discount } = outcome;
 
     const notificationPayload = {
       bookingId:        booking.id,
@@ -375,14 +503,14 @@ export async function POST(req: NextRequest) {
       endTime:          booking.endTime,
       duration:         booking.duration,
       totalPrice:       booking.totalPrice,
-      discount:         0,
+      discount,
       bookingType:      booking.bookingType,
       extraControllers: booking.extraControllers,
       passType:         usedPassType,
       passHoursDeducted,
-      membershipType: usePass ? null : activeMembership?.passType ?? null,
-      membershipExpiresAt: usePass ? null : activeMembership?.expiresAt ?? null,
-      appliedBenefitType: null,
+      membershipType: appliedBenefitType,
+      membershipExpiresAt: appliedBenefitType ? activeMembership?.expiresAt ?? null : null,
+      appliedBenefitType,
       normalPrice: station.hourlyRate * duration + controllerCharge,
       notes:            booking.notes,
     };
