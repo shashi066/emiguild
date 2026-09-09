@@ -413,6 +413,7 @@ type F12026ImportInput = {
   entryFeeRupees?: unknown;
   entryCoins?: unknown;
   driverMultipliers?: unknown;
+  driverNames?: unknown;
 };
 
 export function getF12026ImportCatalog() {
@@ -444,9 +445,19 @@ function normalizeF12026Import(input: F12026ImportInput) {
   if (Object.keys(multiplierInput).length !== expectedKeys.size || Object.keys(multiplierInput).some((key) => !expectedKeys.has(key))) {
     throw new WatchPartyError('INVALID_F1_DRIVERS', 'Use exactly the current 22 F1 drivers.');
   }
+  // Optional driver name overrides
+  let nameOverrides: Record<string, string> = {};
+  if (input.driverNames && typeof input.driverNames === 'object' && !Array.isArray(input.driverNames)) {
+    const nameInput = input.driverNames as Record<string, unknown>;
+    for (const [key, value] of Object.entries(nameInput)) {
+      if (expectedKeys.has(key) && typeof value === 'string' && value.trim().length >= 1 && value.trim().length <= 80) {
+        nameOverrides[key] = value.trim();
+      }
+    }
+  }
   const options = F1_2026_DRIVERS.map((driver) => ({
     key: driver.key,
-    label: `${driver.name} - ${driver.team}`,
+    label: `${nameOverrides[driver.key] ?? driver.name} - ${driver.team}`,
     multiplierBasisPoints: normalizeMultiplierBasisPoints(multiplierInput[driver.key]),
   }));
 
