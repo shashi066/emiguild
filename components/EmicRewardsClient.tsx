@@ -62,6 +62,13 @@ export function EmicRewardsClient({ initialState, signedIn }: { initialState: Em
         <button type="button" role="tab" aria-selected={tab === 'tickets'} className={tab === 'tickets' ? 'active' : ''} onClick={() => setTab('tickets')}>My Tickets</button>
       </div>
 
+      {tab === 'drinks' && (
+        <div className="emic-session-notice" role="note">
+          <Coffee size={17} aria-hidden="true" />
+          <p><strong>Claim during your session</strong><span>Food &amp; Drink rewards can be claimed only during an active gaming or Watch Party session.</span></p>
+        </div>
+      )}
+
       {tab === 'tickets' ? (
         <div className="emic-ticket-list">
           {!signedIn ? (
@@ -120,6 +127,11 @@ export function EmicRewardsClient({ initialState, signedIn }: { initialState: Em
         .emic-rewards-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; padding: 4px; border: 1px solid rgba(148,163,184,.2); border-radius: 8px; background: #0b1220; }
         .emic-rewards-tabs button { min-width: 0; min-height: 46px; padding: 6px; border: 0; border-radius: 6px; color: #94a3b8; background: transparent; font-size: .72rem; font-weight: 800; }
         .emic-rewards-tabs button.active { color: #10151d; background: #f4cf58; }
+        .emic-session-notice { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 10px 12px; border: 1px solid rgba(244,207,88,.38); border-left: 3px solid #f4cf58; border-radius: 6px; background: #1b180d; color: #f8e7a3; }
+        .emic-session-notice svg { flex: 0 0 auto; }
+        .emic-session-notice p { display: grid; gap: 2px; margin: 0; font-size: .78rem; line-height: 1.35; }
+        .emic-session-notice strong { color: #f4cf58; }
+        .emic-session-notice span { color: #d8cfac; }
         .emic-reward-list, .emic-ticket-list { display: grid; gap: 8px; margin-top: 10px; }
         .emic-reward-item, .emic-ticket { justify-content: space-between; min-width: 0; padding: 11px; border: 1px solid rgba(148,163,184,.24); border-left: 3px solid var(--item-color,#f4cf58); border-radius: 8px; background: #0b1321; }
         .emic-reward-item.bronze { --item-color:#d08a47; } .emic-reward-item.silver { --item-color:#cbd5e1; } .emic-reward-item.gold { --item-color:#facc15; }
