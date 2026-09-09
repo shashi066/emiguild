@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard, BookOpen, Monitor, Users,
-  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity, Tv, Menu, X, Castle, CupSoda,
+  Gamepad2, ChevronRight, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity, Tv, Menu, X, Castle, CupSoda, Target, ShoppingBag,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -15,12 +15,14 @@ const NAV_ITEMS = [
   { href: '/admin/passes',   label: 'Passes',         icon: Award },
   { href: '/admin/armory',    label: 'Artifacts',      icon: Shield },
   { href: '/admin/tower',     label: 'Tower',          icon: Castle },
+  { href: '/admin/guess-36', label: 'Guess 36',    icon: Target },
   { href: '/admin/draws',    label: 'Guild Drop',     icon: Gift },
   { href: '/admin/stations', label: 'Stations',       icon: Monitor },
   { href: '/admin/games',    label: 'Games',          icon: Gamepad2 },
   { href: '/admin/daily-spin', label: 'Guild Spin', icon: RotateCw },
   { href: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { href: '/admin/watch-parties', label: 'Watch Parties', icon: Tv },
+  { href: '/admin/rewards', label: 'EMIC Rewards', icon: ShoppingBag },
   { href: '/admin/fnb',          label: 'F&B Items',      icon: CupSoda },
   { href: '/admin/users',    label: 'Users',          icon: Users },
   { href: '/admin/settings', label: 'Settings',       icon: Settings },

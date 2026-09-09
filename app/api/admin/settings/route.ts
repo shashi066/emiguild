@@ -3,7 +3,18 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { z } from 'zod';
 
-const INTERNAL_SETTING_KEYS = new Set(['watch_party_economy_version']);
+const INTERNAL_SETTING_KEYS = new Set([
+  'watch_party_economy_version',
+  'tower_enabled',
+  'tower_rewards',
+  'tower_defaults_version',
+  'tower_run_duration_seconds',
+  'tower_red_cards_per_floor',
+  'guess_36_enabled',
+  'guess_36_rewards',
+  'guess_36_modes',
+  'emic_rewards_catalog',
+]);
 
 const updateSchema = z.array(
   z.object({

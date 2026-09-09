@@ -20,14 +20,14 @@ import {
   X,
 } from 'lucide-react';
 import { AdminModalShell } from '@/components/admin/AdminModalShell';
-import type { TowerRewardConfig } from '@/lib/tower';
+import type { TowerFloorRiskConfig, TowerRewardConfig } from '@/lib/tower';
 import {
   DEFAULT_TOWER_RUN_DURATION_SECONDS,
   TOWER_RUN_DURATION_OPTIONS_SECONDS,
 } from '@/lib/tower-clock';
 
 type AdminView = 'grant' | 'rewards' | 'history';
-type ConfigEditor = 'availability' | 'timer' | 'rewards' | null;
+type ConfigEditor = 'availability' | 'timer' | 'rewards' | 'risk' | null;
 type UserResult = { id: string; name: string; email: string };
 type HistoryItem = {
   id: string;
@@ -44,7 +44,7 @@ type HistoryPage = { items: HistoryItem[]; nextCursor: string | null };
 type PromotionPreview = { enabled: boolean; recipientCount: number; expiresAt: string };
 
 type Props = {
-  initialConfig?: { enabled: boolean; rewards: TowerRewardConfig[]; runDurationSeconds: number };
+  initialConfig?: { enabled: boolean; rewards: TowerRewardConfig[]; runDurationSeconds: number; redCardsPerFloor: TowerFloorRiskConfig[] };
   initialHistory?: HistoryPage;
   manualGrantExpiresAt?: string;
   initialError?: string;
@@ -61,6 +61,16 @@ function validationError(rewards: TowerRewardConfig[]) {
     }
     if (!Number.isInteger(Number(reward.value)) || Number(reward.value) <= 0 || Number(reward.value) > 10000) return `Enter a whole-number value for floor ${reward.level}.`;
     if (reward.type === 'DISCOUNT' && Number(reward.value) > 100) return `Floor ${reward.level} discount cannot exceed 100%.`;
+  }
+  return '';
+}
+
+function riskValidationError(risks: TowerFloorRiskConfig[]) {
+  if (risks.length !== 10) return 'Tower needs a risk setting for all 10 floors.';
+  for (const [index, risk] of risks.entries()) {
+    if (risk.level !== index + 1 || (risk.redCount !== 1 && risk.redCount !== 2)) {
+      return `Choose one or two red cards for floor ${index + 1}.`;
+    }
   }
   return '';
 }
@@ -221,12 +231,16 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
   const [runDurationSeconds, setRunDurationSeconds] = useState(
     initialConfig?.runDurationSeconds ?? DEFAULT_TOWER_RUN_DURATION_SECONDS,
   );
+  const [redCardsPerFloor, setRedCardsPerFloor] = useState<TowerFloorRiskConfig[]>(
+    initialConfig?.redCardsPerFloor ?? Array.from({ length: 10 }, (_, index) => ({ level: index + 1, redCount: index >= 6 ? 2 : 1 })),
+  );
   const [history, setHistory] = useState<HistoryPage>(initialHistory ?? { items: [], nextCursor: null });
   const [query, setQuery] = useState('');
   const [activeEditor, setActiveEditor] = useState<ConfigEditor>(null);
   const [enabledDraft, setEnabledDraft] = useState(enabled);
   const [timerDraft, setTimerDraft] = useState(runDurationSeconds);
   const [rewardDraft, setRewardDraft] = useState<TowerRewardConfig[]>([]);
+  const [riskDraft, setRiskDraft] = useState<TowerFloorRiskConfig[]>([]);
   const [editorError, setEditorError] = useState('');
   const [users, setUsers] = useState<UserResult[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserResult | null>(null);
@@ -249,6 +263,7 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
   const promotionRequestIdRef = useRef(newRequestId());
   const configError = validationError(rewards);
   const draftConfigError = activeEditor === 'rewards' ? validationError(rewardDraft) : '';
+  const draftRiskError = activeEditor === 'risk' ? riskValidationError(riskDraft) : '';
   const requestedGrantQuantity = Number(grantQuantity);
   const grantQuantityValid = Number.isInteger(requestedGrantQuantity)
     && requestedGrantQuantity >= 1
@@ -273,12 +288,19 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
     setActiveEditor('timer');
   };
 
+  const openRiskModal = () => {
+    setRiskDraft(redCardsPerFloor.map((risk) => ({ ...risk })));
+    setEditorError('');
+    setActiveEditor('risk');
+  };
+
   const closeConfigModal = () => {
     if (saving) return;
     setActiveEditor(null);
     setEnabledDraft(enabled);
     setTimerDraft(runDurationSeconds);
     setRewardDraft([]);
+    setRiskDraft([]);
     setEditorError('');
   };
 
@@ -315,9 +337,12 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
     nextEnabled: boolean,
     nextRewards: TowerRewardConfig[],
     nextRunDurationSeconds: number,
+    nextRedCardsPerFloor: TowerFloorRiskConfig[],
   ) => {
     const error = validationError(nextRewards);
     if (error) return setEditorError(error);
+    const riskError = riskValidationError(nextRedCardsPerFloor);
+    if (riskError) return setEditorError(riskError);
     setSaving(true);
     setNotice(null);
     setEditorError('');
@@ -329,6 +354,7 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
           enabled: nextEnabled,
           rewards: nextRewards,
           runDurationSeconds: nextRunDurationSeconds,
+          redCardsPerFloor: nextRedCardsPerFloor,
         }),
       });
       const data = await response.json();
@@ -338,6 +364,8 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
       setRewards(data.rewards ?? nextRewards);
       setRunDurationSeconds(data.runDurationSeconds ?? nextRunDurationSeconds);
       setTimerDraft(data.runDurationSeconds ?? nextRunDurationSeconds);
+      setRedCardsPerFloor(data.redCardsPerFloor ?? nextRedCardsPerFloor);
+      setRiskDraft([]);
       setRewardDraft([]);
       setActiveEditor(null);
       setNotice({ type: 'success', text: 'Tower settings saved.' });
@@ -533,6 +561,17 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
               ))}</div>
               {configError && <div className="form-error"><AlertCircle size={15} />{configError}</div>}
             </TowerSummaryCard>
+            <TowerSummaryCard title="Floor Risk" onEdit={openRiskModal}>
+              <div className="risk-summary-list">
+                {redCardsPerFloor.map((risk) => (
+                  <span key={risk.level} className={risk.redCount === 2 ? 'higher-risk' : ''}>
+                    <b>{risk.level}</b>
+                    {risk.redCount} {risk.redCount === 1 ? 'red' : 'reds'}
+                  </span>
+                ))}
+              </div>
+              <span>Players see the count, while card positions stay hidden.</span>
+            </TowerSummaryCard>
           </div>
         </section>
       )}
@@ -544,7 +583,7 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
           saving={saving}
           error={editorError}
           onClose={closeConfigModal}
-          onSave={() => saveConfig(enabledDraft, rewards, runDurationSeconds)}
+          onSave={() => saveConfig(enabledDraft, rewards, runDurationSeconds, redCardsPerFloor)}
         >
           <label className="tower-enable-row">
             <span><strong>Allow Tower climbs</strong><small>Pause new starts and picks when disabled.</small></span>
@@ -560,7 +599,7 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
           saving={saving}
           error={editorError}
           onClose={closeConfigModal}
-          onSave={() => saveConfig(enabled, rewards, timerDraft)}
+          onSave={() => saveConfig(enabled, rewards, timerDraft, redCardsPerFloor)}
         >
           <div className="tower-timer-options" role="group" aria-label="Tower climb duration">
             {TOWER_RUN_DURATION_OPTIONS_SECONDS.map((seconds) => (
@@ -586,7 +625,7 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
           error={editorError || draftConfigError}
           saveDisabled={Boolean(draftConfigError)}
           onClose={closeConfigModal}
-          onSave={() => saveConfig(enabled, rewardDraft, runDurationSeconds)}
+          onSave={() => saveConfig(enabled, rewardDraft, runDurationSeconds, redCardsPerFloor)}
         >
           <div className="reward-editor">{rewardDraft.map((reward, index) => (
             <div key={reward.level} className="reward-row" role="group" aria-labelledby={`tower-floor-${reward.level}-label`}>
@@ -599,6 +638,41 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
               )}
             </div>
           ))}</div>
+        </TowerConfigModal>
+      )}
+
+      {activeEditor === 'risk' && (
+        <TowerConfigModal
+          title="Floor Risk"
+          titleId="tower-risk-editor-title"
+          saving={saving}
+          error={editorError || draftRiskError}
+          saveDisabled={Boolean(draftRiskError)}
+          onClose={closeConfigModal}
+          onSave={() => saveConfig(enabled, rewards, runDurationSeconds, riskDraft)}
+        >
+          <p className="tower-risk-help">Choose how many of the three cards are red on each floor.</p>
+          <div className="risk-editor">
+            {riskDraft.map((risk, index) => (
+              <div key={risk.level} className="risk-row">
+                <strong>Floor <span>{risk.level}</span></strong>
+                <div role="group" aria-label={`Red cards on floor ${risk.level}`}>
+                  {([1, 2] as const).map((redCount) => (
+                    <button
+                      key={redCount}
+                      type="button"
+                      aria-pressed={risk.redCount === redCount}
+                      onClick={() => setRiskDraft((rows) => rows.map((row, rowIndex) => (
+                        rowIndex === index ? { ...row, redCount } : row
+                      )))}
+                    >
+                      {redCount} {redCount === 1 ? 'Red' : 'Reds'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </TowerConfigModal>
       )}
 
@@ -704,6 +778,19 @@ export function AdminTower({ initialConfig, initialHistory, manualGrantExpiresAt
         .tower-timer-options button { min-width: 0; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px; border: 1px solid var(--color-border); border-radius: 7px; background: rgba(255,255,255,.025); color: var(--color-text-secondary); font: inherit; font-size: .82rem; font-weight: 800; cursor: pointer; }
         .tower-timer-options button[aria-pressed="true"] { border-color: rgba(97,232,255,.7); background: rgba(97,232,255,.1); color: #8ee8ff; }
         .tower-timer-options button:focus-visible { outline: 2px solid #8ee8ff; outline-offset: 2px; }
+        .risk-summary-list { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 6px; }
+        .risk-summary-list > span { min-width: 0; display: grid; justify-items: center; gap: 2px; padding: 7px 3px; border: 1px solid rgba(97,232,255,.28); border-radius: 6px; color: #8ee8ff; font-size: .66rem; font-weight: 800; }
+        .risk-summary-list b { color: var(--color-text-primary); font-size: .78rem; }
+        .risk-summary-list > span.higher-risk { border-color: rgba(251,113,133,.4); color: #fda4af; }
+        .tower-risk-help { margin: 0; color: var(--color-text-secondary); font-size: .82rem; }
+        .risk-editor { display: grid; gap: 7px; }
+        .risk-row { min-width: 0; display: grid; grid-template-columns: minmax(74px,.5fr) minmax(0,1fr); align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--color-border); border-radius: 7px; }
+        .risk-row > strong { display: flex; align-items: center; gap: 6px; color: var(--color-text-secondary); font-size: .78rem; }
+        .risk-row > strong span { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid rgba(97,232,255,.4); border-radius: 5px; color: #8ee8ff; }
+        .risk-row > div { min-width: 0; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+        .risk-row button { min-width: 0; min-height: 44px; padding: 7px; border: 1px solid var(--color-border); border-radius: 6px; background: rgba(255,255,255,.025); color: var(--color-text-secondary); font: inherit; font-size: .76rem; font-weight: 800; cursor: pointer; }
+        .risk-row button[aria-pressed="true"] { border-color: rgba(251,113,133,.72); background: rgba(190,24,93,.13); color: #fecdd3; }
+        .risk-row button:focus-visible { outline: 2px solid #8ee8ff; outline-offset: 2px; }
         .reward-summary-list { display: grid; gap: 8px; }
         .reward-summary-row { min-width: 0; display: grid; grid-template-columns: 36px minmax(0,1fr); gap: 4px 10px; align-items: center; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: rgba(255,255,255,.025); }
         .reward-summary-row > span { grid-row: span 2; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid rgba(97,232,255,.4); border-radius: 6px; color: #8ee8ff; font-weight: 900; }

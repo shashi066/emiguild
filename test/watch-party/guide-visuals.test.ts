@@ -56,4 +56,27 @@ test('keeps guide visuals optional for shared fallback rows', () => {
   assert.equal(source.includes('visual?: InfoGuideStepVisual'), true);
   assert.equal(source.includes("className={step.visual ? 'has-visual' : undefined}"), true);
   assert.equal(source.includes('{step.visual && ('), true);
+  assert.equal(source.includes('grid-template-columns: 52px minmax(0, 1fr)'), true);
+  assert.equal(source.includes('grid-template-columns: 48px minmax(0, 1fr)'), true);
+  assert.equal(source.includes('.info-guide-steps li.has-visual .info-guide-step-number {\n          position: absolute;'), true);
+  assert.equal(source.includes('<span className="info-guide-step-number" aria-hidden="true">{index + 1}</span>\n                    {StepIcon'), true);
+});
+
+test('shares one compact Info control and keeps the Rewards shortcut on the Watch Party list', () => {
+  const trigger = readFileSync(new URL('../../components/InfoGuideButton.tsx', import.meta.url), 'utf8');
+  const rewards = readFileSync(new URL('../../components/EmicRewardsButton.tsx', import.meta.url), 'utf8');
+  const list = readFileSync(new URL('../../components/WatchPartyClient.tsx', import.meta.url), 'utf8');
+  const detail = readFileSync(new URL('../../components/WatchPartyDetailClient.tsx', import.meta.url), 'utf8');
+  const tower = readFileSync(new URL('../../components/TowerClient.tsx', import.meta.url), 'utf8');
+  const guess = readFileSync(new URL('../../components/Guess36Client.tsx', import.meta.url), 'utf8');
+  const armory = readFileSync(new URL('../../components/ArmoryClient.tsx', import.meta.url), 'utf8');
+
+  assert.equal(trigger.includes('min-height: 36px'), true);
+  assert.equal(trigger.includes('border-radius: 6px'), true);
+  for (const source of [list, detail, tower, guess, armory]) assert.equal(source.includes('<InfoGuideButton'), true);
+  assert.equal(list.includes('<EmicRewardsButton />'), true);
+  assert.equal(rewards.includes('href="/rewards"'), true);
+  assert.equal(rewards.includes('Open EMIC Rewards shop'), true);
+  assert.equal(rewards.includes('background: #33260b'), true);
+  assert.equal(detail.includes('<EmicRewardsButton'), false);
 });

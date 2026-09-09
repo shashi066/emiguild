@@ -42,6 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           customerEmail: invite.userEmail,
           partyId: party.id,
           title: party.title,
+          source: party.source,
           homeTeam: party.homeTeam,
           awayTeam: party.awayTeam,
           kickoffAt: party.kickoffAt,

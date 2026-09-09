@@ -25,7 +25,19 @@ import {
   Award,
   RotateCcw,
   Castle,
+  Target,
+  Gift,
+  Trophy,
 } from 'lucide-react';
+
+const HOME_SIDE_QUESTS = [
+  { href: '/guess-36', label: 'Guess 36', icon: Target, tone: 'guess' },
+  { href: '/tower', label: 'Tower', icon: Castle, tone: 'tower' },
+  { href: '/daily-spin', label: 'Guild Spin', icon: RotateCcw, tone: 'spin' },
+  { href: '/armory', label: 'Artifacts', icon: Shield, tone: 'artifacts' },
+  { href: '/draws', label: 'Guild Drop', icon: Gift, tone: 'drop' },
+  { href: '/tournaments', label: 'Tournament', icon: Trophy, tone: 'tournament' },
+] as const;
 
 async function getStations() {
   return prisma.station.findMany({
@@ -259,6 +271,21 @@ export default async function HomePage() {
             </p>
 
             <HeroActions />
+
+            <nav className="home-side-quests" aria-label="Side Quests shortcuts">
+              <span className="home-side-quests-label">Side Quests</span>
+              <div className="home-side-quests-grid">
+                {HOME_SIDE_QUESTS.map(({ href, label, icon: Icon, tone }) => (
+                  <Link key={href} href={href} className={`home-side-quest ${tone}`}>
+                    <span className="home-side-quest-icon" aria-hidden="true">
+                      <Icon size={17} />
+                    </span>
+                    <span>{label}</span>
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </Link>
+                ))}
+              </div>
+            </nav>
 
             <div className="hero-stats">
               <div>

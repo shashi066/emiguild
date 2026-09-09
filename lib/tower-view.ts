@@ -70,10 +70,10 @@ export function getTowerMiniCardPresentation(input: {
   position: number;
   selectedPosition?: number;
   historyResult?: 'SAFE' | 'LOSS';
-  redPosition?: number;
+  redPositions?: number[];
 }): TowerMiniCardPresentation {
-  if (input.redPosition !== undefined) {
-    if (input.position === input.redPosition) return 'red';
+  if (input.redPositions !== undefined) {
+    if (input.redPositions.includes(input.position)) return 'red';
     if (input.historyResult === 'SAFE' && input.position === input.selectedPosition) {
       return 'selected-safe';
     }

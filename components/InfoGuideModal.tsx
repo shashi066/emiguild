@@ -21,6 +21,7 @@ export type InfoGuideModalProps = {
   steps: readonly InfoGuideStep[];
   onClose: () => void;
   closeLabel?: string;
+  lightweight?: boolean;
 };
 
 export function InfoGuideModal({
@@ -31,11 +32,12 @@ export function InfoGuideModal({
   steps,
   onClose,
   closeLabel = `Close ${eyebrow}`,
+  lightweight = false,
 }: InfoGuideModalProps) {
   const subtitleId = `${titleId}-subtitle`;
 
   return (
-    <AdminModalShell onClose={onClose} labelledBy={titleId} describedBy={subtitleId}>
+    <AdminModalShell onClose={onClose} labelledBy={titleId} describedBy={subtitleId} lightweight={lightweight}>
       <section className="info-guide-modal">
         <header className="info-guide-header">
           <span className="info-guide-icon" aria-hidden="true">
@@ -61,9 +63,10 @@ export function InfoGuideModal({
             const StepIcon = step.visual?.kind === 'icon' ? step.visual.icon : null;
             return (
               <li key={`${index}-${step.title}`} className={step.visual ? 'has-visual' : undefined}>
-                <span className="info-guide-step-number" aria-hidden="true">{index + 1}</span>
+                {!step.visual && <span className="info-guide-step-number" aria-hidden="true">{index + 1}</span>}
                 {step.visual && (
                   <span className={`info-guide-step-visual ${step.visual.kind === 'cards' ? step.visual.state : 'icon'}`} role="img" aria-label={step.visual.label}>
+                    <span className="info-guide-step-number" aria-hidden="true">{index + 1}</span>
                     {StepIcon && <StepIcon size={21} strokeWidth={1.9} aria-hidden="true" />}
                     {step.visual.kind === 'cards' && step.visual.state === 'hidden' && (
                       <span className="info-guide-card-set" aria-hidden="true"><i>?</i><i>?</i><i>?</i></span>
@@ -90,9 +93,8 @@ export function InfoGuideModal({
         .info-guide-modal {
           min-width: 0;
           display: grid;
-          gap: 16px;
+          gap: 14px;
           color: var(--color-text-primary);
-          overflow-wrap: anywhere;
         }
 
         .info-guide-header {
@@ -169,15 +171,38 @@ export function InfoGuideModal({
         }
 
         .info-guide-steps li {
+          position: relative;
           display: grid;
           grid-template-columns: 30px minmax(0, 1fr);
+          align-items: start;
           gap: 10px;
-          padding: 11px 0;
+          padding: 10px 0;
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .info-guide-steps li.has-visual {
-          grid-template-columns: 30px 44px minmax(0, 1fr);
+          grid-template-columns: 52px minmax(0, 1fr);
+          gap: 9px;
+        }
+
+        .info-guide-steps li.has-visual .info-guide-step-number {
+          position: absolute;
+          z-index: 1;
+          top: -6px;
+          left: -7px;
+          width: 22px;
+          height: 22px;
+          background: #102939;
+          font-size: 0.68rem;
+        }
+
+        .info-guide-steps li.has-visual .info-guide-step-visual {
+          grid-column: 1;
+          margin-left: 8px;
+        }
+
+        .info-guide-steps li.has-visual > div {
+          grid-column: 2;
         }
 
         .info-guide-step-number {
@@ -194,6 +219,7 @@ export function InfoGuideModal({
         }
 
         .info-guide-step-visual {
+          position: relative;
           width: 42px;
           height: 42px;
           display: grid;
@@ -283,10 +309,12 @@ export function InfoGuideModal({
           .info-guide-icon { width: 32px; height: 32px; }
           .info-guide-heading h2 { font-size: 1.05rem; }
           .info-guide-heading p { font-size: 0.8rem; }
-          .info-guide-steps li { grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 10px 0; }
-          .info-guide-steps li.has-visual { grid-template-columns: 28px 38px minmax(0, 1fr); gap: 7px; }
+          .info-guide-steps li { grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 9px 0; }
+          .info-guide-steps li.has-visual { grid-template-columns: 48px minmax(0, 1fr); gap: 8px; }
           .info-guide-step-number { width: 26px; height: 26px; }
-          .info-guide-step-visual { width: 36px; height: 36px; }
+          .info-guide-step-visual { width: 38px; height: 38px; }
+          .info-guide-steps li.has-visual .info-guide-step-number { width: 21px; height: 21px; }
+          .info-guide-steps li.has-visual .info-guide-step-visual { margin-left: 7px; }
           .info-guide-actions { display: grid; }
           .info-guide-confirm { width: 100%; min-height: 48px; }
         }

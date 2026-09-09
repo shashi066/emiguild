@@ -10,7 +10,6 @@ import {
   Clock3,
   Coins,
   Gift,
-  Info,
   LockKeyhole,
   RefreshCw,
   ShieldAlert,
@@ -20,6 +19,7 @@ import {
   Zap,
 } from 'lucide-react';
 import InfoGuideModal from '@/components/InfoGuideModal';
+import InfoGuideButton from '@/components/InfoGuideButton';
 import { RewardTicketCard } from '@/components/RewardTicketCard';
 import { AdminModalShell } from '@/components/admin/AdminModalShell';
 import { getTowerRewardTicketDisplay } from '@/lib/reward-ticket';
@@ -54,9 +54,9 @@ type TowerReward = {
   passType?: string;
 };
 type TowerCard = { id: string };
-type TowerFloor = { level: number; reward: TowerReward };
+type TowerFloor = { level: number; reward: TowerReward; redCount: 1 | 2 };
 type TowerHistory = { level: number; selectedPosition: number; result: 'SAFE' | 'LOSS' };
-type TowerReveal = { level: number; redPosition: number };
+type TowerReveal = { level: number; redPositions: number[] };
 type TowerRewardTicket = { id: string; reward: TowerReward; expiresAt: string };
 type TowerAttemptState = {
   attemptId: string;
@@ -117,7 +117,7 @@ function getTowerGuideSteps(runDurationSeconds: number) {
   },
   {
     title: 'Pick a Card',
-    description: 'Each floor has 3 cards - 2 Green and 1 Red. Pick one card to reveal your result.',
+    description: 'Each floor has 3 cards. Check the floor label: 1 red leaves 2 green cards, while 2 reds leave 1 green card. Pick one card to reveal your result.',
     visual: { kind: 'cards', state: 'hidden', label: 'Three hidden cards' },
   },
   {
@@ -252,7 +252,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         : '';
   const floors = useMemo(() => orderTowerFloors(attempt?.floors ?? []), [attempt?.floors]);
   const historyByLevel = useMemo(() => new Map((attempt?.history ?? []).map((item) => [item.level, item])), [attempt?.history]);
-  const revealByLevel = useMemo(() => new Map((attempt?.reveal ?? []).map((item) => [item.level, item.redPosition])), [attempt?.reveal]);
+  const revealByLevel = useMemo(() => new Map((attempt?.reveal ?? []).map((item) => [item.level, item.redPositions])), [attempt?.reveal]);
   const lastResolvedFloor = attempt?.history.length ? attempt.history[attempt.history.length - 1] : undefined;
   const pendingSafeLevel = attempt?.status === 'IN_PROGRESS'
     && attempt.canClaim
@@ -554,7 +554,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         <header className="tower-head">
           <div><span>Booking Check-in Reward</span><h1 id="tower-title"><Castle size={23} /> Tower of Rewards</h1></div>
           <div className="tower-head-actions">
-            <button type="button" className="tower-info" onClick={() => setGuideOpen(true)} aria-haspopup="dialog"><Info size={16} /> Info</button>
+            <InfoGuideButton onClick={() => setGuideOpen(true)} ariaLabel="Open How Tower Works guide" />
             <span className="tower-token-count" aria-label={`${state.availableTokens} available Tower Tokens`}><Coins size={15} /> {state.availableTokens}</span>
           </div>
         </header>
@@ -599,7 +599,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
             <div className="tower-building" aria-label="Tower floors">
               {floors.map((floor) => {
                 const history = historyByLevel.get(floor.level);
-                const redPosition = revealByLevel.get(floor.level);
+                const redPositions = revealByLevel.get(floor.level);
                 const presentation = getTowerFloorPresentation({
                   level: floor.level,
                   focusedLevel: focusedLevel ?? attempt.level,
@@ -616,14 +616,15 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
                     ref={isFocused ? (node) => { currentFloorRef.current = node; } : undefined}
                     className={`tower-floor ${presentation}`}
                     aria-current={isFocused ? 'step' : undefined}
-                    aria-label={`Floor ${floor.level}, ${rewardLabel(floor.reward)}, ${floorPresentationLabel(presentation)}`}
+                    aria-label={`Floor ${floor.level}, ${rewardLabel(floor.reward)}, ${floor.redCount} red ${floor.redCount === 1 ? 'card' : 'cards'}, ${floorPresentationLabel(presentation)}`}
                   >
                     <div className="floor-label">
                       <b>{floor.level}</b>
                       <span className="floor-reward">{rewardLabel(floor.reward)}</span>
                       <div className="floor-meta">
+                        <small className={`floor-risk ${floor.redCount === 2 ? 'higher' : ''}`}>{floor.redCount} {floor.redCount === 1 ? 'red' : 'reds'}</small>
                         {!showHistoryCards && <FloorMarker presentation={presentation} />}
-                        {showHistoryCards && <MiniCards selectedPosition={history?.selectedPosition} result={history?.result} redPosition={redPosition} />}
+                        {showHistoryCards && <MiniCards selectedPosition={history?.selectedPosition} result={history?.result} redPositions={redPositions} />}
                       </div>
                     </div>
                     {presentation === 'current' ? (
@@ -726,9 +727,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         .tower-head > div:first-child > span { color: #69d9e7; font-size: .62rem; font-weight: 800; text-transform: uppercase; }
         .tower-head h1 { display: flex; align-items: center; gap: 7px; margin: 3px 0 0; font-size: 1.14rem; line-height: 1.2; }
         .tower-head-actions { display: flex; align-items: center; gap: 6px; }
-        .tower-info, .tower-token-count { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #2b394c; border-radius: 6px; padding: 0 8px; background: #101827; color: var(--color-text-secondary); font: inherit; font-size: .7rem; font-weight: 800; }
-        .tower-info { border-color: rgba(97,232,255,0.3); background: #111b2a; color: #61e8ff; cursor: pointer; }
-        .tower-info:focus-visible { outline: 2px solid #61e8ff; outline-offset: 2px; }
+        .tower-token-count { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #2b394c; border-radius: 6px; padding: 0 8px; background: #101827; color: var(--color-text-secondary); font: inherit; font-size: .7rem; font-weight: 800; }
         .tower-token-count { min-width: 45px; }
         .tower-emblem { position: relative; height: 76px; display: grid; place-items: center; margin-block: -2px; color: #61e8ff; }
         .tower-emblem::before, .tower-emblem::after { content: ''; position: absolute; z-index: 0; top: 2px; width: 100px; height: 1px; background: var(--tower-structure); }
@@ -766,7 +765,9 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         .tower-floor.locked .floor-label > b, .tower-floor.revealed .floor-label > b { color: #bad9ed; }
         .floor-reward { min-width: 0; color: #8ee8f2; font-size: .69rem; font-weight: 700; line-height: 1.2; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
         .tower-floor.locked .floor-reward { color: #78cbd5; -webkit-line-clamp: 1; }
-        .floor-meta { min-width: 26px; display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+        .floor-meta { min-width: 26px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+        .floor-risk { flex: 0 0 auto; color: #88a8b5; font-size: .61rem; font-weight: 800; line-height: 1; white-space: nowrap; }
+        .floor-risk.higher { color: #f3a4ad; }
         :global(.floor-state) { width: 26px; height: 26px; display: inline-grid; place-items: center; color: #7e899b; }
         :global(.floor-state.current) { color: var(--tower-current-accent); }
         :global(.floor-state.pending) { color: #79d6a5; }
@@ -843,7 +844,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         @media (max-width: 340px) {
           .tower-page { padding-inline: 7px; }
           .tower-head h1 { font-size: 1.04rem; }
-          .tower-info, .tower-token-count { padding-inline: 6px; }
+          .tower-token-count { padding-inline: 6px; }
           .tower-floor.current, .tower-floor.pending-safe { padding-inline: 7px; }
           .active-cards, :global(.decision-cards) { min-height: 96px; gap: 6px; }
           .active-cards button, :global(.decision-card) { min-height: 96px; }
@@ -892,24 +893,25 @@ function DecisionCards({ floor, selectedPosition }: { floor: number; selectedPos
   })}</div>;
 }
 
-function MiniCards({ selectedPosition, result, redPosition }: {
+function MiniCards({ selectedPosition, result, redPositions }: {
   selectedPosition?: number;
   result?: 'SAFE' | 'LOSS';
-  redPosition?: number;
+  redPositions?: number[];
 }) {
-  const terminalReveal = redPosition !== undefined;
+  const terminalReveal = redPositions !== undefined;
   const selectedSafe = result === 'SAFE' && selectedPosition !== undefined;
+  const redPositionsLabel = redPositions?.map((position) => position + 1).join(' and ');
   const historyLabel = terminalReveal
     ? selectedSafe
-      ? `You selected card ${selectedPosition + 1} safely. Red card was position ${redPosition + 1}.`
+      ? `You selected card ${selectedPosition + 1} safely. Red ${redPositions?.length === 1 ? 'card was' : 'cards were'} at ${redPositionsLabel}.`
       : result === 'LOSS' && selectedPosition !== undefined
         ? `You selected red card ${selectedPosition + 1}.`
-        : `Red card was position ${redPosition + 1}.`
+        : `Red ${redPositions?.length === 1 ? 'card was' : 'cards were'} at ${redPositionsLabel}.`
     : selectedSafe
       ? `You selected card ${selectedPosition + 1} safely.`
       : undefined;
   return <div className={`tower-mini-cards ${terminalReveal ? 'terminal-reveal' : ''}`} role={historyLabel ? 'img' : undefined} aria-label={historyLabel}>{[0, 1, 2].map((position) => {
-    const cardPresentation = getTowerMiniCardPresentation({ position, selectedPosition, historyResult: result, redPosition });
+    const cardPresentation = getTowerMiniCardPresentation({ position, selectedPosition, historyResult: result, redPositions });
     const red = cardPresentation === 'red';
     const safe = cardPresentation === 'safe';
     const chosenSafe = cardPresentation === 'selected-safe';

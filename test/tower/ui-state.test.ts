@@ -77,11 +77,11 @@ test('colors terminal history fully without revealing active red cards', () => {
   const terminalCards = Array.from({ length: 10 }, (_, level) => (
     [0, 1, 2].map((position) => getTowerMiniCardPresentation({
       position,
-      redPosition: level % 3,
+      redPositions: level >= 6 ? [level % 3, (level + 1) % 3] : [level % 3],
     }))
   )).flat();
-  assert.equal(terminalCards.filter((card) => card === 'safe').length, 20);
-  assert.equal(terminalCards.filter((card) => card === 'red').length, 10);
+  assert.equal(terminalCards.filter((card) => card === 'safe').length, 16);
+  assert.equal(terminalCards.filter((card) => card === 'red').length, 14);
   assert.equal(terminalCards.filter((card) => card === 'neutral').length, 0);
 
   const activeCards = [0, 1, 2].map((position) => getTowerMiniCardPresentation({
@@ -95,23 +95,23 @@ test('colors terminal history fully without revealing active red cards', () => {
     position,
     selectedPosition: 1,
     historyResult: 'SAFE',
-    redPosition: 2,
+    redPositions: [2],
   }));
   assert.deepEqual(visitedTerminalCards, ['safe', 'selected-safe', 'red']);
 
   const unvisitedTerminalCards = [0, 1, 2].map((position) => getTowerMiniCardPresentation({
     position,
-    redPosition: 2,
+    redPositions: [0, 2],
   }));
-  assert.deepEqual(unvisitedTerminalCards, ['safe', 'safe', 'red']);
+  assert.deepEqual(unvisitedTerminalCards, ['red', 'safe', 'red']);
 
   const losingTerminalCards = [0, 1, 2].map((position) => getTowerMiniCardPresentation({
     position,
     selectedPosition: 2,
     historyResult: 'LOSS',
-    redPosition: 2,
+    redPositions: [1, 2],
   }));
-  assert.deepEqual(losingTerminalCards, ['safe', 'safe', 'red']);
+  assert.deepEqual(losingTerminalCards, ['safe', 'red', 'red']);
 });
 
 test('uses one local countdown interval without polling Tower state', () => {
@@ -200,9 +200,16 @@ test('keeps the Admin Tower editor readable and compact on mobile', () => {
   assert.equal(source.includes('<TowerSummaryCard title="Tower Availability"'), true);
   assert.equal(source.includes('<TowerSummaryCard title="Climb Timer"'), true);
   assert.equal(source.includes('<TowerSummaryCard title="Floor Rewards"'), true);
+  assert.equal(source.includes('<TowerSummaryCard title="Floor Risk"'), true);
   assert.equal(source.includes("{activeEditor === 'availability' && ("), true);
   assert.equal(source.includes("{activeEditor === 'timer' && ("), true);
   assert.equal(source.includes("{activeEditor === 'rewards' && ("), true);
+  assert.equal(source.includes("{activeEditor === 'risk' && ("), true);
+  assert.equal(source.includes('aria-label={`Red cards on floor ${risk.level}`}'), true);
+  assert.equal(source.includes('aria-pressed={risk.redCount === redCount}'), true);
+  assert.equal(source.includes('setRiskDraft(redCardsPerFloor.map((risk) => ({ ...risk })))'), true);
+  assert.equal(source.includes('redCardsPerFloor: nextRedCardsPerFloor'), true);
+  assert.equal(source.includes('.risk-row button { min-width: 0; min-height: 44px;'), true);
   assert.equal(source.includes('TOWER_RUN_DURATION_OPTIONS_SECONDS.map((seconds)'), true);
   assert.equal(source.includes('aria-pressed={timerDraft === seconds}'), true);
   assert.equal(source.includes('runDurationSeconds: nextRunDurationSeconds'), true);
@@ -227,6 +234,23 @@ test('keeps the Admin Tower editor readable and compact on mobile', () => {
   assert.equal(source.includes('.history-meta { grid-template-columns: auto minmax(0,1fr);'), true);
   assert.equal(source.includes('aria-label="Search Tower history"'), true);
   assert.equal(source.includes('aria-label="Filter Tower history by status"'), true);
+});
+
+test('shows floor risk counts without exposing active red positions', () => {
+  const client = readFileSync(new URL('../../components/TowerClient.tsx', import.meta.url), 'utf8');
+  const tower = readFileSync(new URL('../../lib/tower.ts', import.meta.url), 'utf8');
+  const publicSettings = readFileSync(new URL('../../app/api/settings/route.ts', import.meta.url), 'utf8');
+  const adminSettings = readFileSync(new URL('../../app/api/admin/settings/route.ts', import.meta.url), 'utf8');
+
+  assert.equal(client.includes("type TowerFloor = { level: number; reward: TowerReward; redCount: 1 | 2 }"), true);
+  assert.equal(client.includes("{floor.redCount} {floor.redCount === 1 ? 'red' : 'reds'}"), true);
+  assert.equal(client.includes('redPositions={redPositions}'), true);
+  assert.equal(client.includes('Check the floor label: 1 red leaves 2 green cards, while 2 reds leave 1 green card.'), true);
+  assert.equal(tower.includes("const TOWER_RED_CARDS_KEY = 'tower_red_cards_per_floor'"), true);
+  assert.equal(tower.includes('...(terminal ? { reveal: publicReveal(redCards) } : {})'), true);
+  assert.equal(tower.includes('redPositions: slots.map'), true);
+  assert.equal(publicSettings.includes("'tower_red_cards_per_floor'"), true);
+  assert.equal(adminSettings.includes("'tower_red_cards_per_floor'"), true);
 });
 
 test('uses immediate start and restore scrolling with motion-aware Climb scrolling', () => {
@@ -330,6 +354,7 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
   const source = readFileSync(new URL('../../components/TowerClient.tsx', import.meta.url), 'utf8');
   const pageSource = readFileSync(new URL('../../app/tower/page.tsx', import.meta.url), 'utf8');
   const layoutSource = readFileSync(new URL('../../app/tower/layout.tsx', import.meta.url), 'utf8');
+  const infoButtonSource = readFileSync(new URL('../../components/InfoGuideButton.tsx', import.meta.url), 'utf8');
   assert.equal(source.includes('data-level={floor.level}'), false);
   assert.equal(source.includes('<small>F</small>'), false);
   assert.equal(source.includes('<small>{index + 1}</small>'), false);
@@ -350,7 +375,7 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
   assert.equal(source.includes("chosenSafe ? <Zap size={iconSize} />"), true);
   assert.equal(source.includes("role={historyLabel ? 'img' : undefined}"), true);
   assert.equal(source.includes('You selected card ${selectedPosition + 1} safely.'), true);
-  assert.equal(source.includes("terminalReveal = redPosition !== undefined"), true);
+  assert.equal(source.includes("terminalReveal = redPositions !== undefined"), true);
   assert.equal(source.includes('const showHistoryCards = !isFocused && !isLocked'), true);
   assert.equal(source.includes('!showHistoryCards && <FloorMarker'), true);
   assert.equal(source.includes('showHistoryCards && <MiniCards'), true);
@@ -365,7 +390,8 @@ test('keeps the mobile progression hierarchy simple, numbered, and accessible', 
   assert.equal(pageSource.includes('Back to Home'), false);
   assert.equal(layoutSource.match(/Back to Home/g)?.length, 1);
   assert.equal(layoutSource.includes('className="tower-route-back"'), true);
-  assert.equal(source.includes('border-color: rgba(97,232,255,0.3); background: #111b2a; color: #61e8ff'), true);
+  assert.equal(source.includes('<InfoGuideButton'), true);
+  assert.equal(infoButtonSource.includes('border: 1px solid rgba(97, 232, 255, 0.3)'), true);
   assert.equal(source.includes('.tower-floor.revealed .floor-label > b'), true);
   assert.equal(source.includes('background: #17613f'), true);
   assert.equal(source.includes('from that run'), false);
@@ -422,8 +448,8 @@ test('shows the six-step Tower guide with lightweight optional visuals', () => {
   assert.equal(guideSource.includes("step.visual.state === 'safe' && <Zap"), true);
   assert.equal(guideSource.includes("step.visual.state === 'red' && <X"), true);
   assert.equal(guideSource.includes('role="img" aria-label={step.visual.label}'), true);
-  assert.equal(guideSource.includes('grid-template-columns: 30px 44px minmax(0, 1fr)'), true);
-  assert.equal(guideSource.includes('grid-template-columns: 28px 38px minmax(0, 1fr)'), true);
+  assert.equal(guideSource.includes('grid-template-columns: 52px minmax(0, 1fr)'), true);
+  assert.equal(guideSource.includes('grid-template-columns: 48px minmax(0, 1fr)'), true);
   assert.equal(guideSource.includes('@keyframes'), false);
 });
 

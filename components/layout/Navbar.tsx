@@ -9,7 +9,7 @@ import { SideQuestsMenu } from './SideQuestsMenu';
 import {
   Calendar, BookOpen, User, LogOut,
   LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw,
-  Gamepad2, Trophy, Shield, Castle,
+  Gamepad2, Trophy, Shield, Castle, Target, Tv, ShoppingBag,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -28,6 +28,7 @@ export function Navbar() {
     { href: '/book',       label: 'Book a Slot', icon: <Calendar size={15} /> },
     { href: '/passes',     label: 'Passes',      icon: <Award size={15} /> },
     { href: '/daily-spin', label: 'Guild Spin',   icon: <RotateCw size={15} /> },
+    { href: '/guess-36', label: 'Guess 36',   icon: <Target size={15} /> },
     { href: '/draws',      label: '🎁 Guild Drop', icon: null },
     ...(session ? [{ href: '/my-bookings', label: 'My Bookings', icon: <BookOpen size={15} /> }] : []),
     ...(isAdmin  ? [{ href: '/admin',      label: 'Admin',       icon: <LayoutDashboard size={15} /> }] : []),
@@ -38,7 +39,6 @@ export function Navbar() {
     { href: '/book',        label: 'Book a Slot', icon: <Calendar size={15} /> },
     { href: '/games',       label: 'Games',       icon: <Gamepad2 size={15} /> },
     { href: '/passes',      label: 'Passes',      icon: <Award size={15} /> },
-    { href: '/tournaments', label: 'Tournament',  icon: <Trophy size={15} /> },
   ];
 
   const desktopAccountLinks = [
@@ -51,8 +51,11 @@ export function Navbar() {
     { href: '/book',        label: 'Book a Slot', icon: <Calendar size={15} /> },
     { href: '/games',       label: 'Games',       icon: <Gamepad2 size={15} /> },
     { href: '/passes',      label: 'Passes',      icon: <Award size={15} /> },
+    { href: '/watch-party', label: 'Watch Party', icon: <Tv size={15} /> },
+    { href: '/rewards',     label: 'EMIC Rewards', icon: <ShoppingBag size={15} /> },
     { href: '/armory',      label: 'Artifacts',   icon: <Shield size={15} /> },
     { href: '/tower',       label: 'Tower',        icon: <Castle size={15} /> },
+    { href: '/guess-36',  label: 'Guess 36',   icon: <Target size={15} /> },
     { href: '/daily-spin',  label: 'Guild Spin',  icon: <RotateCw size={15} /> },
     { href: '/draws',       label: '🎁 Guild Drop', icon: null },
     { href: '/tournaments', label: 'Tournament',  icon: <Trophy size={15} /> },

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { DEFAULT_GUESS_36_MODES, DEFAULT_GUESS_36_REWARDS } from '../lib/guess-36-rules';
 
 const prisma = new PrismaClient();
 
@@ -35,6 +36,22 @@ async function main() {
     where: { key: 'daily_spin_reset_hour' },
     update: {},
     create: { key: 'daily_spin_reset_hour', value: '0', label: 'Daily Reset Hour in IST (0-23)' },
+  });
+
+  await prisma.setting.upsert({
+    where: { key: 'guess_36_enabled' },
+    update: {},
+    create: { key: 'guess_36_enabled', value: 'true', label: 'Guess 36 Enabled' },
+  });
+  await prisma.setting.upsert({
+    where: { key: 'guess_36_rewards' },
+    update: {},
+    create: { key: 'guess_36_rewards', value: JSON.stringify(DEFAULT_GUESS_36_REWARDS), label: 'Guess 36 Rewards' },
+  });
+  await prisma.setting.upsert({
+    where: { key: 'guess_36_modes' },
+    update: {},
+    create: { key: 'guess_36_modes', value: JSON.stringify(DEFAULT_GUESS_36_MODES), label: 'Guess 36 Pick Types' },
   });
   console.log('✅ Settings seeded');
 

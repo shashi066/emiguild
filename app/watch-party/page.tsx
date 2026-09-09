@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'EmiGuild Watch Parties',
-  description: 'Live watch parties, event Fan Picks, and EMIC Rewards at EmiGuild.',
+  description: 'Live watch parties and event Fan Picks at EmiGuild.',
 };
 
 export default async function WatchPartyPage() {
