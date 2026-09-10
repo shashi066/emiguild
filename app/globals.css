@@ -502,6 +502,26 @@ h1, h2, h3, h4, h5, h6 {
   color: #55d7ff;
 }
 
+.emic-rewards-btn {
+  box-shadow: inset 3px 0 0 rgba(250, 204, 21, 0.75), inset 0 0 14px rgba(245, 158, 11, 0.08);
+}
+
+.emic-rewards-btn::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid rgba(250, 204, 21, 0.72);
+  border-right: 1px solid rgba(250, 204, 21, 0.72);
+  border-radius: 0 3px 0 0;
+}
+
+.emic-rewards-btn svg {
+  color: #facc15;
+}
+
 @keyframes watch-party-spin {
   to { transform: rotate(360deg); }
 }
@@ -856,6 +876,32 @@ input.form-input[type="time"]:focus {
   margin-bottom: 0;
 }
 
+.guess-36-page {
+  min-height: calc(100dvh - 72px);
+  padding: 12px 0 42px;
+  background: var(--color-bg-base);
+}
+
+.guess-36-shell {
+  width: min(100%, 500px);
+  margin: 0 auto;
+  padding: 0 10px;
+}
+
+.guess-36-back {
+  min-height: 36px;
+  margin-bottom: 8px;
+}
+
+.guess-36-route-loading {
+  min-height: calc(100dvh - 120px);
+  justify-content: center;
+}
+
+@media (max-width: 340px) {
+  .guess-36-shell { padding-inline: 8px; }
+}
+
 .hero-eyebrow-row.has-tower-banner {
   margin-bottom: 10px;
 }
@@ -1025,6 +1071,84 @@ input.form-input[type="time"]:focus {
   align-items: center;
   gap: var(--space-md);
   flex-wrap: wrap;
+}
+
+.home-side-quests {
+  display: grid;
+  gap: 7px;
+  margin-top: var(--space-lg);
+}
+
+.home-side-quests-label {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.home-side-quests-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.home-side-quest {
+  --side-quest-accent: #67e8f9;
+  --side-quest-border: rgba(103, 232, 249, 0.45);
+  min-width: 0;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 15px;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid #26374b;
+  border-radius: 6px;
+  background: #0b1420;
+  color: #dce8f3;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-decoration: none;
+  transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
+}
+
+.home-side-quest.guess { --side-quest-accent: #67e8f9; --side-quest-border: rgba(103, 232, 249, 0.45); }
+.home-side-quest.tower { --side-quest-accent: #c4b5fd; --side-quest-border: rgba(196, 181, 253, 0.45); }
+.home-side-quest.spin { --side-quest-accent: #d7ccff; --side-quest-border: rgba(125, 92, 255, 0.46); }
+.home-side-quest.artifacts { --side-quest-accent: #f8fafc; --side-quest-border: rgba(255, 255, 255, 0.55); }
+.home-side-quest.drop { --side-quest-accent: #ffd6f5; --side-quest-border: rgba(255, 84, 214, 0.4); }
+.home-side-quest.tournament { --side-quest-accent: #ffd6d6; --side-quest-border: rgba(255, 72, 72, 0.42); }
+
+.home-side-quest-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--side-quest-border);
+  border-radius: 5px;
+  background: #111d2b;
+  color: var(--side-quest-accent);
+}
+
+.home-side-quest > svg {
+  color: var(--side-quest-accent);
+}
+
+.home-side-quest:hover {
+  border-color: var(--side-quest-accent);
+  background: #101c2a;
+  transform: translateY(-1px);
+}
+
+.home-side-quest:active {
+  transform: translateY(0);
+}
+
+.home-side-quest:focus-visible {
+  outline: 2px solid var(--side-quest-accent);
+  outline-offset: 2px;
 }
 
 .hero-stats {
@@ -3320,6 +3444,7 @@ input.form-input[type="time"]:focus {
     width: 16px !important;
     height: 16px !important;
   }
+  .home-side-quests-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-layout  { flex-direction: column; }
   .admin-sidebar {
     width: 100%;
@@ -3431,8 +3556,14 @@ input.form-input[type="time"]:focus {
     transition: border-color 120ms ease, background-color 120ms ease;
   }
 
+  .home-side-quest {
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
   .tower-home-banner:hover,
-  .tower-home-banner:active {
+  .tower-home-banner:active,
+  .home-side-quest:hover,
+  .home-side-quest:active {
     transform: none;
   }
 }

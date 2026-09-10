@@ -16,7 +16,7 @@ type ArtifactTicket = {
   set?: { name?: string | null } | null;
 };
 
-type TowerTicket = {
+type NormalizedRewardTicket = {
   id: string;
   reward: {
     name: string;
@@ -69,12 +69,12 @@ export function getArtifactRewardTicketDisplay(ticket: ArtifactTicket): RewardTi
   return { ...base, kind: 'reward', label: 'Artifact Reward', value: 'Reward' };
 }
 
-export function getTowerRewardTicketDisplay(ticket: TowerTicket): RewardTicketDisplay {
+function getNormalizedRewardTicketDisplay(ticket: NormalizedRewardTicket, origin: string): RewardTicketDisplay {
   const reward = ticket.reward;
   const base = {
     id: ticket.id,
     description: reward.name,
-    origin: 'Tower of Rewards',
+    origin,
     expiry: `Valid until ${formatRewardTicketExpiry(ticket.expiresAt)}`,
   };
 
@@ -88,4 +88,12 @@ export function getTowerRewardTicketDisplay(ticket: TowerTicket): RewardTicketDi
     ? reward.value % 60 === 0 ? `${reward.value / 60} hr` : `${reward.value} min`
     : reward.name;
   return { ...base, kind: 'pass', label: passName, value: passValue };
+}
+
+export function getTowerRewardTicketDisplay(ticket: NormalizedRewardTicket): RewardTicketDisplay {
+  return getNormalizedRewardTicketDisplay(ticket, 'Tower of Rewards');
+}
+
+export function getGuess36RewardTicketDisplay(ticket: NormalizedRewardTicket): RewardTicketDisplay {
+  return getNormalizedRewardTicketDisplay(ticket, 'Guess 36');
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { InfoGuideModal } from '@/components/InfoGuideModal';
+import InfoGuideButton from '@/components/InfoGuideButton';
 import { RewardTicketCard } from '@/components/RewardTicketCard';
 import { getArtifactRewardTicketDisplay } from '@/lib/reward-ticket';
 import {
@@ -25,7 +26,6 @@ import {
   Gamepad2,
   Gem,
   Hand,
-  Info,
   IndianRupee,
   Package,
   Percent,
@@ -889,17 +889,7 @@ function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge, onGu
   if (state?.forge?.reason === 'disabled') {
     return (
       <section className="armory-panel forge-disabled-card">
-        <button
-          type="button"
-          className="forge-guide-button"
-          aria-label="Open How Artifacts Work guide"
-          aria-haspopup="dialog"
-          title="How Artifacts Work"
-          onClick={onGuide}
-        >
-          <Info size={20} aria-hidden="true" />
-          <span>Info</span>
-        </button>
+        <div className="forge-guide-control"><InfoGuideButton onClick={onGuide} ariaLabel="Open How Artifacts Work guide" /></div>
         <Sparkles size={48} />
         <h2>Daily Forge Disabled</h2>
         <p>The Daily Forge feature is currently disabled by the administrator.</p>
@@ -917,17 +907,7 @@ function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge, onGu
 
   return (
     <section className={forging ? 'forge-panel forging' : 'forge-panel'}>
-      <button
-        type="button"
-        className="forge-guide-button"
-        aria-label="Open How Artifacts Work guide"
-        aria-haspopup="dialog"
-        title="How Artifacts Work"
-        onClick={onGuide}
-      >
-        <Info size={20} aria-hidden="true" />
-        <span>Info</span>
-      </button>
+      <div className="forge-guide-control"><InfoGuideButton onClick={onGuide} ariaLabel="Open How Artifacts Work guide" /></div>
       <div className="forge-ring"><Sparkles size={34} /></div>
       <div className="forge-copy">
         <span className="eyebrow">Daily Forge</span>
@@ -1246,8 +1226,7 @@ function ArmoryStyles() {
       .forge-action { display: grid; gap: 8px; justify-items: stretch; min-width: 180px; }
       .forge-locked { background: rgba(255,255,255,0.04); color: var(--color-text-secondary); border-color: rgba(255,255,255,0.14); }
       .forge-locked svg { color: var(--color-accent-warning); }
-      .forge-guide-button { position: absolute; top: 12px; right: 12px; z-index: 2; min-width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 1px solid rgba(97,232,255,0.3); border-radius: 999px; background: #111b2a; color: #61e8ff; font: inherit; font-size: 0.78rem; font-weight: 900; cursor: pointer; }
-      .forge-guide-button:focus-visible { outline: 2px solid #61e8ff; outline-offset: 3px; }
+      .forge-guide-control { position: absolute; top: 12px; right: 12px; z-index: 2; }
       .armory-rpg .admin-modal-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
       .armory-rpg > .admin-modal-overlay > .admin-modal-dialog { padding: var(--space-lg); border-color: rgba(231,206,137,0.18); border-radius: 8px; background: #0c1220; transition: none; }
       .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }

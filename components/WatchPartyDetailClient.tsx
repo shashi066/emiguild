@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ArrowLeft, Award, CheckCircle2, Clock, Coins, Info, Lock, Phone, Trophy, Tv } from 'lucide-react';
+import { Activity, ArrowLeft, Award, CheckCircle2, Clock, Coins, Lock, Phone, Search, Trophy, Tv } from 'lucide-react';
 import { EmicoinAmount } from '@/components/watch-party/EmicoinAmount';
 import InfoGuideModal from '@/components/InfoGuideModal';
+import InfoGuideButton from '@/components/InfoGuideButton';
 import { readApiResponse } from '@/lib/read-api-response';
 import { possibleEmicReturn } from '@/lib/watch-party-odds';
 import {
@@ -50,6 +51,7 @@ const FAN_PICK_GUIDE_STEPS = [
 type WatchPartyDetail = {
   id: string;
   title: string;
+  source: string;
   homeTeam: string;
   awayTeam: string;
   kickoffAt: string;
@@ -113,6 +115,7 @@ export function WatchPartyDetailClient({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
+  const [optionSearch, setOptionSearch] = useState('');
   const parsedStake = /^\d+$/.test(stakeInput) ? Number(stakeInput) : Number.NaN;
   const stakeCoins = Number.isSafeInteger(parsedStake) && parsedStake >= 1 && parsedStake <= MAX_EMIC_STAKE
     ? parsedStake
@@ -187,6 +190,11 @@ export function WatchPartyDetailClient({
   const controlsDisabled = hasPrediction || !party.invite.canPredict || Boolean(busy);
   const canChooseOption = !controlsDisabled && !amountInvalid && !amountTooHigh && walletCoins != null;
   const canLockPrediction = Boolean(selectedOption) && canChooseOption;
+  const isF1 = party.source === 'F1_2026';
+  const normalizedOptionSearch = optionSearch.trim().toLowerCase();
+  const visibleOptions = isF1
+    ? party.options.filter((option) => !normalizedOptionSearch || option.label.toLowerCase().includes(normalizedOptionSearch))
+    : party.options;
 
   return (
     <section className="watch-room">
@@ -198,27 +206,21 @@ export function WatchPartyDetailClient({
       </div>
 
       <div className="watch-room-head">
-        <div className="watch-live-icon"><Tv size={21} /></div>
+        <div className="watch-live-icon">{isF1?<Activity size={21}/>:<Tv size={21} />}</div>
         <div>
           <div className="watch-kicker">EmiGuild Watch Parties</div>
-          <h1>{party.homeTeam} vs {party.awayTeam}</h1>
+          <h1>{isF1?party.title:`${party.homeTeam} vs ${party.awayTeam}`}</h1>
         </div>
-        <button
-          className="watch-guide-button"
-          type="button"
-          onClick={() => setGuideOpen(true)}
-          aria-label="Open How Fan Picks Work guide"
-          aria-haspopup="dialog"
-          title="How Fan Picks Work"
-        >
-          <Info size={18} aria-hidden="true" />
-          <span>Info</span>
-        </button>
+        <div className="watch-guide-control"><InfoGuideButton onClick={() => setGuideOpen(true)} ariaLabel="Open How Fan Picks Work guide" /></div>
       </div>
 
-      <div className="watch-room-meta">
+      <div className="watch-event-meta">
         <span><Clock size={14} />{formatTime(party.kickoffAt)}</span>
-        <strong>EMIC Balance <EmicoinAmount value={walletCoins} /></strong>
+        {party.venue&&<span>{party.venue}</span>}
+      </div>
+      <div className="watch-detail-wallet">
+        <span>EMIC Balance</span>
+        <strong><EmicoinAmount value={walletCoins} /></strong>
       </div>
 
       {error && <div className="watch-alert" role="alert">{error}</div>}
@@ -313,8 +315,9 @@ export function WatchPartyDetailClient({
         )}
       </div>}
 
-      <div className="watch-options">
-        {party.options.map((option) => {
+      {isF1&&!hasPrediction&&<label className="watch-option-search"><Search size={16}/><input type="search" value={optionSearch} onChange={event=>setOptionSearch(event.target.value)} placeholder="Search driver or team" aria-label="Search F1 drivers"/></label>}
+      <div className={`watch-options ${isF1?'f1':''}`}>
+        {visibleOptions.map((option) => {
           const selected = (party.prediction?.optionKey ?? selectedOptionKey) === option.key;
           const optionReturn = stakeCoins == null ? null : possibleReturn(stakeCoins, option.multiplier);
           return (
@@ -338,6 +341,7 @@ export function WatchPartyDetailClient({
             </button>
           );
         })}
+        {isF1&&visibleOptions.length===0&&<div className="watch-option-empty">No drivers match your search.</div>}
       </div>
 
       {!hasPrediction && (
@@ -415,15 +419,15 @@ export function WatchPartyDetailClient({
         .watch-back-row { display: flex; margin-bottom: 20px; }
         .watch-room-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
         .watch-room-head > div:nth-child(2) { min-width: 0; }
-        .watch-guide-button { min-width: 72px; height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin-left: auto; padding: 0 12px; border: 1px solid rgba(97,232,255,0.3); border-radius: 999px; background: #111b2a; color: #61e8ff; font: inherit; font-size: 0.78rem; font-weight: 900; cursor: pointer; }
-        .watch-guide-button:focus-visible { outline: 2px solid #61e8ff; outline-offset: 3px; }
+        .watch-guide-control { display: flex; margin-left: auto; }
         .watch-live-icon { width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 44px; border: 1px solid rgba(34,211,238,0.35); border-radius: 8px; color: #22d3ee; background: rgba(34,211,238,0.1); }
         .watch-kicker { color: #22d3ee; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
         h1 { margin: 2px 0 0; font-size: 1.45rem; line-height: 1.12; }
-        .watch-room-meta, .watch-token-head, .watch-ticket-head, .watch-leaderboard div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .watch-room-meta { min-height: 56px; padding: 10px 12px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(255,255,255,0.04); }
-        .watch-room-meta span { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-secondary); font-size: 0.82rem; }
-        .watch-room-meta strong, .watch-token-head strong, .watch-token-summary strong, .watch-confirm strong, .watch-ticket strong, .watch-leaderboard strong { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; color: #22d3ee; font-family: Orbitron, sans-serif; }
+        .watch-event-meta, .watch-detail-wallet, .watch-token-head, .watch-ticket-head, .watch-leaderboard div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .watch-event-meta { flex-wrap: wrap; padding-bottom: 7px; color: var(--color-text-muted); font-size: .75rem; }
+        .watch-event-meta span { display: inline-flex; align-items: center; gap: 6px; }
+        .watch-detail-wallet { min-height: 48px; padding: 8px 0; margin-bottom: 12px; color: #94a3b8; }
+        .watch-detail-wallet strong, .watch-token-head strong, .watch-token-summary strong, .watch-confirm strong, .watch-ticket strong, .watch-leaderboard strong { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; color: #22d3ee; font-family: Orbitron, sans-serif; }
         .watch-full { width: 100%; justify-content: center; margin-bottom: 12px; }
         .watch-entry-credit { min-height: 48px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 7px; margin: -4px 0 12px; padding: 8px 10px; border: 1px solid rgba(34,211,238,0.22); border-radius: 8px; color: #bff7ff; background: rgba(34,211,238,0.08); font-size: 0.78rem; text-align: center; }
         .watch-locked { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; border: 1px dashed rgba(251,191,36,0.36); border-radius: 8px; color: #fbbf24; background: rgba(251,191,36,0.08); }
@@ -455,6 +459,12 @@ export function WatchPartyDetailClient({
         .watch-control-note { color: #fbbf24; background: rgba(251,191,36,0.08); }
         .watch-lock-time { color: var(--color-text-muted); font-size: 0.76rem; text-align: right; }
         .watch-options { display: grid; gap: 10px; }
+        .watch-option-search { position: relative; display: block; margin: 10px 0 8px; }
+        .watch-option-search svg { position: absolute; top: 50%; left: 11px; transform: translateY(-50%); color: var(--color-text-muted); }
+        .watch-option-search input { width: 100%; min-height: 46px; padding: 0 12px 0 36px; border: 1px solid rgba(34,211,238,.24); border-radius: 8px; color: var(--color-text-primary); background: rgba(15,23,42,.9); font: inherit; }
+        .watch-options.f1 { max-height: 390px; overflow-y: auto; padding-right: 2px; }
+        .watch-options.f1 .watch-option { min-height: 60px; }
+        .watch-option-empty { padding: 20px; color: var(--color-text-muted); text-align: center; }
         .watch-option { min-height: 86px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--color-text-primary); background: rgba(15,23,42,0.9); }
         .watch-option-copy { min-width: 0; display: grid; gap: 5px; text-align: left; }
         .watch-option strong { min-width: 0; color: var(--color-text-primary); overflow-wrap: anywhere; }
@@ -480,9 +490,8 @@ export function WatchPartyDetailClient({
         .watch-leaderboard div > span { min-width: 0; overflow-wrap: anywhere; }
         .watch-leaderboard div > strong { min-width: 0; max-width: 100%; justify-self: end; }
         @media (max-width: 460px) {
-          .watch-room-head { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: start; gap: 8px; }
-          .watch-guide-button { grid-column: 1 / -1; width: 100%; min-width: 0; margin-left: 0; }
-          .watch-room-meta { align-items: flex-start; flex-direction: column; }
+          .watch-room-head { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: start; gap: 8px; }
+          .watch-guide-control { grid-column: 3; justify-self: end; margin-left: 0; }
           .watch-token-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .watch-balance-preview { align-items: flex-start; flex-direction: column; }
           .watch-confirm { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
@@ -490,7 +499,7 @@ export function WatchPartyDetailClient({
         }
         @media (max-width: 360px) {
           .watch-room { min-width: 0; }
-          .watch-room-meta strong { flex-wrap: wrap; }
+          .watch-detail-wallet strong { flex-wrap: wrap; }
           .watch-token-panel, .watch-ticket, .watch-leaderboard { padding: 10px; }
           .watch-token-head { align-items: flex-start; flex-direction: column; }
           .watch-lock-time { text-align: left; }

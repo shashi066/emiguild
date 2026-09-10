@@ -4,19 +4,17 @@ import { prisma } from '../../lib/prisma';
 import {
   archiveCompletedWatchParties,
   cancelWatchPartyInvite,
-  cancelWatchPartyShopOrder,
   checkInWatchPartyInvite,
   coinUnitsFromCoins,
   createWatchParty,
   DEFAULT_WATCH_PARTY_ENTRY_COINS,
   DEFAULT_WATCH_PARTY_ENTRY_COIN_UNITS,
   enterWatchParty,
+  getAdminWatchPartyFanPickAudit,
   getAdminWatchPartyState,
-  getAdminWatchPartyShopOrders,
-  getWatchPartyShop,
+  getWatchPartyDetail,
+  getWatchPartyList,
   inviteWatchPartyUsers,
-  markWatchPartyShopOrderGiven,
-  purchaseWatchPartyShopOrder,
   settleWatchParty,
   stopWatchPartyPredictions,
   submitWatchPartyPrediction,
@@ -25,6 +23,13 @@ import {
   WatchPartyError,
 } from '../../lib/watch-party';
 import { buildWatchPartyInviteEmail } from '../../lib/notify';
+import {
+  cancelEmicRewardOrder,
+  getAdminEmicRewardOrders,
+  getEmicRewards,
+  markEmicRewardGiven,
+  purchaseEmicReward,
+} from '../../lib/emic-rewards';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -49,9 +54,25 @@ test('builds a safe Watch Party invite email with event details and optional Fan
   assert.match(email.html, /optional Fan Pick activity/i);
   assert.match(email.html, />OPEN WATCH PARTY</);
   assert.doesNotMatch(email.html, /prediction|predict|odds|stake|payout|bet|wager|gambl/i);
-  assert.doesNotMatch(email.html, /Entry fee|at the counter|₹|rupee|&#8377;/i);
+  assert.doesNotMatch(email.html, /Entry fee|at the counter|â‚¹|rupee|&#8377;/i);
   assert.doesNotMatch(email.html, /Emicoins|EMIC|Check-in reward/i);
   assert.doesNotMatch(email.html, /<Guild Member>|<Chelsea>|<Main>/);
+});
+
+test('F1 invite emails show the race title without a fake versus matchup', () => {
+  const email = buildWatchPartyInviteEmail({
+    customerName: 'Driver Fan',
+    customerEmail: 'fan@example.test',
+    partyId: 'f1-2026-spain',
+    title: 'Spanish Grand Prix 2026',
+    source: 'F1_2026',
+    homeTeam: 'Formula 1',
+    awayTeam: 'Spanish Grand Prix',
+    kickoffAt: '2026-09-13T13:00:00.000Z',
+    venue: 'Madring, Madrid',
+  });
+  assert.match(email.html, />Spanish Grand Prix 2026</);
+  assert.doesNotMatch(email.html, /Formula 1 vs Spanish Grand Prix/);
 });
 
 async function cleanup(suffix: string) {
@@ -104,11 +125,10 @@ function hasWatchPartyCode(code: string) {
 }
 
 function hasWatchPartyError(code: string, message: string) {
-  return (error: unknown) => (
-    error instanceof WatchPartyError
-    && error.code === code
-    && error.message === message
-  );
+  return (error: unknown) => {
+    const candidate = error as { code?: string; message?: string };
+    return candidate?.code === code && candidate?.message === message;
+  };
 }
 
 test('interprets admin datetime-local kickoff as IST before storage', async () => {
@@ -177,7 +197,7 @@ test('Fan Pick EMIC limits allow 100,000 and retain the stable validation code',
   assert.throws(() => coinUnitsFromCoins(100_000.1), invalidAmount);
 });
 
-test('editing imported team names clears stale Premier League metadata', async () => {
+test('editing imported participants clears stale provider metadata', async () => {
   const suffix = `manual-event-${Date.now()}`;
   await cleanup(suffix);
   const { admin } = await makeUsers(suffix);
@@ -188,11 +208,11 @@ test('editing imported team names clears stale Premier League metadata', async (
       homeTeam: 'Arsenal',
       awayTeam: 'Chelsea',
       kickoffAt: new Date(Date.now() + DAY).toISOString(),
-      source: 'LOCAL_PL',
-      providerMatchId: 'pl-123',
-      providerCompetitionCode: 'PL',
+      source: 'PROVIDER_IMPORT',
+      providerMatchId: 'event-123',
+      providerCompetitionCode: 'EVENT',
       providerSeason: 2026,
-      providerPayload: { fixture: 'original' },
+      providerPayload: { event: 'original' },
     });
 
     await updateWatchParty(imported.id, { homeTeam: 'India' });
@@ -337,6 +357,28 @@ test('invite, check-in, entry credit, Fan Pick debit, and result finalization ar
     });
     assert.equal(prediction.status, 'WON');
     assert.equal(prediction.payoutUnits, 200);
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
+test('settled watch parties close and cannot be reopened by players', async () => {
+  const suffix = `closed-event-${Date.now()}`;
+  await cleanup(suffix);
+  const { admin, user } = await makeUsers(suffix);
+
+  try {
+    const party = await makeParty(admin.id, suffix);
+    const settled = await settleWatchParty(admin.id, party.id, 'HOME');
+    assert.equal(settled.status, 'CLOSED');
+    assert.equal(settled.predictionStatus, 'SETTLED');
+
+    const list = await getWatchPartyList(user.id);
+    assert.equal(list.parties.some((item) => item.id === party.id), false);
+    await assert.rejects(
+      getWatchPartyDetail(party.id, user.id),
+      hasWatchPartyCode('PARTY_NOT_FOUND'),
+    );
   } finally {
     await cleanup(suffix);
   }
@@ -588,13 +630,85 @@ test('admin watch party state paginates newest records without duplicates', asyn
   }
 });
 
+test('admin Fan Pick audit is complete, searchable, paginated, and absent from the party list payload', async () => {
+  const suffix = `fan-audit-${Date.now()}`;
+  await cleanup(suffix);
+  const { admin } = await makeUsers(suffix);
+
+  try {
+    const party = await makeParty(admin.id, suffix);
+    const users = await Promise.all(['Pending', 'Winner', 'Unmatched', 'Restored'].map((label) => (
+      prisma.user.create({
+        data: {
+          name: `${label} Player ${suffix}`,
+          email: `${label.toLowerCase()}-${suffix}@test.local`,
+          password: 'test-password',
+          role: 'USER',
+        },
+      })
+    )));
+    await prisma.watchPartyPrediction.createMany({
+      data: [
+        { partyId: party.id, userId: users[0].id, optionKey: 'HOME', optionLabel: 'Leeds United', multiplierBasisPoints: 20_000, stakeUnits: 100, status: 'ACTIVE' },
+        { partyId: party.id, userId: users[1].id, optionKey: 'HOME', optionLabel: 'Leeds United', multiplierBasisPoints: 22_500, stakeUnits: 200, payoutUnits: 450, status: 'WON' },
+        { partyId: party.id, userId: users[2].id, optionKey: 'AWAY', optionLabel: 'Ipswich Town', multiplierBasisPoints: 20_000, stakeUnits: 300, payoutUnits: 0, status: 'LOST' },
+        { partyId: party.id, userId: users[3].id, optionKey: 'DRAW', optionLabel: 'Draw / Tie', multiplierBasisPoints: 30_000, stakeUnits: 400, payoutUnits: 400, status: 'VOID' },
+      ],
+    });
+
+    const firstPage = await getAdminWatchPartyFanPickAudit(party.id, { take: 2 });
+    assert.deepEqual(firstPage.summary, {
+      totalPicks: 4,
+      emicUsed: 100,
+      emicReturned: 85,
+      matchedPicks: 1,
+      unmatchedPicks: 1,
+    });
+    assert.equal(firstPage.picks.length, 2);
+    assert.equal(firstPage.pageInfo.hasMore, true);
+    assert.equal(firstPage.picks.every((pick) => typeof pick.multiplier === 'string'), true);
+
+    const pending = await getAdminWatchPartyFanPickAudit(party.id, { status: 'ACTIVE' });
+    assert.equal(pending.picks.length, 1);
+    assert.equal(pending.picks[0].emicReturned, null);
+
+    const winner = await getAdminWatchPartyFanPickAudit(party.id, { query: 'wInNeR' });
+    assert.equal(winner.picks.length, 1);
+    assert.equal(winner.picks[0].status, 'WON');
+    assert.equal(winner.picks[0].emicReturned, 45);
+    assert.equal(winner.picks[0].multiplier, '2.25x');
+
+    const byChoice = await getAdminWatchPartyFanPickAudit(party.id, { query: 'IPSWICH' });
+    assert.equal(byChoice.picks.length, 1);
+    assert.equal(byChoice.picks[0].status, 'LOST');
+    assert.equal(byChoice.picks[0].emicReturned, 0);
+
+    await prisma.watchParty.update({ where: { id: party.id }, data: { status: 'ARCHIVED' } });
+    const archived = await getAdminWatchPartyFanPickAudit(party.id, { status: 'VOID' });
+    assert.equal(archived.picks.length, 1);
+    assert.equal(archived.picks[0].emicReturned, 40);
+
+    const adminState = await getAdminWatchPartyState({ take: 80 });
+    const listedParty = adminState.parties.find((item) => item.id === party.id);
+    assert.equal(listedParty, undefined);
+
+    await prisma.watchParty.update({ where: { id: party.id }, data: { status: 'ACTIVE' } });
+    const visibleState = await getAdminWatchPartyState({ take: 80 });
+    const visibleParty = visibleState.parties.find((item) => item.id === party.id);
+    assert.equal(visibleParty?.predictionCount, 4);
+    assert.equal(visibleParty ? 'predictions' in visibleParty : true, false);
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
 test('watch party shop returns pass, guild, and drink items', async () => {
   const suffix = `shop-items-${Date.now()}`;
   await cleanup(suffix);
   const { user } = await makeUsers(suffix);
 
   try {
-    const shop = await getWatchPartyShop(user.id);
+    const shop = await getEmicRewards(user.id);
     const byKey = new Map(shop.items.map((item) => [item.itemKey, item]));
     assert.equal(shop.orders.length, 0);
     assert.equal(byKey.get('BRONZE')?.tokenCost, 13_000);
@@ -627,12 +741,16 @@ test('watch party shop orders debit EMIC and can be marked given without assigni
     });
 
     const beforePassCount = await prisma.userPass.count({ where: { userId: user.id } });
-    const shop = await purchaseWatchPartyShopOrder(user.id, 'GUILD_HERO');
+    const shop = await purchaseEmicReward(user.id, 'GUILD_HERO');
     assert.equal(shop.walletCoins, 5010);
     assert.equal(shop.orders.length, 1);
     assert.equal(shop.orders[0].label, 'Guild Hero');
     assert.equal(shop.orders[0].itemType, 'GUILD_MEMBERSHIP');
     assert.equal(shop.orders[0].status, 'PENDING');
+    assert.deepEqual(
+      Object.keys(shop.orders[0]).sort(),
+      ['category', 'id', 'itemKey', 'itemType', 'label', 'status', 'tokenCost'],
+    );
 
     const order = await prisma.watchPartyShopOrder.findUniqueOrThrow({
       where: { id: shop.orders[0].id },
@@ -645,10 +763,10 @@ test('watch party shop orders debit EMIC and can be marked given without assigni
     const afterPurchasePassCount = await prisma.userPass.count({ where: { userId: user.id } });
     assert.equal(afterPurchasePassCount, beforePassCount);
 
-    const pending = await getAdminWatchPartyShopOrders();
+    const pending = await getAdminEmicRewardOrders();
     assert.equal(pending.orders.some((item) => item.id === order.id), true);
 
-    const given = await markWatchPartyShopOrderGiven(admin.id, order.id);
+    const given = await markEmicRewardGiven(admin.id, order.id);
     assert.equal(given.status, 'GIVEN');
 
     const givenOrder = await prisma.watchPartyShopOrder.findUniqueOrThrow({
@@ -661,7 +779,7 @@ test('watch party shop orders debit EMIC and can be marked given without assigni
     const afterGivenPassCount = await prisma.userPass.count({ where: { userId: user.id } });
     assert.equal(afterGivenPassCount, beforePassCount);
 
-    const afterGivenQueue = await getAdminWatchPartyShopOrders();
+    const afterGivenQueue = await getAdminEmicRewardOrders();
     assert.equal(afterGivenQueue.orders.some((item) => item.id === order.id), false);
   } finally {
     await cleanup(suffix);
@@ -679,15 +797,15 @@ test('admin shop order queue paginates pending tickets without duplicates', asyn
       data: { watchPartyCoins: 50000 },
     });
 
-    await purchaseWatchPartyShopOrder(user.id, 'DRINK_20');
-    await purchaseWatchPartyShopOrder(user.id, 'DRINK_40');
+    await purchaseEmicReward(user.id, 'DRINK_20');
+    await purchaseEmicReward(user.id, 'DRINK_40');
 
-    const firstPage = await getAdminWatchPartyShopOrders({ take: 1 });
+    const firstPage = await getAdminEmicRewardOrders({ take: 1 });
     assert.equal(firstPage.orders.length, 1);
     assert.equal(firstPage.pageInfo.take, 1);
     assert.equal(firstPage.pageInfo.hasMore, true);
 
-    const secondPage = await getAdminWatchPartyShopOrders({
+    const secondPage = await getAdminEmicRewardOrders({
       skip: firstPage.pageInfo.nextSkip,
       take: 1,
     });
@@ -705,8 +823,8 @@ test('watch party shop order cancellation refunds once', async () => {
 
   try {
     await assert.rejects(
-      cancelWatchPartyShopOrder(admin.id, `${suffix}-missing`),
-      hasWatchPartyError('SHOP_ORDER_NOT_FOUND', 'EMIC redemption not found.'),
+      cancelEmicRewardOrder(admin.id, `${suffix}-missing`),
+      hasWatchPartyError('ORDER_NOT_FOUND', 'EMIC redemption not found.'),
     );
 
     await prisma.user.update({
@@ -714,11 +832,11 @@ test('watch party shop order cancellation refunds once', async () => {
       data: { watchPartyCoins: 12500 },
     });
 
-    const shop = await purchaseWatchPartyShopOrder(user.id, 'DRINK_125');
+    const shop = await purchaseEmicReward(user.id, 'DRINK_125');
     assert.equal(shop.walletCoins, 0);
     const orderId = shop.orders[0].id;
 
-    const cancelled = await cancelWatchPartyShopOrder(admin.id, orderId);
+    const cancelled = await cancelEmicRewardOrder(admin.id, orderId);
     assert.equal(cancelled.status, 'CANCELLED');
 
     const refundedUser = await prisma.user.findUniqueOrThrow({
@@ -728,9 +846,9 @@ test('watch party shop order cancellation refunds once', async () => {
     assert.equal(refundedUser.watchPartyCoins, 12500);
 
     await assert.rejects(
-      cancelWatchPartyShopOrder(admin.id, orderId),
+      cancelEmicRewardOrder(admin.id, orderId),
       hasWatchPartyError(
-        'SHOP_ORDER_NOT_PENDING',
+        'ORDER_NOT_PENDING',
         'This EMIC redemption is no longer pending.',
       ),
     );
@@ -751,8 +869,8 @@ test('watch party shop order purchase requires enough EMIC', async () => {
 
   try {
     await assert.rejects(
-      purchaseWatchPartyShopOrder(user.id, 'NOT_A_REWARD'),
-      hasWatchPartyError('INVALID_SHOP_ITEM', 'Choose a valid EMIC reward.'),
+      purchaseEmicReward(user.id, 'NOT_A_REWARD'),
+      hasWatchPartyError('INVALID_REWARD_ITEM', 'Choose a valid EMIC reward.'),
     );
 
     await prisma.user.update({
@@ -761,9 +879,9 @@ test('watch party shop order purchase requires enough EMIC', async () => {
     });
 
     await assert.rejects(
-      purchaseWatchPartyShopOrder(user.id, 'GUILD_HERO'),
+      purchaseEmicReward(user.id, 'GUILD_HERO'),
       hasWatchPartyError(
-        'INSUFFICIENT_TOKENS',
+        'INSUFFICIENT_EMIC',
         'Your EMIC balance is too low to redeem this item.',
       ),
     );

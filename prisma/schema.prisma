@@ -27,6 +27,7 @@ model User {
   passes                        UserPass[]
   dailySpins                    UserDailySpin[]
   drawEntries                   DrawEntry[]
+  guess36Entries                Guess36Entry[]
   wonDraws                      LuckyDraw[]            @relation("DrawWinner")
   tournamentPlayers             TournamentPlayer[]
   armoryInventory               ArmoryInventory[]
@@ -238,6 +239,40 @@ model DrawEntry {
 
   @@unique([drawId, userId])
   @@map("draw_entries")
+}
+
+model Guess36Round {
+  id            String    @id @default(cuid())
+  roundDate     String    @unique // YYYY-MM-DD in IST
+  status        String    @default("OPEN")
+  winningNumber Int?
+  rewardsSnapshot String?
+  generatedAt   DateTime?
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  entries Guess36Entry[]
+
+  @@index([status, roundDate])
+  @@map("guess_36_rounds")
+}
+
+model Guess36Entry {
+  id             String   @id @default(cuid())
+  roundId        String
+  userId         String
+  selectionType  String   @default("NUMBER")
+  selectionValue Int?     @map("selectedNumber")
+  createdAt      DateTime @default(now())
+
+  round Guess36Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, userId])
+  @@index([roundId, selectionType, selectionValue])
+  @@index([userId, createdAt])
+  @@map("guess_36_entries")
 }
 
 model Game {

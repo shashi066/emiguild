@@ -4,6 +4,7 @@ import test from 'node:test';
 import { prisma } from '../../lib/prisma';
 import { checkInBookingWithArtifact, getArmoryState, getArmoryToday, redeemArmoryTicket } from '../../lib/armory';
 import {
+  DEFAULT_TOWER_RED_CARDS_PER_FLOOR,
   DEFAULT_TOWER_REWARDS,
   TowerError,
   claimTowerReward,
@@ -21,6 +22,7 @@ import {
   isTowerTokenExpired,
   normalizeTowerRunDuration,
   normalizeTowerRewards,
+  normalizeTowerRedCardsPerFloor,
   pickTowerCard,
   searchTowerUsers,
   startTowerAttempt,
@@ -52,10 +54,17 @@ function assertActivePrivacy(value: unknown) {
   assert.ok(Buffer.byteLength(json, 'utf8') < 10_000, 'Tower response exceeded 10 KB');
 }
 
-function assertTerminalReveal(value: { reveal?: Array<{ level: number; redPosition: number }> }) {
+function assertTerminalReveal(
+  value: { reveal?: Array<{ level: number; redPositions: number[] }> },
+  expectedCounts: number[] = Array(10).fill(1),
+) {
   assert.equal(value.reveal?.length, 10);
   assert.deepEqual(value.reveal?.map((row) => row.level), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-  assert.ok(value.reveal?.every((row) => row.redPosition >= 0 && row.redPosition <= 2));
+  assert.deepEqual(value.reveal?.map((row) => row.redPositions.length), expectedCounts);
+  assert.ok(value.reveal?.every((row) => (
+    new Set(row.redPositions).size === row.redPositions.length
+    && row.redPositions.every((position) => position >= 0 && position <= 2)
+  )));
   const json = JSON.stringify(value);
   assert.equal(json.includes('redCards'), false);
   assert.equal(json.includes('cardSlot'), false);
@@ -75,10 +84,10 @@ test('Tower Tokens expire at the exclusive end of the next IST calendar day', ()
 
 test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', async (suite) => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const users = await Promise.all(['Owner', 'Inventory', 'Loss', 'Complete', 'Expiry', 'Timeout', 'Banner', 'Batch', 'Timer'].map((name) => prisma.user.create({
+  const users = await Promise.all(['Owner', 'Inventory', 'Loss', 'Complete', 'Expiry', 'Timeout', 'Banner', 'Batch', 'Timer', 'Risk Safe', 'Risk Loss'].map((name) => prisma.user.create({
     data: { name: `Tower ${name} ${suffix}`, email: `tower-${name.toLowerCase()}-${suffix}@example.test`, password: 'test-only' },
   })));
-  const [owner, inventoryUser, lossUser, completeUser, expiryUser, timeoutUser, bannerUser, batchUser, timerUser] = users;
+  const [owner, inventoryUser, lossUser, completeUser, expiryUser, timeoutUser, bannerUser, batchUser, timerUser, riskSafeUser, riskLossUser] = users;
   const admin = await prisma.user.create({
     data: { name: `Tower Admin ${suffix}`, email: `tower-admin-${suffix}@example.test`, password: 'test-only', role: 'ADMIN' },
   });
@@ -106,7 +115,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
   });
 
   try {
-    await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 120 });
+    await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 120, redCardsPerFloor: DEFAULT_TOWER_RED_CARDS_PER_FLOOR });
 
     await suite.test('strictly validates all ten configured rewards', () => {
       const normalized = normalizeTowerRewards(DEFAULT_TOWER_REWARDS);
@@ -131,6 +140,69 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.equal(legacyPass[9].name, 'Gold Pass');
       assert.equal(Object.hasOwn(legacyPass[9], 'passType'), false);
       assert.equal(Object.hasOwn(legacyPass[9], 'value'), false);
+    });
+
+    await suite.test('validates and snapshots independent floor risk', async () => {
+      const normalized = normalizeTowerRedCardsPerFloor(DEFAULT_TOWER_RED_CARDS_PER_FLOOR);
+      assert.deepEqual(normalized.map((row) => row.redCount), [1, 1, 1, 1, 1, 1, 2, 2, 2, 2]);
+      assert.throws(() => normalizeTowerRedCardsPerFloor(normalized.slice(0, 9)), /INVALID_TOWER_RISK/);
+      assert.throws(() => normalizeTowerRedCardsPerFloor(normalized.map((row) => ({ ...row, level: 1 }))), /INVALID_TOWER_RISK/);
+      assert.throws(() => normalizeTowerRedCardsPerFloor(normalized.map((row) => row.level === 7 ? { ...row, redCount: 3 } : row)), /INVALID_TOWER_RISK/);
+
+      await prisma.setting.delete({ where: { key: 'tower_red_cards_per_floor' } });
+      const seededConfig = await getTowerConfig();
+      assert.deepEqual(seededConfig.redCardsPerFloor, DEFAULT_TOWER_RED_CARDS_PER_FLOOR);
+      assert.ok(await prisma.setting.findUnique({ where: { key: 'tower_red_cards_per_floor' } }));
+
+      for (const [user, slot, expectedResult] of [
+        [riskSafeUser, 'C', 'SAFE'],
+        [riskLossUser, 'A', 'LOSS'],
+      ] as const) {
+        await grantManualTowerToken(user.id, `request-${suffix}-risk-${slot}`, admin.id, baseNow);
+        const attempt = await startTowerAttempt(user.id, baseNow);
+        assert.deepEqual(attempt.floors.map((floor) => floor.redCount), [1, 1, 1, 1, 1, 1, 2, 2, 2, 2]);
+        assert.equal(Object.hasOwn(attempt, 'reveal'), false);
+        assertActivePrivacy(attempt);
+        const redCards = Array.from({ length: 10 }, (_, index) => index >= 6 ? ['A', 'B'] : ['A']);
+        await prisma.towerAttempt.update({
+          where: { id: attempt.attemptId },
+          data: { currentLevel: 7, redCards: JSON.stringify(redCards) },
+        });
+        const result = await pickTowerCard(user.id, attempt.attemptId, towerCardId(attempt.attemptId, 7, slot), baseNow);
+        assert.equal(result.result, expectedResult);
+        if (expectedResult === 'LOSS') {
+          assertTerminalReveal(result.attempt, [1, 1, 1, 1, 1, 1, 2, 2, 2, 2]);
+        }
+      }
+
+      const allOneRed = DEFAULT_TOWER_RED_CARDS_PER_FLOOR.map((row) => ({ ...row, redCount: 1 as const }));
+      await updateTowerAdminConfig({
+        enabled: true,
+        rewards: DEFAULT_TOWER_REWARDS,
+        runDurationSeconds: 120,
+        redCardsPerFloor: allOneRed,
+      });
+      const existingAttempt = await getTowerCurrent(riskSafeUser.id, baseNow);
+      assert.deepEqual(existingAttempt.attempt?.floors.map((floor) => floor.redCount), [1, 1, 1, 1, 1, 1, 2, 2, 2, 2]);
+      await grantManualTowerToken(riskLossUser.id, `request-${suffix}-risk-next`, admin.id, baseNow);
+      const nextAttempt = await startTowerAttempt(riskLossUser.id, baseNow);
+      assert.deepEqual(nextAttempt.floors.map((floor) => floor.redCount), Array(10).fill(1));
+      const malformedLayout = Array.from({ length: 10 }, () => ['A']);
+      malformedLayout[0] = ['A', 'A'];
+      await prisma.towerAttempt.update({
+        where: { id: nextAttempt.attemptId },
+        data: { redCards: JSON.stringify(malformedLayout) },
+      });
+      await assert.rejects(
+        () => getTowerCurrent(riskLossUser.id, baseNow),
+        (error: TowerError) => error.code === 'BAD_TOWER_CONFIG',
+      );
+      await updateTowerAdminConfig({
+        enabled: true,
+        rewards: DEFAULT_TOWER_REWARDS,
+        runDurationSeconds: 120,
+        redCardsPerFloor: DEFAULT_TOWER_RED_CARDS_PER_FLOOR,
+      });
     });
 
     await suite.test('one booking grants one immutable token and enforces ownership', async () => {
@@ -196,6 +268,9 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.equal(restored.attemptId, firstRun.attemptId);
       const storedFirstRun = await prisma.towerAttempt.findUniqueOrThrow({ where: { id: firstRun.attemptId } });
       assert.equal(storedFirstRun.tokenId, firstGrant.token.id);
+      const generatedLayout = JSON.parse(storedFirstRun.redCards) as string[][];
+      assert.deepEqual(generatedLayout.map((slots) => slots.length), [1, 1, 1, 1, 1, 1, 2, 2, 2, 2]);
+      assert.ok(generatedLayout.every((slots) => new Set(slots).size === slots.length));
       assert.equal((await getTowerCurrent(inventoryUser.id, inventoryNow)).availableTokens, 1);
 
       await prisma.towerAttempt.update({
@@ -702,7 +777,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.ok(expired.items.every((item) => item.adminStatus === 'EXPIRED' || item.attempt?.status !== 'IN_PROGRESS'));
     });
   } finally {
-    await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 120 });
+    await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 120, redCardsPerFloor: DEFAULT_TOWER_RED_CARDS_PER_FLOOR });
     await prisma.station.delete({ where: { id: station.id } });
     await prisma.user.deleteMany({ where: { id: { in: [...users.map((user) => user.id), admin.id] } } });
   }

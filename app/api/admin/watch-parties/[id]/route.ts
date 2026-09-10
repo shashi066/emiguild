@@ -13,6 +13,10 @@ async function requireAdmin() {
   return session?.user?.role === 'ADMIN' ? session : null;
 }
 
+export async function GET() {
+  return NextResponse.json({ error: 'Not found' }, { status: 404 });
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { id } = await params;

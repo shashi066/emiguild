@@ -13,23 +13,10 @@ type EmicoinAmountProps = {
 };
 
 const amountStyle: CSSProperties = {
-  height: 36,
   display: 'inline-flex',
   alignItems: 'center',
   gap: 6,
   minWidth: 0,
-  padding: '3px 10px 3px 3px',
-  border: '1px solid transparent',
-  borderRadius: 999,
-  background: [
-    'linear-gradient(105deg, rgba(34, 211, 238, 0.1), #071426 42%, rgba(124, 58, 237, 0.14)) padding-box',
-    'linear-gradient(135deg, rgba(34, 211, 238, 0.82), rgba(124, 58, 237, 0.82)) border-box',
-  ].join(', '),
-  boxShadow: [
-    'inset 0 0 0 1px rgba(157, 231, 255, 0.06)',
-    'inset 0 0 12px rgba(34, 211, 238, 0.08)',
-    '0 0 9px rgba(74, 118, 255, 0.2)',
-  ].join(', '),
   color: 'inherit',
   font: 'inherit',
   fontWeight: 'inherit',
@@ -39,11 +26,10 @@ const amountStyle: CSSProperties = {
 };
 
 const imageStyle: CSSProperties = {
-  width: 28,
-  height: 28,
-  flex: '0 0 28px',
+  width: 22,
+  height: 22,
+  flex: '0 0 22px',
   objectFit: 'contain',
-  filter: 'drop-shadow(0 0 3px rgba(108, 99, 255, 0.45))',
 };
 
 const visibleValueStyle: CSSProperties = {
@@ -86,8 +72,8 @@ export function EmicoinAmount({ value, className = '' }: EmicoinAmountProps) {
       <span className="emicoin-sr" style={visuallyHiddenStyle}>{accessibleValue}</span>
       <Image
         src={EMIC_IMAGE_SRC}
-        width={28}
-        height={28}
+        width={22}
+        height={22}
         alt=""
         aria-hidden="true"
         draggable={false}
@@ -95,7 +81,7 @@ export function EmicoinAmount({ value, className = '' }: EmicoinAmountProps) {
         style={imageStyle}
       />
       <span className="emicoin-value" style={visibleValueStyle} aria-hidden="true">
-        {visibleValue} {EMIC_CODE}
+        {visibleValue}
       </span>
     </span>
   );

@@ -21,6 +21,7 @@ export const TOWER_MANUAL_GRANT_MAX = 10;
 const TOWER_REWARDS_KEY = 'tower_rewards';
 const TOWER_ENABLED_KEY = 'tower_enabled';
 const TOWER_RUN_DURATION_KEY = 'tower_run_duration_seconds';
+const TOWER_RED_CARDS_KEY = 'tower_red_cards_per_floor';
 const TOWER_DEFAULTS_VERSION_KEY = 'tower_defaults_version';
 const TOWER_DEFAULTS_VERSION = 'tower_rewards_v1';
 export type TowerRewardType = 'DISCOUNT' | 'GAMING_TIME' | 'RACING_TIME' | 'PASS';
@@ -30,6 +31,10 @@ export type TowerRewardConfig = {
   name: string;
   type: TowerRewardType;
   value?: number;
+};
+export type TowerFloorRiskConfig = {
+  level: number;
+  redCount: 1 | 2;
 };
 export type TowerPublicReward = {
   id: string;
@@ -75,6 +80,10 @@ export const DEFAULT_TOWER_REWARDS: TowerRewardConfig[] = [
   { id: 'tower_l9_20_discount', level: 9, name: '20% Booking Discount', type: 'DISCOUNT', value: 20 },
   { id: 'tower_l10_pass', level: 10, name: 'Bronze Pass', type: 'PASS' },
 ];
+export const DEFAULT_TOWER_RED_CARDS_PER_FLOOR: TowerFloorRiskConfig[] = Array.from(
+  { length: TOWER_TOTAL_LEVELS },
+  (_, index) => ({ level: index + 1, redCount: index + 1 >= 7 ? 2 : 1 }),
+);
 
 let towerConfigReady = false;
 
@@ -112,6 +121,7 @@ export function friendlyTowerError(error: unknown) {
     BAD_TOWER_CONFIG: { error: 'Tower rewards need admin configuration.', status: 500 },
     INVALID_TOWER_CONFIG: { error: 'Enter a valid reward for every Tower floor.', status: 400 },
     INVALID_TOWER_TIMER: { error: 'Choose a Tower climb time between 1 and 5 minutes.', status: 400 },
+    INVALID_TOWER_RISK: { error: 'Choose one or two red cards for every Tower floor.', status: 400 },
   };
   return map[code] ?? { error: 'Tower action failed.', status: 500 };
 }
@@ -122,6 +132,15 @@ export function isTowerTokenExpired(expiresAt: Date | string, now: Date = new Da
 
 export async function ensureTowerDefaults(store: TowerStore = prisma) {
   if (towerConfigReady) return;
+  await store.setting.upsert({
+    where: { key: TOWER_RED_CARDS_KEY },
+    update: {},
+    create: {
+      key: TOWER_RED_CARDS_KEY,
+      value: JSON.stringify(DEFAULT_TOWER_RED_CARDS_PER_FLOOR),
+      label: 'Tower red cards per floor',
+    },
+  });
   await store.setting.upsert({
     where: { key: TOWER_RUN_DURATION_KEY },
     update: {},
@@ -157,7 +176,7 @@ export async function ensureTowerDefaults(store: TowerStore = prisma) {
 export async function getTowerConfig(store: TowerStore = prisma) {
   await ensureTowerDefaults(store);
   const settings = await store.setting.findMany({
-    where: { key: { in: [TOWER_ENABLED_KEY, TOWER_REWARDS_KEY, TOWER_RUN_DURATION_KEY] } },
+    where: { key: { in: [TOWER_ENABLED_KEY, TOWER_REWARDS_KEY, TOWER_RUN_DURATION_KEY, TOWER_RED_CARDS_KEY] } },
   });
   const map = Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
   if (map[TOWER_RUN_DURATION_KEY] === undefined) {
@@ -172,10 +191,20 @@ export async function getTowerConfig(store: TowerStore = prisma) {
     });
     map[TOWER_RUN_DURATION_KEY] = String(DEFAULT_TOWER_RUN_DURATION_SECONDS);
   }
+  if (map[TOWER_RED_CARDS_KEY] === undefined) {
+    const value = JSON.stringify(DEFAULT_TOWER_RED_CARDS_PER_FLOOR);
+    await store.setting.upsert({
+      where: { key: TOWER_RED_CARDS_KEY },
+      update: {},
+      create: { key: TOWER_RED_CARDS_KEY, value, label: 'Tower red cards per floor' },
+    });
+    map[TOWER_RED_CARDS_KEY] = value;
+  }
   return {
     enabled: map[TOWER_ENABLED_KEY] !== 'false',
     rewards: normalizeTowerRewards(map[TOWER_REWARDS_KEY]),
     runDurationSeconds: storedTowerRunDuration(map[TOWER_RUN_DURATION_KEY]),
+    redCardsPerFloor: normalizeTowerRedCardsPerFloor(map[TOWER_RED_CARDS_KEY]),
   };
 }
 
@@ -192,6 +221,26 @@ export function normalizeTowerRunDuration(raw: unknown) {
     throw new TowerError('INVALID_TOWER_TIMER');
   }
   return value;
+}
+
+export function normalizeTowerRedCardsPerFloor(raw: unknown): TowerFloorRiskConfig[] {
+  let parsed: unknown = raw;
+  if (typeof raw === 'string') {
+    try { parsed = JSON.parse(raw); } catch { throw new TowerError('INVALID_TOWER_RISK'); }
+  }
+  if (parsed == null) return DEFAULT_TOWER_RED_CARDS_PER_FLOOR.map((row) => ({ ...row }));
+  if (!Array.isArray(parsed) || parsed.length !== TOWER_TOTAL_LEVELS) throw new TowerError('INVALID_TOWER_RISK');
+  const normalized = parsed.map((item) => {
+    const row = item as Partial<TowerFloorRiskConfig>;
+    const level = Number(row.level);
+    const redCount = Number(row.redCount);
+    if (!Number.isInteger(level) || level < 1 || level > TOWER_TOTAL_LEVELS || (redCount !== 1 && redCount !== 2)) {
+      throw new TowerError('INVALID_TOWER_RISK');
+    }
+    return { level, redCount: redCount as 1 | 2 };
+  }).sort((a, b) => a.level - b.level);
+  if (!normalized.every((row, index) => row.level === index + 1)) throw new TowerError('INVALID_TOWER_RISK');
+  return normalized;
 }
 
 export function normalizeTowerRewards(raw: unknown): TowerRewardConfig[] {
@@ -235,13 +284,16 @@ export function towerRewardName(type: TowerRewardType, value: number, configured
 }
 
 export async function updateTowerAdminConfig(body: unknown) {
-  const input = body as { enabled?: unknown; rewards?: unknown; runDurationSeconds?: unknown } | null;
+  const input = body as { enabled?: unknown; rewards?: unknown; runDurationSeconds?: unknown; redCardsPerFloor?: unknown } | null;
   const current = await getTowerConfig();
   const enabled = input?.enabled !== false;
   const rewards = normalizeTowerRewards(input?.rewards);
   const runDurationSeconds = input?.runDurationSeconds === undefined
     ? current.runDurationSeconds
     : normalizeTowerRunDuration(input.runDurationSeconds);
+  const redCardsPerFloor = input?.redCardsPerFloor === undefined
+    ? current.redCardsPerFloor
+    : normalizeTowerRedCardsPerFloor(input.redCardsPerFloor);
   await prisma.$transaction(async (tx) => {
     await tx.setting.upsert({
       where: { key: TOWER_ENABLED_KEY },
@@ -261,6 +313,11 @@ export async function updateTowerAdminConfig(body: unknown) {
         value: String(runDurationSeconds),
         label: 'Tower climb duration in seconds',
       },
+    });
+    await tx.setting.upsert({
+      where: { key: TOWER_RED_CARDS_KEY },
+      update: { value: JSON.stringify(redCardsPerFloor), label: 'Tower red cards per floor' },
+      create: { key: TOWER_RED_CARDS_KEY, value: JSON.stringify(redCardsPerFloor), label: 'Tower red cards per floor' },
     });
   });
   towerConfigReady = false;
@@ -321,8 +378,29 @@ function parseJson<T>(value: string | null | undefined, fallback: T): T {
   try { return JSON.parse(value) as T; } catch { return fallback; }
 }
 
-function generateRedCards() {
-  return Array.from({ length: TOWER_TOTAL_LEVELS }, () => TOWER_CARD_SLOTS[crypto.randomInt(0, TOWER_CARD_SLOTS.length)]);
+function generateRedCards(config: TowerFloorRiskConfig[]) {
+  return config.map(({ redCount }) => {
+    if (redCount === 1) return [TOWER_CARD_SLOTS[crypto.randomInt(0, TOWER_CARD_SLOTS.length)]];
+    const safeSlot = TOWER_CARD_SLOTS[crypto.randomInt(0, TOWER_CARD_SLOTS.length)];
+    return TOWER_CARD_SLOTS.filter((slot) => slot !== safeSlot);
+  });
+}
+
+function parseAttemptRedCards(raw: string) {
+  const parsed = parseJson<unknown>(raw, null);
+  if (!Array.isArray(parsed) || parsed.length !== TOWER_TOTAL_LEVELS) {
+    throw new TowerError('BAD_TOWER_CONFIG', undefined, 500);
+  }
+  return parsed.map((value) => {
+    const slots = typeof value === 'string' ? [value] : value;
+    if (
+      !Array.isArray(slots)
+      || (slots.length !== 1 && slots.length !== 2)
+      || new Set(slots).size !== slots.length
+      || slots.some((slot) => !TOWER_CARD_SLOTS.includes(slot as typeof TOWER_CARD_SLOTS[number]))
+    ) throw new TowerError('BAD_TOWER_CONFIG', undefined, 500);
+    return slots as Array<typeof TOWER_CARD_SLOTS[number]>;
+  });
 }
 
 function towerSecret() {
@@ -350,8 +428,8 @@ function isUniqueConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
-function publicFloors(rewards: TowerRewardConfig[]) {
-  return rewards.map((reward) => ({ level: reward.level, reward: publicReward(reward) }));
+function publicFloors(rewards: TowerRewardConfig[], redCards: Array<Array<typeof TOWER_CARD_SLOTS[number]>>) {
+  return rewards.map((reward) => ({ level: reward.level, reward: publicReward(reward), redCount: redCards[reward.level - 1].length as 1 | 2 }));
 }
 
 function publicHistory(attempt: AttemptWithToken) {
@@ -362,12 +440,10 @@ function publicHistory(attempt: AttemptWithToken) {
   }));
 }
 
-function publicReveal(attempt: AttemptWithToken) {
-  const redCards = parseJson<string[]>(attempt.redCards, []);
-  if (redCards.length !== TOWER_TOTAL_LEVELS) return [];
-  return redCards.map((slot, index) => ({
+function publicReveal(redCards: Array<Array<typeof TOWER_CARD_SLOTS[number]>>) {
+  return redCards.map((slots, index) => ({
     level: index + 1,
-    redPosition: Math.max(0, TOWER_CARD_SLOTS.indexOf(slot as typeof TOWER_CARD_SLOTS[number])),
+    redPositions: slots.map((slot) => TOWER_CARD_SLOTS.indexOf(slot)),
   }));
 }
 
@@ -383,6 +459,7 @@ function serializeAttempt(
   rewards: TowerRewardConfig[],
   now: Date = new Date(),
 ) {
+  const redCards = parseAttemptRedCards(attempt.redCards);
   const status = effectiveAttemptStatus(attempt, now);
   const forfeited = status === 'TIMED_OUT' || status === 'EXPIRED';
   const securedReward = forfeited
@@ -408,12 +485,12 @@ function serializeAttempt(
     runExpiresAt: attempt.runExpiresAt.toISOString(),
     climbDurationSeconds: Math.max(0, Math.ceil((attempt.runExpiresAt.getTime() - attempt.startedAt.getTime()) / 1000)),
     serverNow: now.toISOString(),
-    floors: publicFloors(rewards),
+    floors: publicFloors(rewards, redCards),
     history: publicHistory(attempt),
     cards: status === 'IN_PROGRESS' && !waitingForDecision
       ? cardsForLevel(attempt.id, attempt.currentLevel)
       : [],
-    ...(terminal ? { reveal: publicReveal(attempt) } : {}),
+    ...(terminal ? { reveal: publicReveal(redCards) } : {}),
   };
 }
 
@@ -838,7 +915,7 @@ export async function startTowerAttempt(userId: string, now: Date = new Date()) 
       data: {
         tokenId: token.id,
         userId,
-        redCards: JSON.stringify(generateRedCards()),
+        redCards: JSON.stringify(generateRedCards(config.redCardsPerFloor)),
         startedAt: now,
         runExpiresAt: getTowerRunExpiry(now, token.expiresAt, config.runDurationSeconds),
       },
@@ -873,11 +950,9 @@ export async function pickTowerCard(userId: string, attemptId: string, selectedC
     ) {
       throw new TowerError('CLIMB_DECISION_REQUIRED', undefined, 409);
     }
-    const redCards = parseJson<string[]>(attempt.redCards, []);
-    const redSlot = redCards[level - 1];
-    if (!TOWER_CARD_SLOTS.includes(redSlot as typeof TOWER_CARD_SLOTS[number])) throw new TowerError('BAD_TOWER_CONFIG', undefined, 500);
+    const redSlots = parseAttemptRedCards(attempt.redCards)[level - 1];
 
-    if (slot === redSlot) {
+    if (redSlots.includes(slot)) {
       const record: TowerPickRecord = { level, cardId: selectedCardId, cardSlot: slot, result: 'LOSS', securedReward: null };
       const updated = await tx.towerAttempt.updateMany({
         where: { id: attempt.id, status: 'IN_PROGRESS', currentLevel: level },

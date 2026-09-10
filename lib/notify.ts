@@ -54,6 +54,7 @@ export interface WatchPartyInviteEmailPayload {
   customerEmail: string;
   partyId: string;
   title: string;
+  source?: string;
   homeTeam: string;
   awayTeam: string;
   kickoffAt: Date | string;
@@ -309,6 +310,7 @@ export function buildWatchPartyInviteEmail(payload: WatchPartyInviteEmailPayload
   const title = escapeHtml(payload.title);
   const homeTeam = escapeHtml(payload.homeTeam);
   const awayTeam = escapeHtml(payload.awayTeam);
+  const eventLabel = payload.source === 'F1_2026' ? title : `${homeTeam} vs ${awayTeam}`;
   const kickoff = escapeHtml(fmtDateTime(payload.kickoffAt));
   const venue = payload.venue ? escapeHtml(payload.venue) : 'EmiGuild Gaming Cafe';
   const siteUrl = APP_URL || 'https://emiguild.in';
@@ -325,7 +327,7 @@ export function buildWatchPartyInviteEmail(payload: WatchPartyInviteEmailPayload
       <div style="padding:24px 28px;">
         <p style="margin:0 0 18px;line-height:1.6;">Hi ${customerName}, EmiGuild has invited you to <strong>${title}</strong>.</p>
         <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
-          <tr><td style="padding:8px 0;color:#9ca3af;width:140px;">Event</td><td style="padding:8px 0;font-weight:700;">${homeTeam} vs ${awayTeam}</td></tr>
+          <tr><td style="padding:8px 0;color:#9ca3af;width:140px;">Event</td><td style="padding:8px 0;font-weight:700;">${eventLabel}</td></tr>
           <tr><td style="padding:8px 0;color:#9ca3af;">Event start</td><td style="padding:8px 0;">${kickoff}</td></tr>
           <tr><td style="padding:8px 0;color:#9ca3af;">Venue</td><td style="padding:8px 0;">${venue}</td></tr>
         </table>

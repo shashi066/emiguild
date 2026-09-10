@@ -39,7 +39,7 @@ const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
   gold: {
     background: 'rgba(255,215,0,0.1)',
     border: '1px solid rgba(255,215,0,0.3)',
-    color: '#FFD700',
+    color: '#fff6c4',
   },
   green: {
     background: 'rgba(0, 230, 118, 0.1)',

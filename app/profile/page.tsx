@@ -2,7 +2,6 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { redirect } from 'next/navigation';
 import { User, Mail, Phone, Calendar, BookOpen, Shield } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
 import { ChangePasswordForm } from '@/components/profile/ChangePasswordForm';
 
 export default async function ProfilePage() {
@@ -20,10 +19,8 @@ export default async function ProfilePage() {
     by: ['status'],
     where: { userId: user.id },
     _count: true,
-    _sum: { totalPrice: true },
   });
 
-  const totalSpent = stats.reduce((sum, s) => sum + (s._sum.totalPrice ?? 0), 0);
   const totalBookings = stats.reduce((sum, s) => sum + s._count, 0);
   const confirmed = stats.find((s) => s.status === 'CONFIRMED')?._count ?? 0;
   const completed = stats.find((s) => s.status === 'COMPLETED')?._count ?? 0;
@@ -96,7 +93,6 @@ export default async function ProfilePage() {
             { label: 'Total Bookings',    value: totalBookings,           color: '#6c63ff', bg: 'rgba(108,99,255,0.1)' },
             { label: 'Confirmed',         value: confirmed,               color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
             { label: 'Completed Sessions',value: completed,               color: '#818cf8', bg: 'rgba(99,102,241,0.1)' },
-            { label: 'Total Spent',       value: formatCurrency(totalSpent), color: '#ffaa00', bg: 'rgba(255,170,0,0.1)' },
           ].map((stat, i) => (
             <div key={i} className="stat-card">
               <div className="stat-icon" style={{ background: stat.bg, color: stat.color }}>

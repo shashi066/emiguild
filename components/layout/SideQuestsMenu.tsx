@@ -4,22 +4,40 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
+  Castle,
   ChevronDown,
   Compass,
   Gift,
+  ShoppingBag,
+  Target,
   RotateCw,
   Shield,
   Trophy,
+  Tv,
 } from 'lucide-react';
 
 const CLOSE_DELAY_MS = 125;
 
 const SIDE_QUESTS = [
   {
+    href: '/tournaments',
+    title: 'Tournaments',
+    subtitle: 'Join competitions and track brackets',
+    icon: Trophy,
+    accent: 'side-quest-accent-violet',
+  },
+  {
+    href: '/guess-36',
+    title: 'Guess 36',
+    subtitle: 'Choose a daily pick and win rewards',
+    icon: Target,
+    accent: 'side-quest-accent-blue',
+  },
+  {
     href: '/tower',
     title: 'Tower',
     subtitle: 'Use check-in Tower Tokens',
-    icon: Trophy,
+    icon: Castle,
     accent: 'side-quest-accent-cyan',
   },
   {
@@ -42,6 +60,20 @@ const SIDE_QUESTS = [
     subtitle: 'Unlock surprise guild loot',
     icon: Gift,
     accent: 'side-quest-accent-blue',
+  },
+  {
+    href: '/watch-party',
+    title: 'Watch Party',
+    subtitle: 'Join live events and make Fan Picks',
+    icon: Tv,
+    accent: 'side-quest-accent-cyan',
+  },
+  {
+    href: '/rewards',
+    title: 'EMIC Rewards',
+    subtitle: 'Use EMIC and collect rewards',
+    icon: ShoppingBag,
+    accent: 'side-quest-accent-violet',
   },
 ];
 

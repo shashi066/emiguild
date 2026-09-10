@@ -1210,7 +1210,7 @@ export async function redeemArmoryTicket(ticketId: string, now: Date = new Date(
   });
   if (!ticket) throw new Error('TICKET_NOT_FOUND');
   if (ticket.status === 'REDEEMED') throw new Error('TICKET_REDEEMED');
-  const expired = ticket.source === 'TOWER'
+  const expired = ticket.source === 'TOWER' || ticket.source === 'GUESS_36'
     ? ticket.expiresAt.getTime() <= now.getTime()
     : ticket.claimDate !== getIstDateKey(now);
   if (expired) throw new Error('TICKET_EXPIRED');
