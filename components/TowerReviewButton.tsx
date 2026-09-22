@@ -5,7 +5,15 @@ import Link from 'next/link';
 import { LogIn } from 'lucide-react';
 import { GOOGLE_REVIEW_URL, type TowerReviewState } from '@/lib/tower-review';
 
-export function TowerReviewButton({ initialReview }: { initialReview?: TowerReviewState }) {
+type TowerReviewGrant = { created: boolean; expiresAt: string };
+
+export function TowerReviewButton({
+  initialReview,
+  onTokenGranted,
+}: {
+  initialReview?: TowerReviewState;
+  onTokenGranted?: (grant: TowerReviewGrant) => void;
+}) {
   const [review, setReview] = useState(initialReview);
   const [enabled, setEnabled] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -81,6 +89,7 @@ export function TowerReviewButton({ initialReview }: { initialReview?: TowerRevi
       if (!response.ok) throw new Error(data.error ?? 'Unable to claim your token. Please try again.');
       setAuthRequired(false);
       setReview((current) => current ? { ...current, claimed: true } : current);
+      onTokenGranted?.({ created: data.created === true, expiresAt: String(data.expiresAt) });
     } catch (claimError) {
       setError(claimError instanceof Error ? claimError.message : 'Unable to claim your token. Please try again.');
     } finally {
@@ -93,7 +102,7 @@ export function TowerReviewButton({ initialReview }: { initialReview?: TowerRevi
     <section className={`tower-review${review?.claimed ? ' claimed' : ''}`} aria-label="Daily Google review token">
       <div>
         <strong>{review?.claimed ? 'Today’s token claimed' : 'Get a daily Tower Token'}</strong>
-        <p>1 Tower Token daily · Resets at midnight IST.</p>
+        <p>1 Tower Token daily · Resets at 12 AM.</p>
       </div>
       <a
         className="tower-review-action"
@@ -114,7 +123,8 @@ export function TowerReviewButton({ initialReview }: { initialReview?: TowerRevi
       )}
       {error && <p className="tower-review-error" role="alert">{error} Use the review link again to retry your token.</p>}
       <style jsx>{`
-        .tower-review { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; margin-bottom: 16px; border: 1px solid #3b6d77; border-radius: 8px; background: #0b1421; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+        .tower-review { position: relative; isolation: isolate; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; margin-bottom: 16px; border: 1px solid #3b6d77; border-radius: 8px; background: #0b1421; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+        .tower-review::before { content: ''; position: absolute; z-index: 0; inset: -3px; border: 1px solid #69d9e7; border-radius: 10px; pointer-events: none; opacity: 0; transform: scale(1); animation: towerReviewBorderPulse 850ms ease-in-out 3; }
         .tower-review > div { min-width: 0; }
         .tower-review strong { color: #69d9e7; font-size: .9rem; line-height: 1.25; }
         .tower-review p { margin: 5px 0 0; color: var(--color-text-secondary); font-size: .75rem; line-height: 1.4; }
@@ -122,6 +132,7 @@ export function TowerReviewButton({ initialReview }: { initialReview?: TowerRevi
         .tower-review-action:focus-visible { outline: 2px solid #69d9e7; outline-offset: 2px; }
         .tower-review-action:active { transform: scale(.98); }
         .tower-review.claimed { border-color: #3f8d67; background: #10251b; }
+        .tower-review.claimed::before { border-color: #4bc487; }
         .tower-review.claimed strong { color: #d0f8e1; }
         .tower-review-login { flex-basis: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #35445a; color: #69d9e7; }
         .tower-review-login > div { min-width: 0; }
@@ -129,10 +140,17 @@ export function TowerReviewButton({ initialReview }: { initialReview?: TowerRevi
         .tower-review-login p { margin-top: 2px; font-size: .7rem; }
         .tower-review .tower-review-error { flex-basis: 100%; color: var(--color-text-primary); }
         @media (hover: hover) { .tower-review-action:hover { border-color: #61d9e7; background: #61d9e7; } }
+        @keyframes towerReviewBorderPulse {
+          0%, 100% { opacity: .15; transform: scale(1); }
+          45% { opacity: .9; transform: scale(1.015); }
+        }
         @media (max-width: 480px) {
           .tower-review-action { width: 100%; }
           .tower-review-login { grid-template-columns: auto minmax(0, 1fr); }
           .tower-review-login :global(.btn) { grid-column: 1 / -1; width: 100%; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .tower-review::before { animation: none; opacity: .55; transform: none; }
         }
       `}</style>
     </section>
