@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { caseInsensitiveContains } from '@/lib/prisma-search';
 import { runSerializableTransaction } from '@/lib/prisma-transaction';
 import { getArmoryToday } from '@/lib/armory';
+import { getNextIstMidnight } from '@/lib/armory-clock';
 import {
   DEFAULT_TOWER_RUN_DURATION_SECONDS,
   TOWER_RUN_DURATION_OPTIONS_SECONDS,
@@ -503,6 +504,31 @@ function pickResponse(attempt: AttemptWithToken, rewards: TowerRewardConfig[], r
   };
 }
 
+export async function grantGoogleReviewTowerToken(userId: string, now: Date = new Date()) {
+  if (!userId) throw new TowerError('UNAUTHORIZED', undefined, 401);
+  const sourceRefId = `GOOGLE_REVIEW:${userId}:${getArmoryToday(now)}`;
+  try {
+    return await runSerializableTransaction(async (tx) => {
+      const config = await getTowerConfig(tx);
+      if (!config.enabled) throw new TowerError('TOWER_DISABLED', undefined, 403);
+      const existing = await tx.towerToken.findUnique({ where: { sourceRefId } });
+      if (existing) return { token: existing, created: false };
+      const token = await tx.towerToken.create({
+        data: {
+          userId, source: 'GOOGLE_REVIEW', sourceRefId,
+          earnedAt: now, expiresAt: getTowerTokenExpiry(now),
+        },
+      });
+      return { token, created: true };
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+    const token = await prisma.towerToken.findUnique({ where: { sourceRefId } });
+    if (!token) throw error;
+    return { token, created: false };
+  }
+}
+
 export async function grantTowerToken(checkInId: string, actor: { id: string; role?: string | null }) {
   if (!checkInId) throw new TowerError('CHECKIN_NOT_FOUND', undefined, 404);
   try {
@@ -853,7 +879,7 @@ export async function getTowerCurrent(
       runExpiresAt: { gt: now },
       token: { expiresAt: { gt: now } },
     };
-  const [attempt, availableTokens, nextToken, rewardTickets] = await Promise.all([
+  const [attempt, availableTokens, nextToken, rewardTickets, reviewToken] = await Promise.all([
     prisma.towerAttempt.findFirst({ where: attemptWhere, include: { token: true }, orderBy: { startedAt: 'desc' } }),
     prisma.towerToken.count({ where: { userId, status: 'AVAILABLE', expiresAt: { gt: now } } }),
     prisma.towerToken.findFirst({
@@ -867,11 +893,20 @@ export async function getTowerCurrent(
       orderBy: [{ claimedAt: 'desc' }, { id: 'desc' }],
       take: 10,
     }),
+    prisma.towerToken.findUnique({
+      where: { sourceRefId: `GOOGLE_REVIEW:${userId}:${getArmoryToday(now)}` },
+      select: { id: true },
+    }),
   ]);
   return {
     enabled: config.enabled,
     runDurationSeconds: config.runDurationSeconds,
     availableTokens,
+    review: {
+      claimed: Boolean(reviewToken),
+      nextResetAt: getNextIstMidnight(now).toISOString(),
+      serverNow: now.toISOString(),
+    },
     nextTokenExpiresAt: nextToken?.expiresAt.toISOString() ?? null,
     rewardTickets: rewardTickets.map(serializeTowerRewardTicket),
     attempt: attempt ? serializeAttempt(attempt, config.rewards, now) : null,

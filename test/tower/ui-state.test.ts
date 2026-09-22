@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync as readSourceFile } from 'node:fs';
 import test from 'node:test';
+
+// Source assertions must work with both Windows and Unix checkout line endings.
+const readFileSync = (path: URL, encoding: 'utf8') => readSourceFile(path, encoding).replace(/\r\n/g, '\n');
 import {
   getTowerFloorPresentation,
   getTowerFocusedLevel,

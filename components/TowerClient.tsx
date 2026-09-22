@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import InfoGuideModal from '@/components/InfoGuideModal';
 import InfoGuideButton from '@/components/InfoGuideButton';
+import { TowerReviewButton } from '@/components/TowerReviewButton';
+import type { TowerReviewState } from '@/lib/tower-review';
 import { RewardTicketCard } from '@/components/RewardTicketCard';
 import { AdminModalShell } from '@/components/admin/AdminModalShell';
 import { getTowerRewardTicketDisplay } from '@/lib/reward-ticket';
@@ -75,6 +77,7 @@ type TowerAttemptState = {
   cards: TowerCard[];
 };
 type TowerState = {
+  review?: TowerReviewState;
   enabled: boolean;
   runDurationSeconds: number;
   availableTokens: number;
@@ -107,7 +110,7 @@ function getTowerGuideSteps(runDurationSeconds: number) {
   return [
   {
     title: 'Start Your Climb',
-    description: 'After a successful linked booking check-in, you get 1 Tower Token for one climb. Use it before the shown expiry.',
+    description: 'Get 1 Tower Token for one climb from a linked booking check-in, or click Give a review on Google for 1 token daily, resetting at midnight IST. Use it before the shown expiry.',
     visual: { kind: 'icon', icon: Coins, label: 'Tower Token' },
   },
   {
@@ -297,6 +300,14 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
       setPendingAction((current) => current === 'refresh' ? null : current);
     }
   }, []);
+
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refresh(activeAttemptId).catch(() => undefined);
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, [activeAttemptId, refresh]);
 
   useEffect(() => {
     warningAttemptRef.current = '';
@@ -558,6 +569,8 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
             <span className="tower-token-count" aria-label={`${state.availableTokens} available Tower Tokens`}><Coins size={15} /> {state.availableTokens}</span>
           </div>
         </header>
+
+        {state.enabled && screen !== 'loading' && screen !== 'error' && <TowerReviewButton initialReview={state.review} />}
 
         {error && attempt && <div className="alert alert-error tower-alert"><ShieldAlert size={16} /><span>{error}</span><button type="button" onClick={() => refresh(attempt.attemptId).catch(() => undefined)} disabled={loading} aria-label="Retry"><RefreshCw size={15} /></button></div>}
         <p className="sr-only" aria-live="polite">{pendingAnnouncement || announcement}</p>

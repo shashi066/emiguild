@@ -141,6 +141,7 @@ function historyDetailForItem(item: HistoryItem) {
 }
 
 function historySourceLabel(item: HistoryItem) {
+  if (item.source === 'GOOGLE_REVIEW') return 'Google review';
   const grantor = item.grantedBy?.name ? ` by ${item.grantedBy.name}` : '';
   if (item.source === 'PROMOTION') return `Promotion${grantor}`;
   if (item.source === 'ADMIN') return `Manual${grantor}`;
