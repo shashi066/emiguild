@@ -112,7 +112,7 @@ export function TowerReviewButton({
         onClick={!review?.claimed && !authRequired && enabled ? () => { void claim(); } : undefined}
         aria-busy={busy || undefined}
       >
-        {busy ? 'Claiming token…' : 'Give a review on Google'}
+        {busy ? 'Claiming token…' : '⭐ Leave Your Guild Mark'}
       </a>
       {authRequired && (
         <div className="tower-review-login" role="status">

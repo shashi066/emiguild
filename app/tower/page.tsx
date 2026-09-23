@@ -24,7 +24,7 @@ export default async function TowerPage() {
             <p style={{ margin: 0, maxWidth: 280, color: 'var(--color-text-secondary)' }}>Login to earn your daily Tower Token or use tokens from booking check-ins.</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
               <Link href="/login?callbackUrl=/tower" className="btn btn-primary">Login</Link>
-              <a href={GOOGLE_REVIEW_URL} target="_blank" rel="noopener noreferrer" className="btn btn-success">Give a review on Google</a>
+              <a href={GOOGLE_REVIEW_URL} target="_blank" rel="noopener noreferrer" className="btn btn-success">⭐ Leave Your Guild Mark</a>
             </div>
           </div>
         </section>
