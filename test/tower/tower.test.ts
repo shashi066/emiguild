@@ -19,6 +19,7 @@ import {
   grantManualTowerTokens,
   grantPromotionalTowerTokens,
   grantTowerToken,
+  grantGoogleReviewTowerToken,
   isTowerTokenExpired,
   normalizeTowerRunDuration,
   normalizeTowerRewards,
@@ -116,6 +117,52 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
 
   try {
     await updateTowerAdminConfig({ enabled: true, rewards: DEFAULT_TOWER_REWARDS, runDurationSeconds: 120, redCardsPerFloor: DEFAULT_TOWER_RED_CARDS_PER_FLOOR });
+
+    await suite.test('Google review grants are daily, concurrent-safe, and independent of token usage', async () => {
+      const beforeMidnight = new Date('2030-08-20T18:29:59.999Z');
+      const midnight = new Date('2030-08-20T18:30:00.000Z');
+      try {
+        await assert.rejects(() => grantGoogleReviewTowerToken('', baseNow), /UNAUTHORIZED/);
+        assert.equal((await getTowerCurrent(owner.id, beforeMidnight)).review.claimed, false);
+        const results = await Promise.all([
+          grantGoogleReviewTowerToken(owner.id, beforeMidnight),
+          grantGoogleReviewTowerToken(owner.id, beforeMidnight),
+          grantGoogleReviewTowerToken(owner.id, beforeMidnight),
+        ]);
+        assert.equal(results.filter((result) => result.created).length, 1);
+        assert.equal(new Set(results.map((result) => result.token.id)).size, 1);
+        const token = results[0].token;
+        assert.equal(token.source, 'GOOGLE_REVIEW');
+        assert.equal(token.sourceRefId, `GOOGLE_REVIEW:${owner.id}:2030-08-20`);
+        assert.equal(token.checkInId, null);
+        assert.equal(token.grantedById, null);
+        assert.equal(token.expiresAt.toISOString(), '2030-08-21T18:30:00.000Z');
+        const state = await getTowerCurrent(owner.id, beforeMidnight);
+        assert.equal(state.availableTokens, 1);
+        assert.equal(state.review.claimed, true);
+        assert.equal(state.review.nextResetAt, midnight.toISOString());
+        await prisma.towerToken.update({ where: { id: token.id }, data: { status: 'USED', usedAt: beforeMidnight } });
+        const retry = await grantGoogleReviewTowerToken(owner.id, beforeMidnight);
+        assert.equal(retry.created, false);
+        assert.equal(retry.token.id, token.id);
+        assert.equal(retry.token.expiresAt.toISOString(), token.expiresAt.toISOString());
+        assert.equal((await getTowerCurrent(owner.id, beforeMidnight)).review.claimed, true);
+        assert.equal((await grantGoogleReviewTowerToken(inventoryUser.id, beforeMidnight)).created, true);
+        assert.equal((await getTowerCurrent(owner.id, midnight)).review.claimed, false);
+        const nextDay = await grantGoogleReviewTowerToken(owner.id, midnight);
+        assert.equal(nextDay.created, true);
+        assert.notEqual(nextDay.token.id, token.id);
+        assert.equal(nextDay.token.expiresAt.toISOString(), '2030-08-22T18:30:00.000Z');
+        const history = await getTowerAdminHistory({ query: suffix, now: midnight });
+        assert.ok(history.items.some((item) => item.source === 'GOOGLE_REVIEW'));
+        await prisma.setting.update({ where: { key: 'tower_enabled' }, data: { value: 'false' } });
+        await assert.rejects(() => grantGoogleReviewTowerToken(lossUser.id, midnight), /TOWER_DISABLED/);
+        await assert.rejects(() => grantGoogleReviewTowerToken(owner.id, midnight), /TOWER_DISABLED/);
+      } finally {
+        await prisma.setting.update({ where: { key: 'tower_enabled' }, data: { value: 'true' } });
+        await prisma.towerToken.deleteMany({ where: { source: 'GOOGLE_REVIEW', userId: { in: users.map((user) => user.id) } } });
+      }
+    });
 
     await suite.test('strictly validates all ten configured rewards', () => {
       const normalized = normalizeTowerRewards(DEFAULT_TOWER_REWARDS);
