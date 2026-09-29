@@ -18,7 +18,8 @@ type ButtonVariant =
   | 'drop'
   | 'tournament'
   | 'armory'
-  | 'watch';
+  | 'watch'
+  | 'ps5';
 type AnimationVariant = 'none' | 'spin' | 'lucky' | 'tournament';
 
 interface HeroButtonProps {
@@ -30,7 +31,11 @@ interface HeroButtonProps {
   animation?: AnimationVariant;
   className?: string;
   id?: string;
+  badge?: string;
+  badgeClassName?: string;
+  showShimmer?: boolean;
   onClick?: () => void;
+  disabled?: boolean;
 }
 
 const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
@@ -96,6 +101,11 @@ const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
     border: '1px solid rgba(34, 211, 238, 0.48)',
     color: '#d8fbff',
   },
+  ps5: {
+    background: 'rgba(0, 112, 209, 0.18)',
+    border: '1px solid rgba(0, 212, 255, 0.45)',
+    color: '#e0f2fe',
+  },
 };
 
 const animationClasses: Record<AnimationVariant, string> = {
@@ -121,35 +131,45 @@ export default function HeroButton({
   animation = 'none',
   className = '',
   id,
+  badge,
+  badgeClassName,
+  showShimmer,
   onClick,
+  disabled = false,
 }: HeroButtonProps) {
   const baseClass = variant === 'primary' ? 'btn btn-primary btn-lg' : 'btn btn-ghost btn-lg';
   const animClass = animationClasses[animation];
   const combinedClass = [baseClass, animClass, className].filter(Boolean).join(' ');
   const style = { ...variantStyles[variant], ...animationStyles[animation] };
 
-  const button = (
-    <button type="button" className={combinedClass} style={style} id={id} onClick={onClick}>
+  const content = (
+    <>
+      {showShimmer && <span className="hero-btn-shimmer" aria-hidden="true" />}
       <Icon size={18} />
-      {label}
+      <span>{label}</span>
+      {badge && <span className={badgeClassName || 'hero-btn-badge'} aria-hidden="true">{badge}</span>}
+      {targetId === 'stations' && <ChevronRightIcon />}
+    </>
+  );
+
+  const button = (
+    <button type="button" className={combinedClass} style={style} id={id} onClick={onClick} disabled={disabled}>
+      {content}
     </button>
   );
 
   if (targetId) {
     return (
       <ScrollToSection targetId={targetId} className={combinedClass} style={style}>
-        <Icon size={18} />
-        {label}
-        {targetId === 'stations' && <ChevronRightIcon />}
+        {content}
       </ScrollToSection>
     );
   }
 
-  if (href) {
+  if (href && !disabled) {
     return (
-      <Link href={href} className={combinedClass} style={style}>
-        <Icon size={18} />
-        {label}
+      <Link href={href} className={combinedClass} style={style} id={id}>
+        {content}
       </Link>
     );
   }

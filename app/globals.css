@@ -526,11 +526,37 @@ h1, h2, h3, h4, h5, h6 {
   to { transform: rotate(360deg); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .watch-party-btn::before,
-  .spin-float-btn svg {
-    animation: none;
-  }
+/* ── PS5 Rental Hero Button (Light Red Theme, Low-End Android Optimized) ── */
+.hero-ps5-rental-btn {
+  background: linear-gradient(145deg, rgba(147, 197, 253, 0.28) 0%, rgba(59, 130, 246, 0.2) 42%, rgba(51, 65, 85, 0.38) 100%) !important;
+  border: 1px solid rgba(147, 197, 253, 0.48) !important;
+  box-shadow:
+    0 0 22px rgba(59, 130, 246, 0.38),
+    0 8px 24px rgba(2, 6, 23, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -8px 18px rgba(15, 23, 42, 0.2) !important;
+  color: #eff6ff !important;
+  text-shadow: 0 0 10px rgba(147, 197, 253, 0.5);
+}
+
+.hero-ps5-rental-btn svg {
+  color: #dbeafe !important;
+  filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.85));
+}
+
+.hero-ps5-rental-btn:hover {
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.24), rgba(71, 85, 105, 0.28)) !important;
+  border-color: rgba(147, 197, 253, 0.55) !important;
+  box-shadow:
+    0 0 30px rgba(59, 130, 246, 0.52),
+    0 10px 26px rgba(2, 6, 23, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+  color: #ffffff !important;
+}
+
+.hero-ps5-rental-btn:active {
+  transform: scale(0.97) !important;
+  background: rgba(51, 65, 85, 0.42) !important;
 }
 
 .btn-sm {
@@ -3987,4 +4013,272 @@ select.form-input option {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* ── PS5 Rental ─────────────────────────────────────────────────────────────── */
+
+.ps5-rental-status-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  max-width: 760px;
+  margin: 24px auto 0;
+  padding: clamp(36px, 7vw, 72px) clamp(22px, 6vw, 64px);
+  text-align: center;
+  background: linear-gradient(145deg, rgba(16, 24, 44, 0.98), rgba(10, 13, 25, 0.98));
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.28);
+}
+
+.ps5-rental-status-glow {
+  position: absolute;
+  z-index: -1;
+  width: 340px;
+  height: 340px;
+  top: -210px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.34), transparent 70%);
+  pointer-events: none;
+}
+
+.ps5-rental-status-icon {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 20px;
+  display: grid;
+  place-items: center;
+  color: #bfdbfe;
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.22), rgba(99, 102, 241, 0.12));
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  border-radius: 24px;
+}
+
+.ps5-rental-status-kicker {
+  margin-bottom: 10px;
+  color: #93c5fd;
+  font-family: Orbitron, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ps5-rental-status-card h1 {
+  max-width: 620px;
+  margin: 0 auto 14px;
+  font-size: clamp(1.65rem, 5vw, 2.55rem);
+  line-height: 1.15;
+}
+
+.ps5-rental-status-card > p {
+  max-width: 590px;
+  margin: 0 auto;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.ps5-rental-coming-pill {
+  width: fit-content;
+  margin: 24px auto 30px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #dbeafe;
+  background: rgba(59, 130, 246, 0.13);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ps5-rental-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ps5-rental-preview span {
+  min-width: 0;
+  padding: 16px 10px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  color: #bfdbfe;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+}
+
+.ps5-rental-preview strong { color: var(--color-text-primary); font-size: 0.82rem; }
+.ps5-rental-preview small { color: var(--color-text-muted); font-size: 0.7rem; }
+
+@media (max-width: 520px) {
+  .ps5-rental-status-card { margin-top: 8px; }
+  .ps5-rental-preview { grid-template-columns: 1fr; }
+  .ps5-rental-preview span { grid-template-columns: auto 1fr; justify-items: start; text-align: left; }
+  .ps5-rental-preview span svg { grid-row: span 2; align-self: center; }
+}
+
+.ps5-rental-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+}
+
+@media (min-width: 641px) {
+  .ps5-rental-form-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.ps5-steps {
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xl);
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.ps5-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: all 0.25s ease;
+  flex: 1;
+  min-width: 0;
+}
+
+.ps5-step--active {
+  color: var(--color-text-primary);
+  background: rgba(108, 99, 255, 0.1);
+  border-color: rgba(108, 99, 255, 0.35);
+}
+
+.ps5-step--done {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.ps5-step-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  transition: all 0.25s ease;
+}
+
+.ps5-step--active .ps5-step-number {
+  background: var(--color-accent-primary);
+  color: #fff;
+}
+
+.ps5-step--done .ps5-step-number {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.ps5-step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ps5-step-label--short {
+  display: none;
+}
+
+/* Game chips */
+.ps5-game-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+}
+
+.ps5-game-chip:hover:not(:disabled) {
+  border-color: rgba(108, 99, 255, 0.4);
+  background: rgba(108, 99, 255, 0.08);
+  color: var(--color-text-primary);
+}
+
+.ps5-game-chip--selected {
+  background: rgba(108, 99, 255, 0.15) !important;
+  border-color: rgba(108, 99, 255, 0.45) !important;
+  color: #a78bfa !important;
+  font-weight: 600;
+}
+
+.ps5-game-chip--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .ps5-rental-flow-card {
+    padding: var(--space-lg) !important;
+  }
+  .ps5-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+  .ps5-step {
+    min-width: 0;
+    padding: 8px 3px 7px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    font-size: 0.65rem;
+    text-align: center;
+  }
+  .ps5-step-label--full {
+    display: none;
+  }
+  .ps5-step-label--short {
+    display: block;
+    width: 100%;
+    overflow: visible;
+    line-height: 1.15;
+    text-overflow: clip;
+  }
+  .ps5-step-number {
+    width: 26px;
+    height: 26px;
+    font-size: 0.74rem;
+  }
+}
+
+@media (max-width: 350px) {
+  .ps5-steps { gap: 4px; }
+  .ps5-step { font-size: 0.6rem; padding-inline: 1px; }
+  .ps5-step-number { width: 24px; height: 24px; }
 }

@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/utils';
 import { getIndiaClock, getSpecialOpeningNotice } from '@/lib/public-booking-time';
 import { loadActiveSpecialOpening } from '@/lib/special-opening-server';
 import { getTowerHomePrompt } from '@/lib/tower';
+import { resolvePs5RentalAvailability } from '@/lib/ps5-rental';
 import {
   Gamepad2,
   Calendar,
@@ -199,15 +200,17 @@ export default async function HomePage() {
     console.error('Tower homepage prompt failed:', error);
     return null;
   });
-  const [stations, stats, session, specialOpening, showAvailabilitySetting, towerPrompt] = await Promise.all([
+  const [stations, stats, session, specialOpening, homeSettings, towerPrompt] = await Promise.all([
     getStations(),
     getStats(),
     sessionPromise,
     loadActiveSpecialOpening(now),
-    prisma.setting.findUnique({ where: { key: 'show_stations_availability' } }),
+    prisma.setting.findMany({ where: { key: { in: ['show_stations_availability', 'ps5_rental_status', 'ps5_rental_enabled'] } } }),
     towerPromptPromise,
   ]);
-  const showStationsAvailability = showAvailabilitySetting?.value !== 'false';
+  const homeSettingsMap = Object.fromEntries(homeSettings.map((setting) => [setting.key, setting.value]));
+  const showStationsAvailability = homeSettingsMap.show_stations_availability !== 'false';
+  const ps5RentalStatus = resolvePs5RentalAvailability(homeSettingsMap);
   const indiaClock = getIndiaClock(now);
   const specialOpeningNotice = getSpecialOpeningNotice(
     specialOpening,
@@ -270,7 +273,7 @@ export default async function HomePage() {
               Book your Play Station online in seconds and step in ready for action.
             </p>
 
-            <HeroActions />
+            <HeroActions ps5RentalStatus={ps5RentalStatus} />
 
             <nav className="home-side-quests" aria-label="Side Quests shortcuts">
               <span className="home-side-quests-label">Side Quests</span>
