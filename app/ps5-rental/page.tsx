@@ -1,3 +1,4 @@
+import styles from './rental-theme.module.css';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
@@ -23,7 +24,7 @@ export default async function Ps5RentalPage() {
   if (availability !== 'AVAILABLE') {
     const comingSoon = availability === 'COMING_SOON';
     return (
-      <div className="page-wrapper ps5-rental-status-page"><div className="container">
+      <div className={`page-wrapper ps5-rental-status-page ${styles.theme}`}><div className="container">
         <Link href="/" className="btn btn-ghost btn-sm" style={{ marginBottom: 'var(--space-lg)' }}><ArrowLeft size={16} />Back to Home</Link>
         <div className={`ps5-rental-status-card ${comingSoon ? 'is-coming-soon' : 'is-disabled'}`}>
           <div className="ps5-rental-status-glow" aria-hidden="true" />
@@ -67,7 +68,7 @@ export default async function Ps5RentalPage() {
   }, {} as Record<string, { id: string; name: string }[]>);
 
   return (
-    <div className="page-wrapper">
+    <div className={`page-wrapper ${styles.theme}`}>
       <div className="container">
         <Link href="/" className="btn btn-ghost btn-sm" style={{ marginBottom: 'var(--space-lg)' }}>
           <ArrowLeft size={16} />

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 const NAV_ITEMS = [
+  { href: '/admin/lifecycle', label: 'Messaging', icon: Gift },
   { href: '/admin',          label: 'Dashboard',      icon: LayoutDashboard, exact: true },
   { href: '/admin/bookings', label: 'All Bookings',   icon: BookOpen },
   { href: '/admin/walkin',   label: 'Walk-in Booking', icon: UserPlus },

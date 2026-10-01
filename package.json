@@ -32,7 +32,8 @@
     "test:game-request": "tsx --test test/game-request/game-request.test.ts",
     "test:analytics": "tsx --test test/analytics/*.test.ts",
     "test:tower": "tsx --env-file=.env.local --test test/tower/*.test.ts",
-    "test:guess-36": "tsx --env-file=.env.local --test test/guess-36/*.test.ts"
+    "test:guess-36": "tsx --env-file=.env.local --test test/guess-36/*.test.ts",
+    "test:lifecycle": "tsx --test --test-concurrency=1 test/lifecycle/*.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

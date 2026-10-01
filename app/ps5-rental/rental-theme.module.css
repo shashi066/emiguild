@@ -1,0 +1,21 @@
+.theme {
+  --color-accent-primary: #efb0b8;
+  --gradient-primary: linear-gradient(145deg, #65464c 0%, #863943 42%, #302b34 100%);
+  --rental-accent-surface: #a84e6014;
+  --rental-accent-border: #b9778059;
+}
+.theme :global(.text-gradient) { background-image: linear-gradient(120deg, #f2d9de, #ef9ba8); }
+.theme :global(.section-tag) { color: #efb0b8; }
+.theme :global(.btn-primary) { border: 1px solid #b97780; color: #fff1f2; box-shadow: 0 4px 12px #0206174d, inset 0 1px 0 #ffe1e44d; }
+.theme :global(.btn-primary:hover) { background: linear-gradient(145deg, #76525a, #994550 42%, #3c323d); box-shadow: 0 5px 14px #02061759; }
+.theme :global(.btn:focus-visible), .theme :global(.form-input:focus-visible) { outline: 2px solid #ffc1ca; outline-offset: 3px; }
+.theme :global(.form-input:focus) { border-color: #b97780; box-shadow: 0 0 0 3px #b9778026; }
+.theme :global(.ps5-rental-flow-card), .theme :global(.ps5-rental-status-card) { border-color: #b977804d; background: linear-gradient(145deg, #24202a, #11131e); }
+.theme :global(.ps5-rental-status-glow) { background: radial-gradient(circle, #b454664f, transparent 70%); }
+.theme :global(.ps5-rental-status-icon) { color: #ffd4da; background: var(--gradient-primary); border-color: #b97780; }
+.theme :global(.ps5-rental-status-kicker), .theme :global(.ps5-rental-preview span) { color: #efb0b8; }
+.theme :global(.ps5-rental-coming-pill) { color: #ffdee3; background: var(--rental-accent-surface); border-color: var(--rental-accent-border); }
+.theme :global(.ps5-step--active) { background: var(--rental-accent-surface); border-color: var(--rental-accent-border); }
+.theme :global(.ps5-step--active .ps5-step-number) { background: #863943; color: #fff1f2; }
+.theme :global(.ps5-game-chip:hover:not(:disabled)) { background: var(--rental-accent-surface); border-color: #b97780; }
+.theme :global(.ps5-game-chip--selected) { background: #86394340 !important; border-color: #b97780 !important; color: #ffd4da !important; }

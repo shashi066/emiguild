@@ -526,37 +526,40 @@ h1, h2, h3, h4, h5, h6 {
   to { transform: rotate(360deg); }
 }
 
-/* ── PS5 Rental Hero Button (Light Red Theme, Low-End Android Optimized) ── */
+/* ── PS5 Rental Hero Button — Steel Red ── */
 .hero-ps5-rental-btn {
-  background: linear-gradient(145deg, rgba(147, 197, 253, 0.28) 0%, rgba(59, 130, 246, 0.2) 42%, rgba(51, 65, 85, 0.38) 100%) !important;
-  border: 1px solid rgba(147, 197, 253, 0.48) !important;
+  background: linear-gradient(145deg, #65464c 0%, #863943 42%, #302b34 100%) !important;
+  border: 1px solid #b97780 !important;
   box-shadow:
-    0 0 22px rgba(59, 130, 246, 0.38),
-    0 8px 24px rgba(2, 6, 23, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    inset 0 -8px 18px rgba(15, 23, 42, 0.2) !important;
-  color: #eff6ff !important;
-  text-shadow: 0 0 10px rgba(147, 197, 253, 0.5);
+    0 4px 12px rgba(2, 6, 23, 0.3),
+    inset 0 1px 0 rgba(255, 225, 228, 0.3),
+    inset 0 -2px 0 rgba(25, 17, 23, 0.35) !important;
+  color: #fff1f2 !important;
+  text-shadow: none;
 }
 
 .hero-ps5-rental-btn svg {
-  color: #dbeafe !important;
-  filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.85));
+  color: #ffd4da !important;
+  filter: none;
 }
 
 .hero-ps5-rental-btn:hover {
-  background: linear-gradient(145deg, rgba(59, 130, 246, 0.24), rgba(71, 85, 105, 0.28)) !important;
-  border-color: rgba(147, 197, 253, 0.55) !important;
+  background: linear-gradient(145deg, #76525a 0%, #994550 42%, #3c323d 100%) !important;
+  border-color: #e0a2aa !important;
   box-shadow:
-    0 0 30px rgba(59, 130, 246, 0.52),
-    0 10px 26px rgba(2, 6, 23, 0.46),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+    0 5px 14px rgba(2, 6, 23, 0.35),
+    inset 0 1px 0 rgba(255, 225, 228, 0.4) !important;
   color: #ffffff !important;
+}
+
+.hero-ps5-rental-btn:focus-visible {
+  outline: 2px solid #ffc1ca;
+  outline-offset: 3px;
 }
 
 .hero-ps5-rental-btn:active {
   transform: scale(0.97) !important;
-  background: rgba(51, 65, 85, 0.42) !important;
+  background: #512f38 !important;
 }
 
 .btn-sm {
@@ -4281,4 +4284,22 @@ select.form-input option {
   .ps5-steps { gap: 4px; }
   .ps5-step { font-size: 0.6rem; padding-inline: 1px; }
   .ps5-step-number { width: 24px; height: 24px; }
+}
+
+/* Rental flow uses the shared page, card, and form design tokens. */
+.ps5-rental-shell { max-width: 720px; margin-inline: auto; }
+.ps5-rental-header { text-align: left; margin-bottom: var(--space-xl); }
+.ps5-rental-header .page-title { margin-bottom: var(--space-sm); line-height: 1.4; }
+.ps5-rental-header .page-subtitle { max-width: 600px; line-height: 1.7; }
+.ps5-rental-flow-card { padding: var(--space-xl); }
+.ps5-rental-step-title { display: flex; align-items: center; gap: var(--space-sm); font-size: 1.1rem; font-weight: 700; margin-bottom: var(--space-lg); }
+.ps5-rental-step-title svg { flex-shrink: 0; }
+.ps5-rental-actions { display: flex; justify-content: space-between; gap: var(--space-md); margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--color-border); }
+.ps5-rental-shell .btn, .ps5-rental-shell .ps5-game-chip { min-height: 44px; }
+.ps5-rental-shell .ps5-game-chip:focus-visible { outline: 2px solid var(--color-accent-primary); outline-offset: 3px; }
+.ps5-rental-shell .form-input { min-width: 0; }
+@media (max-width: 640px) {
+  .ps5-rental-header .page-title { font-size: 1.35rem; }
+  .ps5-rental-actions .btn { flex: 1; padding-inline: var(--space-sm); }
+  .ps5-rental-flow-card { padding: var(--space-lg); }
 }

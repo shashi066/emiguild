@@ -559,13 +559,33 @@ export async function getArmoryState(userId: string) {
   };
 }
 
+export function getForgeConfigurationError(config: { enabled: boolean; sets: Array<{ dropPercentage: number; artifacts: Array<{ setId: string; slotDropPercentage: number }> }> }) {
+  if (!config.enabled) return 'ARMORY_DISABLED';
+  if (!config.sets.length) return 'NO_ARTIFACTS';
+  if (!validateDropPercentages(config.sets)) return 'BAD_DROP_TOTAL';
+  if (!validateSlotWeights(config.sets.flatMap((set) => set.artifacts))) return 'BAD_SLOT_TOTAL';
+  return null;
+}
+
+export async function getForgeAvailability(userId: string, now: Date = new Date()) {
+  const today = getArmoryToday(now);
+  const [setting, claim, sets] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: 'armory_enabled' } }),
+    prisma.armoryDailyClaim.findUnique({ where: { userId_claimDate: { userId, claimDate: today } }, select: { id: true } }),
+    prisma.armorySet.findMany({
+      where: { active: true, dropPercentage: { gt: 0 }, artifacts: { some: { active: true, slotDropPercentage: { gt: 0 } } } },
+      select: { dropPercentage: true, artifacts: { where: { active: true, slotDropPercentage: { gt: 0 } }, select: { setId: true, slotDropPercentage: true } } },
+    }),
+  ]);
+  const error = getForgeConfigurationError({ enabled: setting?.value !== 'false', sets });
+  return { canForge: !claim && !error, claimedToday: Boolean(claim), enabled: setting?.value !== 'false', today, nextResetAt: getNextIstMidnight(now).toISOString() };
+}
+
 export async function forgeArtifact(userId: string) {
   const today = getArmoryToday();
   const config = await getArmoryForgeConfig();
-  if (!config.enabled) throw new Error('ARMORY_DISABLED');
-  if (!config.sets.length) throw new Error('NO_ARTIFACTS');
-  if (!validateDropPercentages(config.sets)) throw new Error('BAD_DROP_TOTAL');
-  if (!validateSlotWeights(config.sets.flatMap((set) => set.artifacts))) throw new Error('BAD_SLOT_TOTAL');
+  const configurationError = getForgeConfigurationError(config);
+  if (configurationError) throw new Error(configurationError);
 
   const set = pickWeightedSet(config.sets);
   const selected = pickWeightedArtifact(set.artifacts);

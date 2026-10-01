@@ -190,7 +190,7 @@ export default function Ps5RentalClient({
           Your PS5 rental request has been submitted. We&apos;ll confirm your order and arrange delivery soon. Payment will be collected on delivery.
         </p>
         <div className="card" style={{
-          background: 'rgba(108, 99, 255, 0.06)', border: '1px solid rgba(108, 99, 255, 0.2)',
+          background: 'var(--rental-accent-surface, rgba(108, 99, 255, 0.06))', border: '1px solid var(--rental-accent-border, rgba(108, 99, 255, 0.2))',
           padding: 'var(--space-lg)', maxWidth: 360, margin: '0 auto var(--space-xl)',
           textAlign: 'left',
         }}>
@@ -219,14 +219,14 @@ export default function Ps5RentalClient({
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+    <div className="ps5-rental-shell">
       {/* ── Header ── */}
-      <div className="section-header" style={{ textAlign: 'left', marginBottom: 'var(--space-xl)' }}>
+      <div className="ps5-rental-header">
         <div className="section-tag">PS5 Home Rental</div>
-        <h1 className="section-title" style={{ fontSize: '1.6rem' }}>
+        <h1 className="page-title">
           Rent a PS5 <span className="text-gradient">Delivered to You</span>
         </h1>
-        <p className="section-description" style={{ maxWidth: 600 }}>
+        <p className="page-subtitle">
           Get a PS5 console with your favorite games delivered to your doorstep.
           Play at home, return when done. It&apos;s that simple.
         </p>
@@ -251,12 +251,12 @@ export default function Ps5RentalClient({
       </div>
 
       {/* ── Step Content ── */}
-      <div className="card ps5-rental-flow-card" style={{ padding: 'var(--space-xl)' }}>
+      <div className="card ps5-rental-flow-card">
 
         {/* ═══ Step 1: Duration & Controllers ═══ */}
         {step === 0 && (
           <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 'var(--space-lg)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 className="ps5-rental-step-title">
               <Package size={20} style={{ color: 'var(--color-accent-primary)' }} />
               Rental Duration & Controllers
             </h2>
@@ -274,7 +274,7 @@ export default function Ps5RentalClient({
                     className="btn btn-ghost btn-sm"
                     onClick={() => setDays((d) => Math.max(1, d - 1))}
                     disabled={days <= 1}
-                    id="rental-days-minus"
+                    id="rental-days-minus" aria-label="Decrease rental days"
                   >
                     <Minus size={16} />
                   </button>
@@ -296,7 +296,7 @@ export default function Ps5RentalClient({
                     className="btn btn-ghost btn-sm"
                     onClick={() => setDays((d) => Math.min(30, d + 1))}
                     disabled={days >= 30}
-                    id="rental-days-plus"
+                    id="rental-days-plus" aria-label="Increase rental days"
                   >
                     <Plus size={16} />
                   </button>
@@ -315,7 +315,7 @@ export default function Ps5RentalClient({
                     className="btn btn-ghost btn-sm"
                     onClick={() => setExtraControllers((c) => Math.max(0, c - 1))}
                     disabled={extraControllers <= 0}
-                    id="extra-controllers-minus"
+                    id="extra-controllers-minus" aria-label="Remove extra controller"
                   >
                     <Minus size={16} />
                   </button>
@@ -327,7 +327,7 @@ export default function Ps5RentalClient({
                     className="btn btn-ghost btn-sm"
                     onClick={() => setExtraControllers((c) => Math.min(3, c + 1))}
                     disabled={extraControllers >= 3}
-                    id="extra-controllers-plus"
+                    id="extra-controllers-plus" aria-label="Add extra controller"
                   >
                     <Plus size={16} />
                   </button>
@@ -339,8 +339,8 @@ export default function Ps5RentalClient({
 
               {/* Price Breakdown */}
               <div style={{
-                background: 'rgba(108, 99, 255, 0.06)',
-                border: '1px solid rgba(108, 99, 255, 0.2)',
+                background: 'var(--rental-accent-surface, rgba(108, 99, 255, 0.06))',
+                border: '1px solid var(--rental-accent-border, rgba(108, 99, 255, 0.2))',
                 borderRadius: 'var(--radius-lg)',
                 padding: 'var(--space-lg)',
               }}>
@@ -393,7 +393,7 @@ export default function Ps5RentalClient({
                 value={gameSearch}
                 onChange={(e) => setGameSearch(e.target.value)}
                 style={{ paddingLeft: 36 }}
-                id="game-search"
+                id="game-search" aria-label="Search rental games"
               />
               {gameSearch && (
                 <button
@@ -472,7 +472,7 @@ export default function Ps5RentalClient({
         {/* ═══ Step 3: Delivery Details ═══ */}
         {step === 2 && (
           <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 'var(--space-lg)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 className="ps5-rental-step-title">
               <MapPin size={20} style={{ color: 'var(--color-accent-primary)' }} />
               Delivery Address
             </h2>
@@ -524,7 +524,7 @@ export default function Ps5RentalClient({
         {/* ═══ Step 4: Review & Confirm ═══ */}
         {step === 3 && (
           <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 'var(--space-lg)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 className="ps5-rental-step-title">
               <FileText size={20} style={{ color: 'var(--color-accent-primary)' }} />
               Review Your Order
             </h2>
@@ -532,7 +532,7 @@ export default function Ps5RentalClient({
             <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
               {/* Order summary */}
               <div style={{
-                background: 'rgba(108, 99, 255, 0.06)', border: '1px solid rgba(108, 99, 255, 0.2)',
+                background: 'var(--rental-accent-surface, rgba(108, 99, 255, 0.06))', border: '1px solid var(--rental-accent-border, rgba(108, 99, 255, 0.2))',
                 borderRadius: 'var(--radius-lg)', padding: 'var(--space-lg)',
               }}>
                 <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 'var(--space-md)' }}>Order Summary</div>
@@ -629,17 +629,14 @@ export default function Ps5RentalClient({
 
         {/* ── Error ── */}
         {error && (
-          <div className="alert alert-error" style={{ marginTop: 'var(--space-lg)' }}>
+          <div className="alert alert-error" role="alert" style={{ marginTop: 'var(--space-lg)' }}>
             <AlertCircle size={16} />
             {error}
           </div>
         )}
 
         {/* ── Navigation ── */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-xl)',
-          paddingTop: 'var(--space-lg)', borderTop: '1px solid var(--color-border)',
-        }}>
+        <div className="ps5-rental-actions">
           {step > 0 ? (
             <button type="button" className="btn btn-ghost" onClick={() => { setStep(step - 1); setError(''); }} id="step-back-btn">
               <ChevronLeft size={16} />

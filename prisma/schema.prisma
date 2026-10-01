@@ -19,6 +19,11 @@ model User {
   role                   String   @default("USER")
   guildGems              Int      @default(0)
   watchPartyCoins        Int      @default(0)
+  lifecycleWhatsappFrequency Int      @default(0)
+  lifecycleEmailDigest       Boolean  @default(false)
+  lifecycleConsentUpdatedAt  DateTime?
+  lifecycleConsentVersion    String?
+  lastWebsiteVisitAt         DateTime?
   lastForgotPasswordDate String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
@@ -54,6 +59,8 @@ model User {
   fnbItemsVoided                BookingFnbItem[]       @relation("BookingFnbItemVoidActor")
   ps5Rentals                    Ps5Rental[]
 
+  lifecycleEmailState LifecycleEmailState?
+  lifecycleEmailDeliveries LifecycleEmailDelivery[]
   @@map("users")
 }
 
@@ -756,4 +763,34 @@ model WebsiteAnalytics {
 
   @@id([date, userKey])
   @@map("website_analytics")
+}
+
+model LifecycleEmailState {
+  userId String @id
+  lastComebackEvaluatedAt DateTime?
+  nextComebackCheckAt DateTime?
+  unsubscribedAt DateTime?
+  leaseToken String?
+  leaseUntil DateTime?
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("lifecycle_email_states")
+}
+model LifecycleEmailDelivery {
+  id String @id @default(cuid())
+  userId String
+  recipient String
+  campaign String
+  dedupeKey String @unique
+  payload String
+  status String @default("SENDING")
+  messageId String @unique
+  dispatchedAt DateTime
+  finishedAt DateTime?
+  errorCode String?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, dispatchedAt])
+  @@index([status, dispatchedAt])
+  @@map("lifecycle_email_deliveries")
 }

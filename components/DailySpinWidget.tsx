@@ -269,8 +269,8 @@ export function DailySpinWidget() {
         </h2>
         <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-xl)' }}>
           {spinStatus?.canSpin
-            ? 'Test your luck — spin the grid to win a free perk!'
-            : 'Come back tomorrow for another drop!'}
+            ? 'Daily spin available — one spin each day.'
+            : 'Today’s spin used. Come back after the daily reset.'}
         </p>
         {streak && (
           <div

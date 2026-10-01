@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import ScrollToSection from '@/components/ScrollToSection';
 import HeroActions from '@/components/HeroActions';
+import HomeVaultButton from '@/components/HomeVaultButton';
+import vaultButtonStyles from '@/components/home-vault-button.module.css';
 import HomepageVisitTracker from '@/components/HomepageVisitTracker';
 import { StationAvailabilityBoard } from '@/components/StationAvailabilityBoard';
 import { prisma } from '@/lib/prisma';
@@ -229,7 +231,8 @@ export default async function HomePage() {
         <div className="hero-orb hero-orb-1" />
         <div className="hero-orb hero-orb-2" />
 
-        <div className="container">
+        <div className={`container ${vaultButtonStyles.anchor}`}>
+          <HomeVaultButton />
           <div className="hero-content animate-fade-in-up" style={{ maxWidth: 680 }}>
             <div className={`hero-eyebrow-row${towerPrompt ? ' has-tower-banner' : ''}`}>
               <div className="hero-eyebrow">

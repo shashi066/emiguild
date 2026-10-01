@@ -10,7 +10,9 @@ type TowerReviewGrant = { created: boolean; expiresAt: string };
 export function TowerReviewButton({
   initialReview,
   onTokenGranted,
+  statusSource = 'tower',
 }: {
+  statusSource?: 'tower' | 'vault';
   initialReview?: TowerReviewState;
   onTokenGranted?: (grant: TowerReviewGrant) => void;
 }) {
@@ -32,7 +34,7 @@ export function TowerReviewButton({
       controller = requestController;
       clearTimeout(timer);
       try {
-        const response = await fetch('/api/tower/current', { cache: 'no-store', signal: requestController.signal });
+        const response = await fetch(statusSource === 'vault' ? '/api/vault' : '/api/tower/current', { cache: 'no-store', signal: requestController.signal });
         if (response.status === 401) {
           if (!disposed) {
             setAuthRequired(true);
@@ -41,7 +43,10 @@ export function TowerReviewButton({
           return;
         }
         if (!response.ok) throw new Error('Unable to refresh daily token.');
-        const data = await response.json();
+        const body = await response.json();
+        const section = statusSource === 'vault' ? body.games?.find((game: { id: string }) => game.id === 'tower') : null;
+        const data = statusSource === 'vault' ? { review: section?.facts?.review, enabled: section && !['disabled', 'error'].includes(section.status) } : body;
+        if (!data.review) throw new Error('Unable to refresh daily token.');
         if (disposed || submitting.current) return;
         setAuthRequired(false);
         setReview(data.review);
@@ -71,7 +76,7 @@ export function TowerReviewButton({
       window.removeEventListener('pageshow', onFocus);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [busy]);
+  }, [busy, statusSource]);
 
   async function claim() {
     if (submitting.current) return;
@@ -99,10 +104,10 @@ export function TowerReviewButton({
   }
 
   return (
-    <section className={`tower-review${review?.claimed ? ' claimed' : ''}`} aria-label="Daily Google review token">
+    <section className={`tower-review${review?.claimed ? ' claimed' : ''}${statusSource === 'vault' ? ' subtle' : ''}`} aria-label="Daily Google review token">
       <div>
-        <strong>{review?.claimed ? 'Today’s token claimed' : 'Get a daily Tower Token'}</strong>
-        <p>1 Tower Token daily · Resets at 12 AM.</p>
+        <strong>{review?.claimed ? 'Today’s token claimed' : statusSource === 'vault' ? 'Daily Tower Token' : 'Get a daily Tower Token'}</strong>
+        {statusSource !== 'vault' && <p>1 Tower Token daily · Resets at 12 AM.</p>}
       </div>
       <a
         className="tower-review-action"
@@ -112,7 +117,7 @@ export function TowerReviewButton({
         onClick={!review?.claimed && !authRequired && enabled ? () => { void claim(); } : undefined}
         aria-busy={busy || undefined}
       >
-        {busy ? 'Claiming token…' : '⭐ Leave Your Guild Mark'}
+        {busy ? 'Claiming token…' : statusSource === 'vault' ? review?.claimed ? 'Review EmiGuild' : 'Leave a review' : '⭐ Leave Your Guild Mark'}
       </a>
       {authRequired && (
         <div className="tower-review-login" role="status">
@@ -149,6 +154,12 @@ export function TowerReviewButton({
           .tower-review-login { grid-template-columns: auto minmax(0, 1fr); }
           .tower-review-login :global(.btn) { grid-column: 1 / -1; width: 100%; }
         }
+        .tower-review.subtle { padding: 12px 0 0; margin: 0; border: 0; border-top: 1px solid var(--color-border); border-radius: 0; background: transparent; box-shadow: none; gap: 8px 16px; }
+        .tower-review.subtle::before { display: none; }
+        .tower-review.subtle strong { font-size: .8rem; font-weight: 500; color: var(--color-text-secondary); }
+        .tower-review.subtle p { font-size: .75rem; margin-top: 3px; }
+        .tower-review.subtle .tower-review-action { width: auto; min-height: 44px; padding: 8px 0; border: 0; background: transparent; color: #c4b5e4; font-size: .8rem; font-weight: 500; text-decoration: underline; text-underline-offset: 4px; }
+        .tower-review.subtle .tower-review-action:hover { color: var(--color-text-primary); }
         @media (prefers-reduced-motion: reduce) {
           .tower-review::before { animation: none; opacity: .55; transform: none; }
         }

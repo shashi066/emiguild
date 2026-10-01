@@ -1127,3 +1127,27 @@ export async function claimTowerReward(userId: string, attemptId: string, now: D
   }
   throw new TowerError('TICKET_CODE_FAILED', undefined, 500);
 }
+
+// Vault reads must not seed configuration or reveal the active card layout.
+export async function getTowerProgressSnapshot(userId: string, now: Date = new Date()) {
+  const [setting, tokens, attempt, reviewToken] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: 'tower_enabled' } }),
+    prisma.towerToken.findMany({ where: { userId, status: 'AVAILABLE', expiresAt: { gt: now } }, orderBy: { expiresAt: 'asc' } }),
+    prisma.towerAttempt.findFirst({
+      where: { userId, status: { in: ['IN_PROGRESS', 'COMPLETED'] }, runExpiresAt: { gt: now }, token: { expiresAt: { gt: now } } },
+      include: { token: true }, orderBy: { startedAt: 'desc' },
+    }),
+    prisma.towerToken.findUnique({
+      where: { sourceRefId: `GOOGLE_REVIEW:${userId}:${getArmoryToday(now)}` },
+      select: { id: true },
+    }),
+  ]);
+  const publicAttempt = attempt ? serializeAttempt(attempt, DEFAULT_TOWER_REWARDS, now) : null;
+  return { enabled: setting?.value !== 'false',
+    review: { claimed: Boolean(reviewToken), nextResetAt: getNextIstMidnight(now).toISOString(), serverNow: now.toISOString() },
+    tokens, attempt: publicAttempt ? {
+    level: publicAttempt.level, totalLevels: publicAttempt.totalLevels,
+    status: publicAttempt.status, canClaim: publicAttempt.canClaim,
+    securedReward: publicAttempt.securedReward, runExpiresAt: publicAttempt.runExpiresAt,
+  } : null };
+}
