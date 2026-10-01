@@ -6,6 +6,7 @@ import { loadEmailEvaluation } from './evaluation';
 import { emailConfiguration, gmailLifecycleTransport, lifecycleUnsubscribeSecret, MailTransport, renderLifecycleEmail, signUnsubscribe } from './email';
 
 const LEASE_MS = 5 * 60_000;
+const DELIVERY_RETENTION_MS = 8 * DAY;
 export const CRON_LOCK_KEY = 'lifecycle_email_cron_lock';
 export const CRON_CURSOR_KEY = 'lifecycle_email_cursor';
 export function lifecycleDay(now: Date) { return new Date(now.getTime() + 330 * 60_000).toISOString().slice(0, 10); }
@@ -40,6 +41,11 @@ async function createSend(userId: string, recipient: string, candidate: MessageC
 export async function recoverInterrupted(now: Date) {
   // A process may have died after Gmail accepted DATA. Never automatically resend.
   return prisma.lifecycleEmailDelivery.updateMany({ where: { status: 'SENDING', dispatchedAt: { lte: new Date(now.getTime() - LEASE_MS) } }, data: { status: 'UNKNOWN', errorCode: 'WORKER_INTERRUPTED', finishedAt: now } });
+}
+async function pruneOldDeliveries(now: Date) {
+  // Recent rows are a compact safety ledger for frequency caps and test limits.
+  // Anything older than that window is no longer needed and is removed daily.
+  return prisma.lifecycleEmailDelivery.deleteMany({ where: { dispatchedAt: { lt: new Date(now.getTime() - DELIVERY_RETENTION_MS) } } });
 }
 async function deliver(row: NonNullable<Awaited<ReturnType<typeof createSend>>>, candidate: MessageCandidate, options: DeliveryOptions) {
   const config = emailConfiguration();
@@ -101,6 +107,7 @@ export async function runLifecycleEmails(options: DeliveryOptions = {}) {
   const deadline = Date.now() + 180_000;
   try {
     await recoverInterrupted(now);
+    await pruneOldDeliveries(now);
     const cursor = await prisma.setting.findUnique({ where: { key: CRON_CURSOR_KEY } });
     const users = await prisma.user.findMany({ where: { role: 'USER', ...(cursor?.value ? { id: { gt: cursor.value } } : {}) }, orderBy: { id: 'asc' }, select: { id: true }, take: 200 });
     for (const user of users) {

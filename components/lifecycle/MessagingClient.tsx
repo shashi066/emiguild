@@ -2,10 +2,9 @@
 import { useEffect, useState } from 'react';
 import { MessagingSettings } from '@/lib/lifecycle/rules';
 import { LifecyclePreviewClient } from './LifecyclePreviewClient';
-import { EmailHistoryClient } from './EmailHistoryClient';
 import styles from './lifecycle.module.css';
 export function MessagingClient() {
-  const [tab, setTab] = useState<'settings' | 'preview' | 'history'>('settings');
+  const [tab, setTab] = useState<'settings' | 'preview'>('settings');
   const [settings, setSettings] = useState<MessagingSettings | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -42,7 +41,7 @@ export function MessagingClient() {
     <p className={styles.kicker}>Admin controls</p><h1 className="page-title">Messaging</h1>
     <p className={styles.muted}>Useful emails from each player’s account. Both campaigns share a limit of one email every seven days.</p>
     <div role="tablist" aria-label="Messaging" className={styles.actions} style={{ marginTop: 24 }}>
-      {(['settings', 'preview', 'history'] as const).map((item) => <button key={item} id={'messaging-' + item + '-tab'} role="tab" aria-selected={tab === item} aria-controls={'messaging-' + item + '-panel'} className={'btn ' + (tab === item ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab(item)}>{item === 'settings' ? 'Settings' : item === 'preview' ? 'Player Preview' : 'Delivery History'}</button>)}
+      {(['settings', 'preview'] as const).map((item) => <button key={item} id={'messaging-' + item + '-tab'} role="tab" aria-selected={tab === item} aria-controls={'messaging-' + item + '-panel'} className={'btn ' + (tab === item ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab(item)}>{item === 'settings' ? 'Settings' : 'Player Preview'}</button>)}
     </div>
     {tab === 'settings' ? <section role="tabpanel" id="messaging-settings-panel" aria-labelledby="messaging-settings-tab" className={'card ' + styles.panel}>
       <h2>Email campaigns</h2>
@@ -56,6 +55,6 @@ export function MessagingClient() {
           <div className={styles.actions}><button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button><button type="button" className="btn btn-secondary" disabled={busy} onClick={testEmail}>Send test to my email</button></div>
         </form><p role="status">{message}</p>
       </>}
-    </section> : <section role="tabpanel" id={'messaging-' + tab + '-panel'} aria-labelledby={'messaging-' + tab + '-tab'}>{tab === 'preview' ? <LifecyclePreviewClient /> : <EmailHistoryClient />}</section>}
+    </section> : <section role="tabpanel" id="messaging-preview-panel" aria-labelledby="messaging-preview-tab"><LifecyclePreviewClient /></section>}
   </div>;
 }
