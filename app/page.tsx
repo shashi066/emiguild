@@ -231,14 +231,15 @@ export default async function HomePage() {
         <div className="hero-orb hero-orb-1" />
         <div className="hero-orb hero-orb-2" />
 
-        <div className={`container ${vaultButtonStyles.anchor}`}>
-          <HomeVaultButton />
+        <div className="container">
           <div className="hero-content animate-fade-in-up" style={{ maxWidth: 680 }}>
-            <div className={`hero-eyebrow-row${towerPrompt ? ' has-tower-banner' : ''}`}>
+            <div className={`hero-eyebrow-row ${vaultButtonStyles.header}${towerPrompt ? ' has-tower-banner' : ''}`}>
               <div className="hero-eyebrow">
                 <Zap size={14} />
                 Premium Gaming Experience
               </div>
+
+              <HomeVaultButton />
 
               {specialOpeningNotice && (
                 <div className={`hero-opening-pill ${specialOpeningNotice.state}`}>
