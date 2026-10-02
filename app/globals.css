@@ -547,8 +547,8 @@ h1, h2, h3, h4, h5, h6 {
 .emi-header>div:nth-child(2) { display: grid; flex: 1; }
 .emi-header strong { font-family: Orbitron,sans-serif; font-size: .92rem; }
 .emi-header span { color: var(--color-text-muted); font-size: .68rem; }
-.emi-avatar { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.38); border-radius: 50%; background: #f7c9d7; box-shadow: 0 0 18px rgba(255,159,190,.3); }
-.emi-avatar img { display: block; width: 36px; height: 36px; max-width: none; object-fit: cover; }
+.emi-avatar { width: 36px; height: 36px; flex: 0 0 36px; overflow: hidden; border: 1px solid rgba(255,255,255,.38); border-radius: 50%; background-color: #f7c9d7; box-shadow: 0 0 18px rgba(255,159,190,.3); }
+.emi-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .emi-avatar.large { width: 48px; height: 48px; margin: 0 auto 12px; }
 .emi-icon-button { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 9px; color: var(--color-text-secondary); background: transparent; cursor: pointer; }
 .emi-icon-button:hover { background: rgba(255,255,255,.08); color: #fff; }

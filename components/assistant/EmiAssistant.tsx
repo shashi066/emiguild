@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import emiilyPortrait from '@/public/images/emiily-avatar.png';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -236,13 +237,13 @@ export function EmiAssistant() {
   return <div className={`emi-assistant ${open ? 'is-open' : ''}`}>
     {open && <button className="emi-backdrop" tabIndex={-1} aria-label="Close Emiily assistant" onClick={close} />}
     {open && <div ref={panel} className="emi-panel" role="dialog" aria-modal="true" aria-label="Emiily, the EmiGuild assistant">
-      <header className="emi-header"><div className="emi-avatar"><Image src="/images/emiily-avatar.png" alt="Emiily" width={36} height={36} unoptimized loading="eager" /></div><div><strong>Emiily</strong><span>Choose an option. Typing is optional.</span></div><button className="emi-icon-button" aria-label="Close Emiily assistant" onClick={close}><X size={19} /></button></header>
+      <header className="emi-header"><div className="emi-avatar"><Image src={emiilyPortrait} alt="Emiily" width={36} height={36} unoptimized loading="eager" /></div><div><strong>Emiily</strong><span>Choose an option. Typing is optional.</span></div><button className="emi-icon-button" aria-label="Close Emiily assistant" onClick={close}><X size={19} /></button></header>
       <nav className="emi-flow-nav" aria-label="Assistant navigation">
         <button disabled={disabled || !history.current.length} onClick={() => { const previous = history.current.pop(); if (previous) void navigate(previous, false); }}><ArrowLeft size={14} />Back</button>
         <button disabled={mutating} onClick={startOver}><RotateCcw size={14} />Start over</button>
       </nav>
       <div className="emi-messages emi-flow" aria-busy={disabled}>
-        {view.state.task === 'HOME' && <div className="emi-home-welcome"><p>Hi, I’m Emiily!</p><p>Welcome to EmiGuild!!</p></div>}
+        {view.state.task === 'HOME' && <div className="emi-home-welcome"><p>Hi, I&apos;m Emiily!</p><p>Welcome to EmiGuild!!</p></div>}
         <h2 ref={heading} tabIndex={-1}>{view.card?.actionToken ? 'Review your selection' : view.title}</h2>
         {view.description && <p>{view.description}</p>}
         <p className={notice ? 'emi-status' : 'emi-sr-only'} role="status">{notice}</p>

@@ -26,7 +26,7 @@ export async function getGuidedView(raw: unknown, context: AssistantToolContext)
     return view(result.cards?.[0]?.title ?? 'Review', [], { card: result.cards?.[0] });
   };
   const login = () => view('Sign in to continue', [], { login: true, description: 'Your selections will be kept.' });
-  if (state.task === 'HOME') return view('What would you like to do?', HOME_OPTIONS);
+  if (state.task === 'HOME') return view("Hi, I'm Emiily! How can I help you today?", HOME_OPTIONS);
   if (state.date && !dates.includes(state.date)) throw new Error('Choose a date within the next 30 days.');
 
   if (state.task === 'SPIN') {
