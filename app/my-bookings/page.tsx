@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   BookOpen, Calendar, Clock, Monitor, IndianRupee,
   XCircle, AlertCircle, CheckCircle, Plus, Award, Crown, Sword, Gamepad2,
+  Package, MapPin, Truck,
 } from 'lucide-react';
 import { formatTime, formatDate, formatCurrency, getTodayString } from '@/lib/utils';
 import {
@@ -44,6 +45,35 @@ type ActivePass = {
   }[];
 };
 
+type Ps5Rental = {
+  id: string;
+  rentalDays: number;
+  extraControllers: number;
+  pricePerDay: number;
+  controllerPrice: number;
+  totalPrice: number;
+  selectedGames: string;
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  deliveryCity: string;
+  deliveryPincode: string;
+  deliveryNotes: string | null;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  adminComment: string | null;
+  createdAt: string;
+};
+
+const RENTAL_STATUS_STYLES: Record<string, { bg: string; color: string; border: string; label: string }> = {
+  PENDING:   { bg: 'rgba(255,170,0,0.12)',  color: '#ffaa00', border: 'rgba(255,170,0,0.3)',  label: 'Pending' },
+  CONFIRMED: { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6', border: 'rgba(59,130,246,0.3)', label: 'Confirmed' },
+  DELIVERED: { bg: 'rgba(16,185,129,0.12)', color: '#10b981', border: 'rgba(16,185,129,0.3)', label: 'Delivered' },
+  RETURNED:  { bg: 'rgba(108,99,255,0.12)', color: '#6c63ff', border: 'rgba(108,99,255,0.3)', label: 'Returned' },
+  CANCELLED: { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444', border: 'rgba(239,68,68,0.3)',  label: 'Cancelled' },
+};
+
 const STATUS_CONFIG = {
   PENDING:    { label: 'Pending',    cls: 'badge-pending',    icon: Clock },
   CONFIRMED:  { label: 'Confirmed',  cls: 'badge-confirmed',  icon: CheckCircle },
@@ -64,22 +94,26 @@ const PASS_ICON: Record<string, string> = { BRONZE: '🥉', SILVER: '🥈', GOLD
 export default function MyBookingsPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [userPasses, setUserPasses] = useState<ActivePass[]>([]);
+  const [rentals, setRentals]         = useState<Ps5Rental[]>([]);
   const [loading, setLoading]         = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [error, setError]             = useState('');
-  const [activeTab, setActiveTab]     = useState<'upcoming' | 'past' | 'pass'>('upcoming');
+  const [activeTab, setActiveTab]     = useState<'upcoming' | 'past' | 'pass' | 'rental'>('upcoming');
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [bRes, pRes] = await Promise.all([
+      const [bRes, pRes, rRes] = await Promise.all([
         fetch('/api/bookings?limit=50'),
         fetch('/api/user/pass?history=1'),
+        fetch('/api/ps5-rental'),
       ]);
       const bData = await bRes.json();
       const pData = pRes.ok ? await pRes.json() : { passes: [] };
+      const rData = rRes.ok ? await rRes.json() : { rentals: [] };
       setBookings(bData.bookings ?? []);
       setUserPasses(pData.passes ?? []);
+      setRentals(rData.rentals ?? []);
     } catch {
       setError('Failed to load data.');
     } finally {
@@ -113,6 +147,26 @@ export default function MyBookingsPage() {
     }
   };
 
+  const handleCancelRental = async (id: string) => {
+    if (!confirm('Are you sure you want to cancel this rental order?')) return;
+    setCancellingId(id);
+    try {
+      const res = await fetch(`/api/ps5-rental/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELLED' }),
+      });
+      if (res.ok) {
+        setRentals((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'CANCELLED' } : r)));
+      } else {
+        const data = await res.json();
+        setError(data.error ?? 'Could not cancel this rental.');
+      }
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   const today = getTodayString();
   const upcoming = bookings.filter((b) => b.date >= today && b.status !== 'CANCELLED' && b.status !== 'CHECKED_IN');
   const past     = bookings.filter((b) => b.date < today  || b.status === 'CANCELLED'  || b.status === 'CHECKED_IN');
@@ -122,7 +176,7 @@ export default function MyBookingsPage() {
   );
   const displayList = activeTab === 'upcoming' ? upcoming : past;
 
-  const TabBtn = ({ tab, label, count }: { tab: 'upcoming' | 'past' | 'pass'; label: string; count?: number }) => (
+  const TabBtn = ({ tab, label, count }: { tab: 'upcoming' | 'past' | 'pass' | 'rental'; label: string; count?: number }) => (
     <button
       className={`btn ${activeTab === tab ? 'btn-primary' : 'btn-ghost'}`}
       onClick={() => setActiveTab(tab)}
@@ -165,10 +219,11 @@ export default function MyBookingsPage() {
           <TabBtn tab="upcoming" label="Upcoming" count={upcoming.length} />
           <TabBtn tab="past"     label="Past & Cancelled" count={past.length} />
           <TabBtn tab="pass"     label="My Passes" />
+          <TabBtn tab="rental"   label="PS5 Rentals" count={rentals.length} />
         </div>
 
         {/* ── Bookings list ── */}
-        {activeTab !== 'pass' && (
+        {(activeTab === 'upcoming' || activeTab === 'past') && (
           loading ? (
             <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-text-muted)' }}>
               Loading your bookings...
@@ -415,6 +470,114 @@ export default function MyBookingsPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {/* ── PS5 Rentals tab ── */}
+        {activeTab === 'rental' && (
+          loading ? (
+            <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-text-muted)' }}>Loading your rentals...</div>
+          ) : rentals.length === 0 ? (
+            <div className="card">
+              <div className="empty-state">
+                <div className="empty-state-icon"><Package size={32} /></div>
+                <div className="empty-state-title">No PS5 Rentals</div>
+                <p className="empty-state-text">You haven&apos;t rented a PS5 yet. Get one delivered to your doorstep!</p>
+                <Link href="/ps5-rental" className="btn btn-primary" style={{ marginTop: 'var(--space-md)' }}>
+                  <Package size={16} /> Rent a PS5
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+              {rentals.map((rental) => {
+                const st = RENTAL_STATUS_STYLES[rental.status] ?? RENTAL_STATUS_STYLES.PENDING;
+                const games: string[] = (() => { try { return JSON.parse(rental.selectedGames); } catch { return []; } })();
+                const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+                const orderDate = new Date(rental.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+
+                return (
+                  <div key={rental.id} className="card card-hover" style={{ padding: 'var(--space-lg)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+                      {/* Left side */}
+                      <div style={{ flex: 1, minWidth: 220 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-sm)', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, fontSize: '1rem' }}>PS5 Rental — {rental.rentalDays} Day{rental.rentalDays > 1 ? 's' : ''}</span>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            fontSize: '0.72rem', fontWeight: 700, padding: '2px 10px',
+                            borderRadius: 999, background: st.bg,
+                            border: `1px solid ${st.border}`, color: st.color,
+                          }}>
+                            {st.label}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 'var(--space-lg)', flexWrap: 'wrap', fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-sm)' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Calendar size={14} style={{ color: 'var(--color-accent-primary)' }} />{orderDate}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Gamepad2 size={14} style={{ color: 'var(--color-accent-primary)' }} />1 + {rental.extraControllers} controller{rental.extraControllers !== 1 ? 's' : ''}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Truck size={14} style={{ color: 'var(--color-accent-primary)' }} />COD
+                          </span>
+                        </div>
+
+                        {/* Games */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 'var(--space-sm)' }}>
+                          {games.map((g) => (
+                            <span key={g} style={{
+                              fontSize: '0.72rem', fontWeight: 500,
+                              background: 'rgba(108,99,255,0.1)', border: '1px solid rgba(108,99,255,0.25)',
+                              borderRadius: 6, padding: '2px 8px',
+                            }}>
+                              {g}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Delivery address */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                          <MapPin size={13} style={{ marginTop: 2, flexShrink: 0 }} />
+                          <span>{rental.deliveryAddress}, {rental.deliveryCity} — {rental.deliveryPincode}</span>
+                        </div>
+
+                        {/* Admin comment */}
+                        {rental.adminComment && (
+                          <div style={{ marginTop: 'var(--space-sm)', padding: '8px 12px', background: 'rgba(108,99,255,0.06)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                            <strong>Admin note:</strong> {rental.adminComment}
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>ID: #{rental.id.slice(-8).toUpperCase()}</div>
+                      </div>
+
+                      {/* Right side — price + cancel */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-sm)' }}>
+                        <div>
+                          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '1.3rem', fontWeight: 700, color: 'var(--color-accent-primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <IndianRupee size={16} />{rental.totalPrice.toLocaleString()}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'right' }}>Cash on Delivery</div>
+                        </div>
+                        {rental.status === 'PENDING' && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleCancelRental(rental.id)}
+                            disabled={cancellingId === rental.id}
+                            id={`cancel-rental-${rental.id}`}
+                          >
+                            <XCircle size={14} />{cancellingId === rental.id ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
               })}

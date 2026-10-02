@@ -109,6 +109,7 @@ export function DailySpinWidget() {
     for (let i = 0; i < total; i++) cells.push(rawItems[i % rawItems.length]);
     return cells;
   })();
+  const restoredWinnerIndex = reward ? gridItems.findIndex((item) => item.id === reward.id) : -1;
 
   const handleSpin = () => {
     if (!spinStatus?.canSpin || spinning) return;
@@ -249,9 +250,10 @@ export function DailySpinWidget() {
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes cellPop  { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
         @keyframes winPop   { 0% { transform: scale(0.85); opacity: 0; } 80% { transform: scale(1.06); } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes winnerGlowIn { 0% { box-shadow: 0 0 0 0 transparent; } 55% { box-shadow: 0 0 20px 4px var(--hl-color); } 100% { box-shadow: 0 0 12px 2px var(--hl-color); } }
         @keyframes shimmer  { 0%,100% { box-shadow: 0 0 12px 2px var(--hl-color); } 50% { box-shadow: 0 0 22px 6px var(--hl-color); } }
         .spin-cell-highlighted { animation: cellPop 0.25s ease, shimmer 0.5s ease infinite; }
-        .spin-cell-winner      { animation: winPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
+        .spin-cell-winner      { position: relative; z-index: 2; animation: winPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards, winnerGlowIn 0.75s ease-out forwards; box-shadow: 0 0 12px 2px var(--hl-color); }
         .reward-reveal         { animation: winPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
       ` }} />
 
@@ -267,8 +269,8 @@ export function DailySpinWidget() {
         </h2>
         <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-xl)' }}>
           {spinStatus?.canSpin
-            ? 'Test your luck — spin the grid to win a free perk!'
-            : 'Come back tomorrow for another drop!'}
+            ? 'Daily spin available — one spin each day.'
+            : 'Today’s spin used. Come back after the daily reset.'}
         </p>
         {streak && (
           <div
@@ -409,7 +411,10 @@ export function DailySpinWidget() {
           }}>
             {gridItems.map((item, i) => {
               const isHighlighted = highlighted === i && spinning;
-              const isWinner      = !spinning && reward && item.id === reward.id && highlighted === i;
+              const displayedWinnerIndex = highlighted !== null && gridItems[highlighted]?.id === reward?.id
+                ? highlighted
+                : restoredWinnerIndex;
+              const isWinner      = !spinning && reward && i === displayedWinnerIndex;
               const color         = rarityColor(item);
 
               return (

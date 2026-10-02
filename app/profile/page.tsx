@@ -1,7 +1,9 @@
+import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { redirect } from 'next/navigation';
 import { User, Mail, Phone, Calendar, BookOpen, Shield } from 'lucide-react';
+import styles from './profile.module.css';
 import { ChangePasswordForm } from '@/components/profile/ChangePasswordForm';
 
 export default async function ProfilePage() {
@@ -28,10 +30,10 @@ export default async function ProfilePage() {
   return (
     <div className="page-wrapper">
       <div className="container-sm">
-        <h1 className="page-title" style={{ marginBottom: 'var(--space-2xl)' }}>
-          <User size={28} style={{ display: 'inline', marginRight: 10, color: 'var(--color-accent-primary)' }} />
+        <div className={styles.header}><h1 className={`page-title ${styles.title}`}>
+          <User size={28} aria-hidden="true" style={{ color: 'var(--color-accent-primary)' }} />
           My <span className="text-gradient">Profile</span>
-        </h1>
+        </h1><Link href="/vault" className={`btn btn-primary ${styles.vaultLink}`}>Open your Vault</Link></div>
 
         {/* Profile Card */}
         <div className="card" style={{ marginBottom: 'var(--space-lg)' }}>
@@ -44,7 +46,7 @@ export default async function ProfilePage() {
             }}>
               {user.name.charAt(0).toUpperCase()}
             </div>
-            <div>
+            <div className={styles.identity}>
               <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>{user.name}</div>
               <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>{user.email}</div>
               {user.role === 'ADMIN' && (
@@ -55,7 +57,7 @@ export default async function ProfilePage() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
+          <div className={styles.details}>
             <div className="booking-detail-item">
               <div className="booking-detail-label"><Mail size={12} style={{ display: 'inline', marginRight: 4 }} />Email</div>
               <div className="booking-detail-value" style={{ fontSize: '0.875rem' }}>{user.email}</div>

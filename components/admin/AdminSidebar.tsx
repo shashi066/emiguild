@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 const NAV_ITEMS = [
+  { href: '/admin/lifecycle', label: 'Messaging', icon: Gift },
   { href: '/admin',          label: 'Dashboard',      icon: LayoutDashboard, exact: true },
   { href: '/admin/bookings', label: 'All Bookings',   icon: BookOpen },
   { href: '/admin/walkin',   label: 'Walk-in Booking', icon: UserPlus },
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: '/admin/daily-spin', label: 'Guild Spin', icon: RotateCw },
   { href: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { href: '/admin/watch-parties', label: 'Watch Parties', icon: Tv },
+  { href: '/admin/ps5-rentals', label: 'PS5 Rentals', icon: Gamepad2 },
   { href: '/admin/rewards', label: 'EMIC Rewards', icon: ShoppingBag },
   { href: '/admin/fnb',          label: 'F&B Items',      icon: CupSoda },
   { href: '/admin/users',    label: 'Users',          icon: Users },

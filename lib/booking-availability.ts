@@ -131,3 +131,32 @@ export function isVenueAtCapacityDuring(
   return getVenueCapacityBlockedIntervals(existing, capacityValue)
     .some((blocked) => intervalsOverlap(requested, blocked));
 }
+
+export function getVenueRemainingCapacity(
+  requested: BookingTimeInterval,
+  existing: BookingTimeInterval[],
+  capacityValue: unknown,
+) {
+  const parsedRequested = parseInterval(requested);
+  const capacity = normalizeVenueCapacity(capacityValue);
+  if (!parsedRequested) return 0;
+
+  const occupancyChanges = new Map<number, number>();
+  for (const booking of existing) {
+    const parsed = parseInterval(booking);
+    if (!parsed) continue;
+    const start = Math.max(parsed.start, parsedRequested.start);
+    const end = Math.min(parsed.end, parsedRequested.end);
+    if (end <= start) continue;
+    occupancyChanges.set(start, (occupancyChanges.get(start) ?? 0) + 1);
+    occupancyChanges.set(end, (occupancyChanges.get(end) ?? 0) - 1);
+  }
+
+  let occupied = 0;
+  let peakOccupied = 0;
+  for (const boundary of [...occupancyChanges.keys()].sort((left, right) => left - right)) {
+    occupied += occupancyChanges.get(boundary) ?? 0;
+    peakOccupied = Math.max(peakOccupied, occupied);
+  }
+  return Math.max(0, capacity - peakOccupied);
+}

@@ -20,6 +20,11 @@ model User {
   role                   String   @default("USER") // "USER" | "ADMIN"
   guildGems              Int      @default(0)
   watchPartyCoins        Int      @default(0)
+  lifecycleWhatsappFrequency Int      @default(0)
+  lifecycleEmailDigest       Boolean  @default(false)
+  lifecycleConsentUpdatedAt  DateTime?
+  lifecycleConsentVersion    String?
+  lastWebsiteVisitAt         DateTime?
   lastForgotPasswordDate String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
@@ -53,7 +58,10 @@ model User {
   watchPartyShopOrdersGiven     WatchPartyShopOrder[]  @relation("WatchPartyShopOrderGivenActor")
   watchPartyShopOrdersCancelled WatchPartyShopOrder[]  @relation("WatchPartyShopOrderCancelActor")
   fnbItemsVoided                BookingFnbItem[]       @relation("BookingFnbItemVoidActor")
+  ps5Rentals                    Ps5Rental[]
 
+  lifecycleEmailState LifecycleEmailState?
+  lifecycleEmailDeliveries LifecycleEmailDelivery[]
   @@map("users")
 }
 
@@ -717,6 +725,36 @@ model WatchPartyShopOrder {
   @@map("watch_party_shop_orders")
 }
 
+model Ps5Rental {
+  id                String   @id @default(cuid())
+  userId            String
+  rentalDays        Int
+  extraControllers  Int      @default(0)
+  pricePerDay       Int
+  controllerPrice   Int      @default(0)
+  totalPrice        Int
+  activeUserId      String?  @unique
+  selectedGames     String   // JSON array of game names
+  customerName      String
+  customerPhone     String
+  deliveryAddress   String
+  deliveryCity      String
+  deliveryPincode   String
+  deliveryNotes     String?
+  status            String   @default("PENDING") // PENDING | CONFIRMED | DELIVERED | RETURNED | CANCELLED
+  startDate         String?  // YYYY-MM-DD, set when confirmed
+  endDate           String?  // YYYY-MM-DD, set when confirmed
+  adminComment      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("ps5_rentals")
+}
+
 model WebsiteAnalytics {
   date      DateTime
   userKey   String
@@ -726,4 +764,55 @@ model WebsiteAnalytics {
 
   @@id([date, userKey])
   @@map("website_analytics")
+}
+
+model LifecycleEmailState {
+  userId String @id
+  lastComebackEvaluatedAt DateTime?
+  nextComebackCheckAt DateTime?
+  unsubscribedAt DateTime?
+  leaseToken String?
+  leaseUntil DateTime?
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("lifecycle_email_states")
+}
+model LifecycleEmailDelivery {
+  id String @id @default(cuid())
+  userId String
+  recipient String
+  campaign String
+  dedupeKey String @unique
+  payload String
+  status String @default("SENDING")
+  messageId String @unique
+  dispatchedAt DateTime
+  finishedAt DateTime?
+  errorCode String?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, dispatchedAt])
+  @@index([status, dispatchedAt])
+  @@map("lifecycle_email_deliveries")
+}
+
+model AssistantUsageDaily {
+  guidedRequestCount Int @default(0)
+  guidedWindowStart Int @default(0)
+  guidedWindowCount Int @default(0)
+  date             String
+  actorKey         String
+  requestCount     Int      @default(0)
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  toolCallCount    Int      @default(0)
+  preparedActions  Int      @default(0)
+  completedActions Int      @default(0)
+  errorCount       Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@id([date, actorKey])
+  @@index([date])
+  @@map("assistant_usage_daily")
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Save, CheckCircle, AlertCircle,
-  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor,
+  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor, Package, Bot,
 } from 'lucide-react';
 import {
   SPECIAL_OPENING_DATE_KEY,
@@ -13,9 +13,10 @@ import {
   getActiveSpecialOpening,
   getIndiaClock,
 } from '@/lib/public-booking-time';
+import { parsePs5RentalPrice, resolvePs5RentalAvailability } from '@/lib/ps5-rental';
 
 type Setting = { id: string; key: string; value: string; label: string | null };
-type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | null;
+type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | 'ps5_rental_status' | 'ps5_rental_price' | 'ps5_rental_controller' | 'assistant' | null;
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AdminSettingsPage() {
@@ -108,6 +109,10 @@ export default function AdminSettingsPage() {
     indiaClock.date,
   );
   const showStationsAvailability = settings['show_stations_availability'] !== 'false';
+  const ps5RentalStatus           = resolvePs5RentalAvailability(settings);
+  const ps5RentalPrice            = settings['ps5_rental_price_per_day']     ?? '1200';
+  const ps5ExtraControllerPrice   = settings['ps5_rental_extra_controller']  ?? '500';
+  const assistantReleaseMode      = settings['assistant_release_mode'] ?? 'OFF';
 
   // Draft variants (inside modal)
   const draftSpecialDate    = draft[SPECIAL_OPENING_DATE_KEY];
@@ -139,6 +144,26 @@ export default function AdminSettingsPage() {
 
   const saveStationsAvailability = () =>
     persist([{ key: 'show_stations_availability', value: draft['show_stations_availability'] ?? 'true', label: 'User Live Station Availability' }]);
+
+  const savePs5RentalStatus = () =>
+    persist([{ key: 'ps5_rental_status', value: draft['ps5_rental_status'] ?? ps5RentalStatus, label: 'PS5 Rental Service Status' }]);
+
+  const savePs5RentalPrice = () => {
+    const value = parsePs5RentalPrice(draft['ps5_rental_price_per_day'], -1);
+    if (value < 0) return showToast('error', 'Enter a whole-number price between ₹0 and ₹100,000.');
+    return persist([{ key: 'ps5_rental_price_per_day', value: String(value), label: 'PS5 Rental Price Per Day' }]);
+  };
+
+  const savePs5RentalController = () => {
+    const value = parsePs5RentalPrice(draft['ps5_rental_extra_controller'], -1);
+    if (value < 0) return showToast('error', 'Enter a whole-number price between ₹0 and ₹100,000.');
+    return persist([{ key: 'ps5_rental_extra_controller', value: String(value), label: 'PS5 Rental Extra Controller Price Per Day' }]);
+  };
+
+  const saveAssistant = () => persist([
+    { key: 'assistant_release_mode', value: draft['assistant_release_mode'] ?? 'OFF', label: 'Emi Assistant Release Mode' },
+    { key: 'assistant_beta_user_emails', value: draft['assistant_beta_user_emails'] ?? '', label: 'Emi Assistant Beta Users' },
+  ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -219,6 +244,43 @@ export default function AdminSettingsPage() {
             value={showStationsAvailability ? 'Enabled — Visible to users' : 'Disabled — Hidden from users'}
             badge={showStationsAvailability ? 'active' : undefined}
             onEdit={() => openModal('stations_availability')}
+          />
+
+          {/* ── PS5 Rental Enabled ── */}
+          <SettingCard
+            icon={<Package size={20} />}
+            title="PS5 Rental Service"
+            description="Enable or disable the PS5 home rental service for users."
+            value={ps5RentalStatus === 'AVAILABLE' ? 'Available — Accepting orders' : ps5RentalStatus === 'COMING_SOON' ? 'Coming Soon — Visible, not accepting orders' : 'Disabled — Hidden from homepage'}
+            badge={ps5RentalStatus === 'AVAILABLE' ? 'active' : undefined}
+            onEdit={() => openModal('ps5_rental_status')}
+          />
+
+          {/* ── PS5 Rental Price ── */}
+          <SettingCard
+            icon={<Package size={20} />}
+            title="PS5 Rental Price (Per Day)"
+            description="Daily rental price for PS5 console with 1 controller included."
+            value={`₹${ps5RentalPrice} / day`}
+            onEdit={() => openModal('ps5_rental_price')}
+          />
+
+          {/* ── PS5 Extra Controller Price ── */}
+          <SettingCard
+            icon={<Gamepad2 size={20} />}
+            title="PS5 Extra Controller (Per Day)"
+            description="Additional charge per extra controller per day of rental."
+            value={`₹${ps5ExtraControllerPrice} / controller / day`}
+            onEdit={() => openModal('ps5_rental_controller')}
+          />
+
+          <SettingCard
+            icon={<Bot size={20} />}
+            title="Emi Assistant"
+            description="Control the customer assistant rollout. Beta is restricted to the email allowlist."
+            value={assistantReleaseMode === 'ON' ? 'On — all customers and guests' : assistantReleaseMode === 'BETA' ? 'Beta — allowlisted customers' : 'Off'}
+            badge={assistantReleaseMode === 'ON' ? 'active' : assistantReleaseMode === 'BETA' ? 'warning' : undefined}
+            onEdit={() => openModal('assistant')}
           />
 
         </div>
@@ -479,6 +541,150 @@ export default function AdminSettingsPage() {
                   }} />
                 </div>
               </label>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ Modal: PS5 Rental Enabled ══════════════════════════════════════════ */}
+      {modalId === 'ps5_rental_status' && (
+        <Modal
+          title="PS5 Rental Service"
+          icon={<Package size={18} />}
+          onClose={closeModal}
+          onSave={savePs5RentalStatus}
+          saving={saving}
+        >
+          <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="modal-ps5-status">Public availability</label>
+              <select id="modal-ps5-status" className="form-input" value={draft['ps5_rental_status'] ?? ps5RentalStatus} onChange={(e) => setDraft((p) => ({ ...p, ps5_rental_status: e.target.value }))}>
+                <option value="AVAILABLE">Available — accept orders</option>
+                <option value="COMING_SOON">Coming Soon — show announcement</option>
+                <option value="DISABLED">Disabled — hide from homepage</option>
+              </select>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ Modal: PS5 Rental Price ═══════════════════════════════════════════ */}
+      {modalId === 'ps5_rental_price' && (
+        <Modal
+          title="PS5 Rental Price (Per Day)"
+          icon={<Package size={18} />}
+          onClose={closeModal}
+          onSave={savePs5RentalPrice}
+          saving={saving}
+        >
+          <div className="form-group">
+            <label className="form-label" htmlFor="modal-ps5-price">Price per day (PS5 + 1 controller)</label>
+            <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-sm)' }}>
+              This is the daily rental charge for the PS5 console with 1 DualSense controller included.
+            </p>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{
+                position: 'absolute', left: 14,
+                fontFamily: 'Orbitron, sans-serif', fontWeight: 700,
+                color: 'var(--color-accent-primary)', fontSize: '0.95rem',
+              }}>₹</span>
+              <input
+                id="modal-ps5-price"
+                type="number"
+                className="form-input"
+                style={{ paddingLeft: 34, paddingRight: 70 }}
+                value={draft['ps5_rental_price_per_day'] ?? '1200'}
+                min={0}
+                max={99999}
+                onChange={(e) => setDraft((p) => ({ ...p, ps5_rental_price_per_day: e.target.value }))}
+              />
+              <span style={{ position: 'absolute', right: 14, fontSize: '0.8rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                / day
+              </span>
+            </div>
+            <div style={{
+              marginTop: 10, padding: '10px 14px',
+              background: 'rgba(108,99,255,0.05)', border: '1px solid rgba(108,99,255,0.15)',
+              borderRadius: 'var(--radius-md)', fontSize: '0.82rem', color: 'var(--color-text-secondary)',
+            }}>
+              Preview: 7-day rental = {' '}
+              <strong style={{ color: 'var(--color-accent-primary)' }}>
+                ₹{(parseFloat(draft['ps5_rental_price_per_day'] ?? '1200') * 7).toFixed(0)}
+              </strong>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ Modal: PS5 Extra Controller Price ═════════════════════════════════ */}
+      {modalId === 'ps5_rental_controller' && (
+        <Modal
+          title="PS5 Extra Controller (Per Day)"
+          icon={<Gamepad2 size={18} />}
+          onClose={closeModal}
+          onSave={savePs5RentalController}
+          saving={saving}
+        >
+          <div className="form-group">
+            <label className="form-label" htmlFor="modal-ps5-controller">Price per extra controller per day</label>
+            <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-sm)' }}>
+              1 controller is always included free. This is the charge per additional controller per day.
+            </p>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{
+                position: 'absolute', left: 14,
+                fontFamily: 'Orbitron, sans-serif', fontWeight: 700,
+                color: 'var(--color-accent-primary)', fontSize: '0.95rem',
+              }}>₹</span>
+              <input
+                id="modal-ps5-controller"
+                type="number"
+                className="form-input"
+                style={{ paddingLeft: 34, paddingRight: 130 }}
+                value={draft['ps5_rental_extra_controller'] ?? '500'}
+                min={0}
+                max={99999}
+                onChange={(e) => setDraft((p) => ({ ...p, ps5_rental_extra_controller: e.target.value }))}
+              />
+              <span style={{ position: 'absolute', right: 14, fontSize: '0.8rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                / controller / day
+              </span>
+            </div>
+            <div style={{
+              marginTop: 10, padding: '10px 14px',
+              background: 'rgba(108,99,255,0.05)', border: '1px solid rgba(108,99,255,0.15)',
+              borderRadius: 'var(--radius-md)', fontSize: '0.82rem', color: 'var(--color-text-secondary)',
+            }}>
+              Preview: 2 extra controllers × 5 days = {' '}
+              <strong style={{ color: 'var(--color-accent-primary)' }}>
+                ₹{(parseFloat(draft['ps5_rental_extra_controller'] ?? '500') * 2 * 5).toFixed(0)}
+              </strong>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {modalId === 'assistant' && (
+        <Modal
+          title="Emi Assistant"
+          icon={<Bot size={18} />}
+          onClose={closeModal}
+          onSave={saveAssistant}
+          saving={saving}
+        >
+          <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="modal-assistant-mode">Release mode</label>
+              <select id="modal-assistant-mode" className="form-input" value={draft['assistant_release_mode'] ?? 'OFF'} onChange={(e) => setDraft((p) => ({ ...p, assistant_release_mode: e.target.value }))}>
+                <option value="OFF">Off — hidden for everyone</option>
+                <option value="BETA">Beta — allowlisted signed-in customers</option>
+                <option value="ON">On — customers and public visitors</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="modal-assistant-beta">Beta customer emails</label>
+              <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>Comma-separated. Admin accounts are always excluded.</p>
+              <textarea id="modal-assistant-beta" className="form-input" rows={4} maxLength={2000} placeholder="customer@example.com, tester@example.com" value={draft['assistant_beta_user_emails'] ?? ''} onChange={(e) => setDraft((p) => ({ ...p, assistant_beta_user_emails: e.target.value }))} />
             </div>
           </div>
         </Modal>

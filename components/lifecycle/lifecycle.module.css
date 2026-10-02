@@ -1,0 +1,28 @@
+.shell { max-width: 1040px; margin: 0 auto; padding: 36px 20px 64px; }
+.header { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+.kicker { color: var(--color-accent-primary); text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; font-weight: 700; margin-bottom: 8px; }
+.muted { color: var(--color-text-secondary); line-height: 1.6; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 16px; }
+.card { padding: 24px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card h2 { font-size: 1.2rem; }
+.card p { margin: 0; }
+.card a { align-self: flex-start; margin-top: auto; }
+.time { font-size: .8rem; color: var(--color-text-secondary); }
+.panel { padding: 24px; margin: 24px 0; display: grid; gap: 16px; }
+.field { display: grid; gap: 8px; }
+.select { width: 100%; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); color: var(--color-text-primary); }
+.check { display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; }
+.check input { margin-top: 5px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.error { color: var(--color-danger, var(--color-accent-danger)); }
+.copy { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: .9rem; line-height: 1.7; background: var(--color-bg-elevated); padding: 16px; border-radius: var(--radius-md); }
+.results { display: grid; gap: 8px; }
+.results button { text-align: left; white-space: normal; justify-content: flex-start; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .shell { padding: 24px 16px 48px; } .panel, .card { padding: 18px; } }
+
+.sectionTitle { margin: 32px 0 16px; font-size: 1.25rem; }
+.gameHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-accent-primary); }
+.status { text-transform: capitalize; font-size: .75rem; color: var(--color-text-secondary); border: 1px solid var(--color-border); border-radius: var(--radius-full); padding: 4px 10px; }
+.summary { font-weight: 600; }
+.details { padding-left: 18px; color: var(--color-text-secondary); font-size: .875rem; line-height: 1.7; }
+.progress { width: 100%; height: 8px; accent-color: var(--color-accent-primary); }

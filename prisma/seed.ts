@@ -21,18 +21,6 @@ async function main() {
   });
 
   await prisma.setting.upsert({
-    where: { key: 'daily_spin_retries_enabled' },
-    update: {},
-    create: { key: 'daily_spin_retries_enabled', value: 'false', label: 'Allow Retries for Daily Spin' },
-  });
-
-  await prisma.setting.upsert({
-    where: { key: 'daily_spin_max_retries' },
-    update: {},
-    create: { key: 'daily_spin_max_retries', value: '1', label: 'Maximum Retries for Daily Spin' },
-  });
-
-  await prisma.setting.upsert({
     where: { key: 'daily_spin_reset_hour' },
     update: {},
     create: { key: 'daily_spin_reset_hour', value: '0', label: 'Daily Reset Hour in IST (0-23)' },

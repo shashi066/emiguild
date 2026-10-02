@@ -122,8 +122,6 @@ export function AdminDailySpin() {
     try {
       const payload = [
         { key: 'daily_spin_enabled', value: settings.daily_spin_enabled ?? 'true' },
-        { key: 'daily_spin_retries_enabled', value: settings.daily_spin_retries_enabled ?? 'false' },
-        { key: 'daily_spin_max_retries', value: settings.daily_spin_max_retries ?? '1' },
         { key: 'daily_spin_reset_hour', value: settings.daily_spin_reset_hour ?? '0' },
       ];
       const res = await fetch('/api/admin/settings', {
@@ -275,29 +273,7 @@ export function AdminDailySpin() {
                 />
               </div>
 
-              <div>
-                <label className="form-label">Allow Retries?</label>
-                <select
-                  className="form-input"
-                  value={settings.daily_spin_retries_enabled || 'false'}
-                  onChange={e => setSettings(s => ({ ...s, daily_spin_retries_enabled: e.target.value }))}
-                >
-                  <option value="true">Yes</option>
-                  <option value="false">No</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="form-label">Max Retries</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  min="1"
-                  value={settings.daily_spin_max_retries || '1'}
-                  onChange={e => setSettings(s => ({ ...s, daily_spin_max_retries: e.target.value }))}
-                  disabled={settings.daily_spin_retries_enabled === 'false'}
-                />
-              </div>
+              <p className="form-label">One spin per player each day. Resets at the configured IST hour.</p>
 
             </div>
             <div style={{ marginTop: 'var(--space-md)' }}>

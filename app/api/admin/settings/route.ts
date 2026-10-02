@@ -1,9 +1,12 @@
+import { MESSAGING_SETTING_KEYS, RETIRED_SPIN_SETTING_KEYS } from '@/lib/lifecycle/settings-keys';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { z } from 'zod';
+import { PS5_RENTAL_STATUSES } from '@/lib/ps5-rental';
 
 const INTERNAL_SETTING_KEYS = new Set([
+  ...MESSAGING_SETTING_KEYS, ...RETIRED_SPIN_SETTING_KEYS,
   'watch_party_economy_version',
   'tower_enabled',
   'tower_rewards',
@@ -51,6 +54,26 @@ export async function PUT(req: NextRequest) {
   }
   if (result.data.some((setting) => INTERNAL_SETTING_KEYS.has(setting.key))) {
     return NextResponse.json({ error: 'Internal settings cannot be edited.' }, { status: 400 });
+  }
+  for (const setting of result.data) {
+    if (setting.key === 'daily_spin_reset_hour' && (!/^\d{1,2}$/.test(setting.value) || Number(setting.value) > 23)) {
+      return NextResponse.json({ error: 'Spin reset hour must be a whole IST hour from 0 to 23.' }, { status: 400 });
+    }
+    if (setting.key === 'assistant_release_mode' && !['OFF', 'BETA', 'ON'].includes(setting.value)) {
+      return NextResponse.json({ error: 'Assistant release mode must be OFF, BETA, or ON.' }, { status: 400 });
+    }
+    if (setting.key === 'assistant_beta_user_emails' && setting.value.length > 2_000) {
+      return NextResponse.json({ error: 'Assistant beta allowlist is too long.' }, { status: 400 });
+    }
+    if (setting.key === 'ps5_rental_status' && !PS5_RENTAL_STATUSES.includes(setting.value as (typeof PS5_RENTAL_STATUSES)[number])) {
+      return NextResponse.json({ error: 'Invalid PS5 rental status.' }, { status: 400 });
+    }
+    if (setting.key === 'ps5_rental_price_per_day' || setting.key === 'ps5_rental_extra_controller') {
+      const price = Number(setting.value);
+      if (!Number.isSafeInteger(price) || price < 0 || price > 100_000) {
+        return NextResponse.json({ error: 'PS5 rental prices must be whole numbers from 0 to 100,000.' }, { status: 400 });
+      }
+    }
   }
 
   const updated = await Promise.all(
