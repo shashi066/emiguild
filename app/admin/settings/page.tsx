@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Save, CheckCircle, AlertCircle,
-  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor, Package,
+  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor, Package, Bot,
 } from 'lucide-react';
 import {
   SPECIAL_OPENING_DATE_KEY,
@@ -16,7 +16,7 @@ import {
 import { parsePs5RentalPrice, resolvePs5RentalAvailability } from '@/lib/ps5-rental';
 
 type Setting = { id: string; key: string; value: string; label: string | null };
-type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | 'ps5_rental_status' | 'ps5_rental_price' | 'ps5_rental_controller' | null;
+type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | 'ps5_rental_status' | 'ps5_rental_price' | 'ps5_rental_controller' | 'assistant' | null;
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AdminSettingsPage() {
@@ -112,6 +112,7 @@ export default function AdminSettingsPage() {
   const ps5RentalStatus           = resolvePs5RentalAvailability(settings);
   const ps5RentalPrice            = settings['ps5_rental_price_per_day']     ?? '1200';
   const ps5ExtraControllerPrice   = settings['ps5_rental_extra_controller']  ?? '500';
+  const assistantReleaseMode      = settings['assistant_release_mode'] ?? 'OFF';
 
   // Draft variants (inside modal)
   const draftSpecialDate    = draft[SPECIAL_OPENING_DATE_KEY];
@@ -158,6 +159,11 @@ export default function AdminSettingsPage() {
     if (value < 0) return showToast('error', 'Enter a whole-number price between ₹0 and ₹100,000.');
     return persist([{ key: 'ps5_rental_extra_controller', value: String(value), label: 'PS5 Rental Extra Controller Price Per Day' }]);
   };
+
+  const saveAssistant = () => persist([
+    { key: 'assistant_release_mode', value: draft['assistant_release_mode'] ?? 'OFF', label: 'Emi Assistant Release Mode' },
+    { key: 'assistant_beta_user_emails', value: draft['assistant_beta_user_emails'] ?? '', label: 'Emi Assistant Beta Users' },
+  ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -266,6 +272,15 @@ export default function AdminSettingsPage() {
             description="Additional charge per extra controller per day of rental."
             value={`₹${ps5ExtraControllerPrice} / controller / day`}
             onEdit={() => openModal('ps5_rental_controller')}
+          />
+
+          <SettingCard
+            icon={<Bot size={20} />}
+            title="Emi Assistant"
+            description="Control the customer assistant rollout. Beta is restricted to the email allowlist."
+            value={assistantReleaseMode === 'ON' ? 'On — all customers and guests' : assistantReleaseMode === 'BETA' ? 'Beta — allowlisted customers' : 'Off'}
+            badge={assistantReleaseMode === 'ON' ? 'active' : assistantReleaseMode === 'BETA' ? 'warning' : undefined}
+            onEdit={() => openModal('assistant')}
           />
 
         </div>
@@ -644,6 +659,32 @@ export default function AdminSettingsPage() {
               <strong style={{ color: 'var(--color-accent-primary)' }}>
                 ₹{(parseFloat(draft['ps5_rental_extra_controller'] ?? '500') * 2 * 5).toFixed(0)}
               </strong>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {modalId === 'assistant' && (
+        <Modal
+          title="Emi Assistant"
+          icon={<Bot size={18} />}
+          onClose={closeModal}
+          onSave={saveAssistant}
+          saving={saving}
+        >
+          <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="modal-assistant-mode">Release mode</label>
+              <select id="modal-assistant-mode" className="form-input" value={draft['assistant_release_mode'] ?? 'OFF'} onChange={(e) => setDraft((p) => ({ ...p, assistant_release_mode: e.target.value }))}>
+                <option value="OFF">Off — hidden for everyone</option>
+                <option value="BETA">Beta — allowlisted signed-in customers</option>
+                <option value="ON">On — customers and public visitors</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="modal-assistant-beta">Beta customer emails</label>
+              <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>Comma-separated. Admin accounts are always excluded.</p>
+              <textarea id="modal-assistant-beta" className="form-input" rows={4} maxLength={2000} placeholder="customer@example.com, tester@example.com" value={draft['assistant_beta_user_emails'] ?? ''} onChange={(e) => setDraft((p) => ({ ...p, assistant_beta_user_emails: e.target.value }))} />
             </div>
           </div>
         </Modal>

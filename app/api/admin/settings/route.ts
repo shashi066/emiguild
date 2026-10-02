@@ -59,6 +59,12 @@ export async function PUT(req: NextRequest) {
     if (setting.key === 'daily_spin_reset_hour' && (!/^\d{1,2}$/.test(setting.value) || Number(setting.value) > 23)) {
       return NextResponse.json({ error: 'Spin reset hour must be a whole IST hour from 0 to 23.' }, { status: 400 });
     }
+    if (setting.key === 'assistant_release_mode' && !['OFF', 'BETA', 'ON'].includes(setting.value)) {
+      return NextResponse.json({ error: 'Assistant release mode must be OFF, BETA, or ON.' }, { status: 400 });
+    }
+    if (setting.key === 'assistant_beta_user_emails' && setting.value.length > 2_000) {
+      return NextResponse.json({ error: 'Assistant beta allowlist is too long.' }, { status: 400 });
+    }
     if (setting.key === 'ps5_rental_status' && !PS5_RENTAL_STATUSES.includes(setting.value as (typeof PS5_RENTAL_STATUSES)[number])) {
       return NextResponse.json({ error: 'Invalid PS5 rental status.' }, { status: 400 });
     }

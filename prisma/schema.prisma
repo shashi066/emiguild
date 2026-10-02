@@ -794,3 +794,24 @@ model LifecycleEmailDelivery {
   @@index([status, dispatchedAt])
   @@map("lifecycle_email_deliveries")
 }
+
+model AssistantUsageDaily {
+  guidedRequestCount Int @default(0)
+  guidedWindowStart Int @default(0)
+  guidedWindowCount Int @default(0)
+  date             String
+  actorKey         String
+  requestCount     Int      @default(0)
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  toolCallCount    Int      @default(0)
+  preparedActions  Int      @default(0)
+  completedActions Int      @default(0)
+  errorCount       Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@id([date, actorKey])
+  @@index([date])
+  @@map("assistant_usage_daily")
+}

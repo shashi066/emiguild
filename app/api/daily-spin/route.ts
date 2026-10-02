@@ -4,6 +4,8 @@ import { auth } from '@/auth';
 import crypto from 'crypto';
 import { getSpinSettings, getEffectiveSpinDate, getUserStreakSnapshot, getSpinState } from '@/lib/daily-spin';
 import { encryptNumber } from '@/lib/crypto';
+import { headers } from 'next/headers';
+import { verifyActionToken } from '@/lib/assistant/tokens';
 
 function pickWeightedItem<T extends { weight: number }>(items: T[]) {
   const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
@@ -71,6 +73,13 @@ export async function POST() {
     }
 
     const { spinDate, nextReset } = getEffectiveSpinDate(settings.resetHour);
+    const confirmation = (await headers()).get('x-assistant-confirmation');
+    if (confirmation) {
+      const action = verifyActionToken(confirmation);
+      if (action.action !== 'DAILY_SPIN' || action.userId !== session.user.id || action.spinDate !== spinDate) {
+        return NextResponse.json({ error: 'Spin confirmation expired. Refresh Daily Spin.' }, { status: 409 });
+      }
+    }
 
     const existingSpin = await prisma.userDailySpin.findUnique({
       where: {

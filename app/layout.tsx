@@ -4,6 +4,8 @@ import { ActivityTracker } from '@/components/lifecycle/ActivityTracker';
 import { Navbar } from '@/components/layout/Navbar';
 import { SessionProvider } from '@/components/providers/SessionProvider';
 import { auth } from '@/auth';
+import { canUseAssistant } from '@/lib/assistant/access';
+import { EmiAssistant } from '@/components/assistant/EmiAssistant';
 
 export const metadata: Metadata = {
   title: {
@@ -51,6 +53,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
+  const assistantEnabled = await canUseAssistant(session?.user ?? null);
 
   return (
     <html lang="en">
@@ -59,6 +62,7 @@ export default async function RootLayout({
           <Navbar />
           <ActivityTracker />
           <main>{children}</main>
+          {assistantEnabled && <EmiAssistant />}
         </SessionProvider>
       </body>
     </html>

@@ -2,6 +2,9 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { caseInsensitiveContains } from '@/lib/prisma-search';
 import { auth } from '@/auth';
+import { customerScopedAdmin } from '@/lib/assistant/customer-scope';
+import { verifyActionToken, quoteFingerprint } from '@/lib/assistant/tokens';
+import { quoteBooking } from '@/lib/assistant/quote';
 import { bookingSchema } from '@/lib/validations';
 import { addHours } from '@/lib/utils';
 import { notifyAdminNewBooking, notifyUserNewBooking } from '@/lib/notify';
@@ -143,10 +146,16 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const isAdmin = session.user.role === 'ADMIN';
+  const isAdmin = customerScopedAdmin(session.user.role, req.headers);
 
   try {
     const body = await req.json();
+    const confirmation = req.headers.get('x-assistant-confirmation');
+    const assistantAction = confirmation ? verifyActionToken(confirmation) : null;
+    if (assistantAction && (assistantAction.action !== 'BOOKING' || assistantAction.userId !== session.user.id
+      || quoteFingerprint({ ...body, notes: body.notes || null }) !== quoteFingerprint({ ...assistantAction.draft, notes: assistantAction.draft.notes || null }))) {
+      return NextResponse.json({ error: 'Invalid booking confirmation.' }, { status: 403 });
+    }
     const result = bookingSchema.safeParse(body);
 
     if (!result.success) {
@@ -327,6 +336,13 @@ export async function POST(req: NextRequest) {
     }
 
     const outcome = await runSerializableTransaction(async (tx) => {
+      if (assistantAction?.action === 'BOOKING') {
+        const freshQuote = await quoteBooking(session.user.id, assistantAction.draft, tx);
+        if (quoteFingerprint(freshQuote) !== assistantAction.quoteHash
+          || freshQuote.hourlyRate !== station.hourlyRate || freshQuote.controllerCharge !== controllerCharge) {
+          throw new BookingCreationError('The quote changed. Please review it again.', 409, 'QUOTE_STALE');
+        }
+      }
       const [capacitySetting, allBookingsToday] = await Promise.all([
         tx.setting.findUnique({ where: { key: 'venue_capacity' } }),
         tx.booking.findMany({
@@ -462,6 +478,7 @@ export async function POST(req: NextRequest) {
 
       const booking = await tx.booking.create({
         data: {
+          ...(assistantAction ? { id: `assistant-${assistantAction.jti}` } : {}),
           userId: session.user.id,
           stationId,
           date,

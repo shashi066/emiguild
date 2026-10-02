@@ -538,6 +538,104 @@ h1, h2, h3, h4, h5, h6 {
   text-shadow: none;
 }
 
+/* ── EmiGuild customer assistant ─────────────────────────────────────────── */
+.emi-assistant { position: fixed; right: 20px; bottom: 20px; z-index: 900; }
+.emi-launcher { min-width: 58px; height: 58px; padding: 0 18px; border: 1px solid rgba(0,212,255,.45); border-radius: 999px; background: linear-gradient(135deg,#6c63ff,#00b7df); color: #fff; display: flex; align-items: center; justify-content: center; gap: 9px; font: 700 .82rem Orbitron,sans-serif; cursor: pointer; box-shadow: 0 12px 38px rgba(0,0,0,.42),0 0 24px rgba(0,212,255,.2); }
+.emi-panel { position: absolute; right: 0; bottom: 72px; width: min(390px,calc(100vw - 28px)); height: min(640px,calc(100vh - 120px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(108,99,255,.38); border-radius: 20px; background: rgba(10,12,25,.98); box-shadow: 0 24px 80px rgba(0,0,0,.62); backdrop-filter: blur(20px); }
+.emi-backdrop { position: fixed; inset: 0; border: 0; background: rgba(0,0,0,.28); cursor: default; }
+.emi-header { min-height: 68px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.08); background: linear-gradient(135deg,rgba(108,99,255,.17),rgba(0,212,255,.07)); }
+.emi-header>div:nth-child(2) { display: grid; flex: 1; }
+.emi-header strong { font-family: Orbitron,sans-serif; font-size: .92rem; }
+.emi-header span { color: var(--color-text-muted); font-size: .68rem; }
+.emi-avatar { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.38); border-radius: 50%; background: #f7c9d7; box-shadow: 0 0 18px rgba(255,159,190,.3); }
+.emi-avatar img { display: block; width: 36px; height: 36px; max-width: none; object-fit: cover; }
+.emi-avatar.large { width: 48px; height: 48px; margin: 0 auto 12px; }
+.emi-icon-button { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 9px; color: var(--color-text-secondary); background: transparent; cursor: pointer; }
+.emi-icon-button:hover { background: rgba(255,255,255,.08); color: #fff; }
+.emi-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; }
+.emi-welcome { margin: auto 0; text-align: center; }
+.emi-welcome h2 { font-size: 1.05rem; margin-bottom: 7px; }
+.emi-welcome p { color: var(--color-text-muted); font-size: .78rem; line-height: 1.55; margin: 0 auto 18px; max-width: 290px; }
+.emi-quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.emi-quick-grid button { min-height: 48px; padding: 9px; border: 1px solid rgba(108,99,255,.22); border-radius: 11px; background: rgba(108,99,255,.07); color: var(--color-text-primary); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: .72rem; font-weight: 700; cursor: pointer; }
+.emi-quick-grid button:hover { border-color: rgba(0,212,255,.45); background: rgba(0,212,255,.08); }
+.emi-message { display: flex; flex-direction: column; gap: 8px; max-width: 92%; }
+.emi-message.user { align-self: flex-end; align-items: flex-end; }
+.emi-message.assistant { align-self: stretch; }
+.emi-bubble { padding: 10px 12px; border-radius: 14px; white-space: pre-wrap; font-size: .8rem; line-height: 1.5; }
+.emi-message.user .emi-bubble { background: linear-gradient(135deg,#6259e8,#5149c9); color: #fff; border-bottom-right-radius: 4px; }
+.emi-message.assistant .emi-bubble { align-self: flex-start; background: rgba(255,255,255,.065); color: var(--color-text-primary); border: 1px solid rgba(255,255,255,.07); border-bottom-left-radius: 4px; }
+.emi-card { padding: 12px; border: 1px solid rgba(108,99,255,.22); border-radius: 13px; background: rgba(16,19,37,.92); display: grid; gap: 9px; font-size: .76rem; }
+.emi-card>strong { color: #fff; font: 700 .8rem Orbitron,sans-serif; }
+.emi-card p { color: var(--color-text-secondary); line-height: 1.45; margin: 0; }
+.emi-card-booking_confirmation,.emi-card-spin_confirmation { border-color: rgba(0,230,118,.3); }
+.emi-card-cancellation_confirmation { border-color: rgba(255,170,0,.32); }
+.emi-details { margin: 0; display: grid; gap: 5px; }
+.emi-details>div { display: flex; justify-content: space-between; gap: 12px; }
+.emi-details dt { color: var(--color-text-muted); }
+.emi-details dd { margin: 0; text-align: right; color: var(--color-text-primary); font-weight: 600; }
+.emi-details .emi-total { margin-top: 5px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.09); font-size: .86rem; }
+.emi-details .emi-total dd { color: var(--color-accent-success); }
+.emi-card-list { display: grid; gap: 6px; }
+.emi-card-list>div { padding: 7px 8px; border-radius: 8px; background: rgba(255,255,255,.035); display: grid; gap: 2px; }
+.emi-card-list b { font-size: .75rem; }
+.emi-card-list span { color: var(--color-text-muted); font-size: .68rem; }
+.emi-chip-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.emi-chip-list span { padding: 4px 7px; border-radius: 999px; background: rgba(108,99,255,.12); color: var(--color-text-secondary); font-size: .65rem; }
+.emi-link-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.emi-link-grid a { padding: 7px; border-radius: 8px; text-align: center; background: rgba(108,99,255,.1); color: var(--color-accent-secondary); font-weight: 700; }
+.emi-typing { align-self: flex-start; display: flex; gap: 4px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.06); }
+.emi-typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--color-text-muted); animation: emi-bounce 1s infinite ease-in-out; }
+.emi-typing span:nth-child(2) { animation-delay: .14s; }.emi-typing span:nth-child(3) { animation-delay: .28s; }
+.emi-composer { padding: 11px; border-top: 1px solid rgba(255,255,255,.08); display: flex; gap: 8px; }
+.emi-composer input { min-width: 0; flex: 1; padding: 11px 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; background: rgba(255,255,255,.045); color: #fff; outline: none; font-size: .8rem; }
+.emi-composer input:focus { border-color: rgba(0,212,255,.45); }
+.emi-composer button { width: 40px; border: 0; border-radius: 10px; display: grid; place-items: center; color: #fff; background: #6c63ff; cursor: pointer; }
+.emi-composer button:disabled { opacity: .45; cursor: not-allowed; }
+.emi-direct-links { padding: 0 12px 10px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.emi-direct-links a { color: var(--color-text-muted); font-size: .62rem; }
+.emi-direct-links a:hover { color: var(--color-accent-secondary); }
+.emi-spin { animation: spin .8s linear infinite; }
+.emi-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.emi-retry { align-self: center; margin: -2px 12px 8px; }
+.emi-flow h2 { font-size: 1rem; margin: 0; line-height: 1.5; }
+.emi-home-welcome { display: grid; gap: 3px; }
+.emi-home-welcome p { margin: 0; line-height: 1.4; }
+.emi-home-welcome p:first-child { color: #fff; font: 700 .92rem Orbitron,sans-serif; }
+.emi-home-welcome p:last-child { color: var(--color-text-secondary); font-size: .78rem; }
+.emi-flow>p { margin: 0; font-size: .78rem; color: var(--color-text-secondary); }
+.emi-flow-nav { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.emi-flow-nav button,.emi-type-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: var(--color-text-secondary); border: 0; padding: 9px; cursor: pointer; font-size: .75rem; }
+.emi-options { display: grid; gap: 8px; }
+.emi-options-home { grid-template-columns: 1fr 1fr; }
+.emi-options button,.emi-fields button,.emi-inline-form button,.emi-error button,.emi-change button { padding: 12px; min-height: 44px; border-radius: 10px; border: 1px solid rgba(108,99,255,.35); background: rgba(108,99,255,.1); color: #fff; cursor: pointer; text-align: left; }
+.emi-options button { display: grid; gap: 5px; }
+.emi-options button:hover { border-color: #00d4ff; background: rgba(0,212,255,.1); }
+.emi-options strong { font-size: .8rem; }
+.emi-options span { font-size: .73rem; color: var(--color-text-secondary); line-height: 1.5; }
+.emi-fields { display: grid; gap: 12px; }
+.emi-fields label { display: grid; gap: 6px; font-size: .78rem; }
+.emi-fields select,.emi-fields input,.emi-inline-form input { width: 100%; min-width: 0; padding: 11px; border: 1px solid rgba(255,255,255,.18); border-radius: 9px; background: #171a2b; color: #fff; font: inherit; font-size: .8rem; }
+.emi-inline-form { display: flex; gap: 6px; }
+.emi-error { padding: 10px; border: 1px solid #b87c42; border-radius: 10px; color: #ffd6a6; font-size: .8rem; }
+.emi-change { font-size: .75rem; color: var(--color-text-secondary); }
+.emi-change summary { cursor: pointer; padding: 8px 0; }
+.emi-change button { margin: 3px; font-size: .72rem; }
+.emi-assistant button:disabled { opacity: .5; cursor: not-allowed; }
+.emi-assistant :is(button,a,input,select,summary):focus-visible { outline: 2px solid #00d4ff; outline-offset: 3px; }
+.emi-flow .emi-status { color: #b6afff; font-size: .72rem; }
+@media (max-width:600px) { .emi-panel { height: min(72dvh,680px); z-index: 2; } }
+@keyframes emi-bounce { 0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-3px);opacity:1} }
+
+@media (max-width: 600px) {
+  .emi-assistant { right: 12px; bottom: max(12px,env(safe-area-inset-bottom)); }
+  .emi-panel { position: fixed; inset: auto 0 0; width: 100%; height: min(72vh,680px); border-radius: 22px 22px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .emi-launcher span { display: none; }.emi-launcher { min-width: 56px; width: 56px; padding: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .emi-typing span,.emi-spin { animation: none !important; }
+}
+
 .hero-ps5-rental-btn svg {
   color: #ffd4da !important;
   filter: none;
