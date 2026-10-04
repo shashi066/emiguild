@@ -1,4 +1,5 @@
 .header:global(.hero-eyebrow-row) {
+  --eyebrow-height: calc(0.8rem * 1.6 + 14px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -10,7 +11,7 @@
 .button {
   --neon: #67e8f9; --icon: #cffafe; --inner: #22d3ee38; --outer: #0891b255; --halo: #67e8f942;
   position: relative; z-index: 2; justify-self: end;
-  display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px;
+  display: inline-flex; align-items: center; justify-content: center; width: var(--eyebrow-height); height: var(--eyebrow-height);
   font-size: 12px; font-weight: 800; white-space: nowrap;
   border: 2px solid var(--neon); border-radius: 999px;
   background: rgba(2, 6, 23, 0.32);
@@ -26,20 +27,17 @@
 }
 .button svg { color: var(--icon); transform-origin: 50% 15%; animation: ring 900ms ease-out 1; }
 .badge {
-  position: absolute; top: -7px; right: -7px;
-  display: grid; place-items: center; min-width: 23px; height: 23px; padding: 0 5px;
+  position: absolute; top: -5px; right: -5px;
+  display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 3px;
   border: 2px solid #07111d; border-radius: 999px;
   background: #ecfeff; color: #083344;
-  font-size: 11px; font-weight: 900; line-height: 1;
+  font-size: 9px; font-weight: 900; line-height: 1;
   box-shadow: 0 0 5px #fff, 0 0 12px #67e8f9;
 }
 @keyframes ring { 0%,100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-7deg); } 80% { transform: rotate(4deg); } }
 .button:focus-visible { outline: 3px solid #e2cbff; outline-offset: 4px; }
 @media (hover: hover) and (pointer: fine) { .button:hover { transform: translateY(-2px) scale(1.04); box-shadow: inset 0 0 10px var(--inner), 0 0 11px var(--neon), 0 0 26px var(--outer); } }
 .button:active { transform: scale(.96); }
-@media (max-width: 800px) {
-  .button { width: 54px; height: 54px; }
-}
 @media (prefers-reduced-motion: reduce), (update: slow) {
   .button, .button::before, .button svg { animation: none; transition: none; transform: none !important; }
 }

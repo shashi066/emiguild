@@ -47,7 +47,7 @@ export default function HomeVaultButton() {
 
   const label = count ? `Vault — ${count} pending ${count === 1 ? 'action' : 'actions'}` : 'Vault — rewards and game progress';
   return <Link href="/vault" className={styles.button} aria-label={label} title={label}>
-    <Bell size={26} aria-hidden="true" />
+    <Bell size={14} aria-hidden="true" />
     {count > 0 && <span className={styles.badge} aria-hidden="true">{count > 9 ? '9+' : count}</span>}
   </Link>;
 }

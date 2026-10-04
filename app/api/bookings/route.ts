@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     ];
   }
 
-  const [bookings, total, dayRevenue] = await Promise.all([
+  const [bookings, total, dayRevenue, dayConfirmedBookings] = await Promise.all([
     prisma.booking.findMany({
       where,
       include: {
@@ -117,6 +117,9 @@ export async function GET(req: NextRequest) {
           _sum: { totalPrice: true },
         })
       : Promise.resolve(null),
+    isAdmin && date
+      ? prisma.booking.count({ where: { date, status: 'CONFIRMED' } })
+      : Promise.resolve(null),
   ]);
 
   const fnbSubtotals = isAdmin
@@ -136,6 +139,7 @@ export async function GET(req: NextRequest) {
     total,
     page,
     limit,
+    dayConfirmedBookings,
     dayRevenue: isAdmin && date
       ? dayRevenue?._sum.totalPrice ?? 0
       : null,

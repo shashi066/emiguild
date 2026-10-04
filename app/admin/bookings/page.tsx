@@ -998,6 +998,7 @@ export default function AdminBookingsPage() {
   const [bookings, setBookings]         = useState<Booking[]>([]);
   const [total, setTotal]               = useState(0);
   const [dayRevenue, setDayRevenue]     = useState<{ date: string; amount: number } | null>(null);
+  const [dayConfirmedBookings, setDayConfirmedBookings] = useState<{ date: string; count: number } | null>(null);
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -1048,6 +1049,11 @@ export default function AdminBookingsPage() {
         fnbSubtotal: Number.isFinite(booking.fnbSubtotal) ? booking.fnbSubtotal : 0,
       })));
       setTotal(data.total ?? 0);
+      setDayConfirmedBookings(
+        dateFilter && typeof data.dayConfirmedBookings === 'number'
+          ? { date: dateFilter, count: data.dayConfirmedBookings }
+          : null,
+      );
       setDayRevenue(
         dateFilter && typeof data.dayRevenue === 'number'
           ? { date: dateFilter, amount: data.dayRevenue }
@@ -1065,6 +1071,15 @@ export default function AdminBookingsPage() {
     return () => clearTimeout(timer);
   }, [fetchBookings]);
 
+  const updateDayConfirmedBookings = (previous?: Booking, updated?: Booking) => {
+    setDayConfirmedBookings((current) => {
+      if (!current) return current;
+      const wasConfirmed = previous?.date === current.date && previous.status === 'CONFIRMED';
+      const isConfirmed = updated?.date === current.date && updated.status === 'CONFIRMED';
+      return { ...current, count: Math.max(0, current.count - Number(wasConfirmed) + Number(isConfirmed)) };
+    });
+  };
+
   const handleStatusChange = async (id: string, newStatus: string, adminComment?: string) => {
     setUpdatingId(id);
     setError('');
@@ -1076,6 +1091,9 @@ export default function AdminBookingsPage() {
       const data = await res.json();
       if (res.ok) {
         const previousBooking = bookings.find((booking) => booking.id === id);
+        if (previousBooking) {
+          updateDayConfirmedBookings(previousBooking, { ...previousBooking, status: newStatus as Booking['status'] });
+        }
         setBookings((prev) => prev.map((b) => b.id === id ? { ...b, status: newStatus as Booking['status'], adminComment: adminComment ?? b.adminComment } : b));
         if (newStatus === 'CANCELLED' && previousBooking && previousBooking.status !== 'CANCELLED') {
           setDayRevenue((current) => (
@@ -1153,6 +1171,7 @@ export default function AdminBookingsPage() {
       const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
       if (res.ok) {
         const deletedBooking = bookings.find((booking) => booking.id === id);
+        updateDayConfirmedBookings(deletedBooking);
         setBookings((prev) => prev.filter((b) => b.id !== id));
         if (deletedBooking && deletedBooking.status !== 'CANCELLED') {
           setDayRevenue((current) => (
@@ -1167,6 +1186,7 @@ export default function AdminBookingsPage() {
 
   const handleEditSaved = (updated: Booking) => {
     const previousBooking = bookings.find((booking) => booking.id === updated.id);
+    updateDayConfirmedBookings(previousBooking, updated);
     setBookings((prev) => prev.map((b) => b.id === updated.id ? { ...b, ...updated } : b));
     setDayRevenue((current) => {
       if (!current || !previousBooking) return current;
@@ -1266,6 +1286,32 @@ export default function AdminBookingsPage() {
             <span>Day Earned</span>
             <strong style={{ color: 'var(--color-accent-success)', fontFamily: 'Orbitron, sans-serif', fontSize: '0.8rem' }}>
               {dayRevenue?.date === dateFilter ? formatCurrency(dayRevenue.amount) : '...'}
+            </strong>
+          </div>
+        )}
+        {dateFilter && (
+          <div
+            id="selected-day-confirmed-bookings"
+            aria-live="polite"
+            title={`Confirmed bookings for ${formatDate(dateFilter)}, excluding pending, checked-in, and cancelled bookings`}
+            style={{
+              minHeight: 36,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '0 11px',
+              border: '1px solid rgba(108, 99, 255, 0.3)',
+              borderRadius: 6,
+              background: 'rgba(108, 99, 255, 0.1)',
+              color: 'var(--color-text-secondary)',
+              fontSize: '0.76rem',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <BookOpen size={14} style={{ color: 'var(--color-accent-primary)' }} />
+            <span>Confirmed Bookings</span>
+            <strong style={{ color: 'var(--color-accent-primary)', fontFamily: 'Orbitron, sans-serif', fontSize: '0.8rem' }}>
+              {dayConfirmedBookings?.date === dateFilter ? dayConfirmedBookings.count : '...'}
             </strong>
           </div>
         )}
