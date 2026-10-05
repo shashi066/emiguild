@@ -6,6 +6,7 @@ import { addIndiaCalendarDays, getIndiaClock } from '../../lib/public-booking-ti
 import { createActionToken, verifyActionToken } from '../../lib/assistant/tokens';
 import { getEffectiveSpinDate } from '../../lib/daily-spin';
 import type { GuidedState } from '../../types/assistant';
+import { getAssistantUsage, startAssistantRequest, recordAssistantUsage } from '../../lib/assistant/usage';
 
 const base = process.env.ASSISTANT_TEST_URL;
 test('assistant HTTP flows against a disposable database', { skip: !base }, async (t) => {
@@ -51,6 +52,70 @@ test('assistant HTTP flows against a disposable database', { skip: !base }, asyn
   const act = (token: string, cookie = adminCookie) => api('/api/assistant/actions', { token }, cookie);
   const draft: GuidedState = { task: 'BOOK', stationId: station.id, date, startTime: '18:00', duration: 1, extraControllers: 1, notes: 'Test FC', gameChosen: true };
   let bookingId = '';
+
+  await t.test('AI settings require admin authorization, hide the key, and never leak through public settings', async () => {
+    const url = `${base}/api/admin/assistant-config`;
+    const config = { model: 'gpt-6-luna', dailyLimit: 10, apiKey: 'sk-integration-test-only-key' };
+    const save = (body: unknown, cookie = adminCookie, origin = base!) => fetch(url, { method: 'PUT', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal((await fetch(url)).status, 403);
+    assert.equal((await save(config, otherCookie)).status, 403);
+    assert.equal((await save(config, adminCookie, 'https://other.test')).status, 403);
+    const saved = await save(config);
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await saved.json(), { model: 'gpt-6-luna', dailyLimit: 10, keyConfigured: true });
+    const stored = await prisma.setting.findUniqueOrThrow({ where: { key: 'assistant_ai_config' } });
+    assert.ok(stored.value.includes('encryptedApiKey')); assert.ok(!stored.value.includes(config.apiKey));
+    assert.ok(!(await (await fetch(url, { headers: { Cookie: adminCookie } })).text()).includes(config.apiKey));
+    const publicSettings = await (await fetch(`${base}/api/settings`)).json();
+    assert.equal(publicSettings.assistant_ai_config, undefined);
+    const bookingPage = await fetch(`${base}/book`);
+    assert.equal(bookingPage.status, 200);
+    const bookingHtml = await bookingPage.text();
+    assert.ok(!bookingHtml.includes('assistant_ai_config'));
+    assert.ok(!bookingHtml.includes('encryptedApiKey'));
+    assert.ok(!bookingHtml.includes(config.apiKey));
+    const generic = await (await fetch(`${base}/api/admin/settings`, { headers: { Cookie: adminCookie } })).text();
+    assert.ok(!generic.includes('assistant_ai_config'));
+    const bypass = await fetch(`${base}/api/admin/settings`, { method: 'PUT', headers: { Cookie: adminCookie, 'Content-Type': 'application/json' }, body: JSON.stringify([{ key: 'assistant_ai_config', value: 'plaintext' }]) });
+    assert.equal(bypass.status, 400);
+    assert.equal((await save({ model: 'test', dailyLimit: 0 })).status, 400);
+    await save({ model: 'gpt-6-luna', dailyLimit: 7 });
+    assert.equal((await (await fetch(`${base}/api/assistant/usage`, { headers: { Cookie: adminCookie } })).json()).limit, 7);
+    await save({ model: 'gpt-6-luna', dailyLimit: 10, clearApiKey: true });
+    assert.equal((await api('/api/assistant/chat', { message: 'help' })).response.status, 503);
+    const usageBefore = await getAssistantUsage(`user:${admin.id}`);
+    assert.equal(usageBefore.remaining, 10);
+  });
+  await t.test('AI requires sign-in, while usage reads are non-mutating', async () => {
+    assert.equal((await api('/api/assistant/chat', { message: 'help' }, '')).response.status, 401);
+    assert.equal((await fetch(`${base}/api/assistant/usage`)).status, 401);
+    const count = await prisma.assistantUsageDaily.count();
+    const response = await fetch(`${base}/api/assistant/usage`, { headers: { Cookie: otherCookie } });
+    assert.equal(response.status, 200); assert.equal((await response.json()).remaining, 10);
+    assert.equal(await prisma.assistantUsageDaily.count(), count);
+  });
+  await t.test('customer and admin pages render with the assistant and AI settings controls', async () => {
+    const home = await fetch(`${base}/`);
+    assert.equal(home.status, 200); assert.match(await home.text(), /Ask Emiily/);
+    const adminPage = await fetch(`${base}/admin/settings`, { headers: { Cookie: adminCookie } });
+    assert.equal(adminPage.status, 200);
+    // The settings page fetches its data in the browser; its client component must compile.
+    assert.match(await adminPage.text(), /Manage pricing and cafe configuration/);
+  });
+  await t.test('real database reservations cap concurrent requests and reset at midnight IST', async () => {
+    const actorKey = `user:concurrency-${admin.id}`;
+    const results = await Promise.all(Array.from({ length: 15 }, () => startAssistantRequest(actorKey, 10)));
+    assert.equal(results.filter((r) => r.allowed).length, 10);
+    const usage = await getAssistantUsage(actorKey);
+    assert.equal(usage.remaining, 0);
+    assert.equal((await prisma.assistantUsageDaily.findUniqueOrThrow({ where: { date_actorKey: { date: usage.date, actorKey } } })).requestCount, 10);
+    assert.equal((await getAssistantUsage(actorKey, new Date(), 20)).remaining, 10, 'raising limit preserves usage');
+    const midnight = new Date(`${addIndiaCalendarDays(usage.date, 1)}T00:00:00+05:30`);
+    const next = await startAssistantRequest(actorKey, 10, midnight);
+    assert.equal(next.remaining, 9); assert.notEqual(next.date, usage.date);
+    await recordAssistantUsage(actorKey, { outputTokens: 99 }, usage.date);
+    assert.equal((await prisma.assistantUsageDaily.findUniqueOrThrow({ where: { date_actorKey: { date: usage.date, actorKey } } })).outputTokens, 99);
+  });
 
   await t.test('guests can browse and retain normalized intent at sign-in', async () => {
     const result = await guide(draft, '');
@@ -128,7 +193,7 @@ test('assistant HTTP flows against a disposable database', { skip: !base }, asyn
   });
   await t.test('AI exhaustion does not consume or disable guided allowance', async () => {
     const today = getIndiaClock().date;
-    await prisma.assistantUsageDaily.update({ where: { date_actorKey: { date: today, actorKey: `user:${admin.id}` } }, data: { requestCount: 100 } });
+    await prisma.assistantUsageDaily.update({ where: { date_actorKey: { date: today, actorKey: `user:${admin.id}` } }, data: { requestCount: 10 } });
     assert.equal((await api('/api/assistant/chat', { message: 'hello' })).response.status, 429);
     assert.equal((await guide({ task: 'PRICES' })).response.status, 200);
     await prisma.assistantUsageDaily.update({ where: { date_actorKey: { date: today, actorKey: `user:${admin.id}` } }, data: { guidedWindowStart: Math.floor(Date.now() / 60000), guidedWindowCount: 60 } });

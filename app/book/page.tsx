@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import BookPageInner from './BookPageInner';
 import { prisma } from '@/lib/prisma';
+import { SPECIAL_OPENING_DATE_KEY, SPECIAL_OPENING_ENABLED_KEY, SPECIAL_OPENING_TIME_KEY } from '@/lib/public-booking-time';
 
 export const metadata = {
   title: 'Book a Gaming Session',
@@ -14,7 +15,11 @@ export default async function BookPage() {
   const serverNow = new Date().toISOString();
 
   // Fetch settings on the server side to prevent banner pop-in / late loading
-  const settings = await prisma.setting.findMany();
+  // These values are serialized into client props: use an explicit public list.
+  const settings = await prisma.setting.findMany({
+    where: { key: { in: ['controller_price', SPECIAL_OPENING_DATE_KEY, SPECIAL_OPENING_ENABLED_KEY, SPECIAL_OPENING_TIME_KEY] } },
+    select: { key: true, value: true },
+  });
   const initialSettings: Record<string, string> = {};
   for (const s of settings) {
     initialSettings[s.key] = s.value;

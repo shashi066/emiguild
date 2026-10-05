@@ -1,7 +1,11 @@
 export type AssistantMessage = {
   role: 'user' | 'assistant';
   content: string;
+  links?: Array<{ label: string; href: string }>;
 };
+
+export type AssistantAllowance = { date: string; limit: number; remaining: number; resetsAt: string };
+export type AssistantAnswer = { content: string; links: Array<{ label: string; href: string }> };
 
 export type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
 
@@ -52,6 +56,8 @@ export type AssistantCard = {
 };
 
 export type AssistantStreamEvent =
+  | { type: 'answer'; answer: AssistantAnswer }
+  | { type: 'usage'; usage: AssistantAllowance }
   | { type: 'flow'; state: GuidedState }
   | { type: 'status'; message: string }
   | { type: 'text_delta'; delta: string }

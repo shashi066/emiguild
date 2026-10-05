@@ -34,7 +34,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const settings = await prisma.setting.findMany({
-    where: { key: { notIn: Array.from(INTERNAL_SETTING_KEYS) } },
+    where: { NOT: { key: { startsWith: 'assistant_ai_' } }, key: { notIn: Array.from(INTERNAL_SETTING_KEYS) } },
     orderBy: { key: 'asc' },
   });
   return NextResponse.json({ settings });
@@ -52,7 +52,7 @@ export async function PUT(req: NextRequest) {
   if (!result.success) {
     return NextResponse.json({ error: 'Invalid data', issues: result.error.issues }, { status: 400 });
   }
-  if (result.data.some((setting) => INTERNAL_SETTING_KEYS.has(setting.key))) {
+  if (result.data.some((setting) => INTERNAL_SETTING_KEYS.has(setting.key) || setting.key.startsWith('assistant_ai_'))) {
     return NextResponse.json({ error: 'Internal settings cannot be edited.' }, { status: 400 });
   }
   for (const setting of result.data) {

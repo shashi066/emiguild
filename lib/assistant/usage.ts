@@ -3,8 +3,10 @@ import { prisma } from '@/lib/prisma';
 import { addIndiaCalendarDays, getIndiaClock } from '@/lib/public-booking-time';
 import { runSerializableTransaction } from '@/lib/prisma-transaction';
 import { guidedWindow } from './flow-state';
+import { DEFAULT_AI_DAILY_LIMIT, getAssistantConfigSummary } from './config';
 
 export const ASSISTANT_VISITOR_COOKIE = 'emiguild_assistant_visitor';
+export const ASSISTANT_AI_DAILY_LIMIT = DEFAULT_AI_DAILY_LIMIT;
 
 export async function startGuidedRequest(actorKey: string) {
   const date = getIndiaClock().date;
@@ -27,23 +29,59 @@ function positiveInt(value: string | undefined, fallback: number) {
 }
 
 export function assistantActor(userId: string | null, visitorId: string) {
-  if (userId) return { actorKey: `user:${userId}`, limit: positiveInt(process.env.ASSISTANT_USER_DAILY_LIMIT, 100) };
+  if (userId) return { actorKey: `user:${userId}`, limit: ASSISTANT_AI_DAILY_LIMIT };
   const digest = crypto.createHash('sha256').update(visitorId).digest('hex');
-  return { actorKey: `anon:${digest}`, limit: positiveInt(process.env.ASSISTANT_ANONYMOUS_DAILY_LIMIT, 30) };
+  return { actorKey: `anon:${digest}`, limit: 0 };
 }
 
-export async function startAssistantRequest(actorKey: string, limit: number) {
-  const date = getIndiaClock().date;
-  const usage = await prisma.assistantUsageDaily.upsert({
-    where: { date_actorKey: { date, actorKey } },
-    create: { date, actorKey, requestCount: 1 },
-    update: { requestCount: { increment: 1 } },
+export function assistantAllowance(date: string, requestCount: number, limit = DEFAULT_AI_DAILY_LIMIT) {
+  return {
+    date, limit,
+    remaining: Math.max(0, limit - requestCount),
+    resetsAt: new Date(`${addIndiaCalendarDays(date, 1)}T00:00:00+05:30`).toISOString(),
+  };
+}
+
+export async function getAssistantUsage(actorKey: string, now = new Date(), limit?: number) {
+  limit ??= (await getAssistantConfigSummary()).dailyLimit;
+  const date = getIndiaClock(now).date;
+  const row = await prisma.assistantUsageDaily.findUnique({
+    where: { date_actorKey: { date, actorKey } }, select: { requestCount: true },
+  });
+  return assistantAllowance(date, row?.requestCount ?? 0, limit);
+}
+
+export async function startAssistantRequest(actorKey: string, limit: number, now = new Date()) {
+  if (!actorKey.startsWith('user:')) throw new Error('AI chat requires sign-in.');
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid AI allowance.');
+  const date = getIndiaClock(now).date;
+  const { reserved, usage } = await runSerializableTransaction(async (tx) => {
+    await tx.assistantUsageDaily.upsert({
+      where: { date_actorKey: { date, actorKey } },
+      create: { date, actorKey }, update: {},
+    });
+    // Conditional write plus transaction prevents overspend and rolls back on DB failure.
+    const reserved = await tx.assistantUsageDaily.updateMany({
+      where: { date, actorKey, requestCount: { lt: limit } },
+      data: { requestCount: { increment: 1 } },
+    });
+    const usage = await tx.assistantUsageDaily.findUniqueOrThrow({
+      where: { date_actorKey: { date, actorKey } }, select: { requestCount: true },
+    });
+    return { reserved, usage };
   });
   const retentionDate = addIndiaCalendarDays(date, -90);
   if (retentionDate) {
     void prisma.assistantUsageDaily.deleteMany({ where: { date: { lt: retentionDate } } }).catch(() => undefined);
   }
-  return { allowed: usage.requestCount <= limit, remaining: Math.max(0, limit - usage.requestCount) };
+  return { allowed: reserved.count === 1, ...assistantAllowance(date, usage.requestCount, limit) };
+}
+
+// Only used when a request was cancelled before provider dispatch.
+export async function releaseAssistantReservation(actorKey: string, date: string) {
+  return prisma.assistantUsageDaily.updateMany({
+    where: { date, actorKey, requestCount: { gt: 0 } }, data: { requestCount: { decrement: 1 } },
+  });
 }
 
 export async function recordAssistantUsage(actorKey: string, counters: {
@@ -53,8 +91,7 @@ export async function recordAssistantUsage(actorKey: string, counters: {
   preparedActions?: number;
   completedActions?: number;
   errorCount?: number;
-}) {
-  const date = getIndiaClock().date;
+}, date = getIndiaClock().date) {
   const data = {
     inputTokens: { increment: Math.max(0, counters.inputTokens ?? 0) },
     outputTokens: { increment: Math.max(0, counters.outputTokens ?? 0) },

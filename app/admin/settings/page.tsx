@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Save, CheckCircle, AlertCircle,
-  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor, Package, Bot,
+  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor, Package, Bot, Search,
 } from 'lucide-react';
 import {
   SPECIAL_OPENING_DATE_KEY,
@@ -14,9 +14,15 @@ import {
   getIndiaClock,
 } from '@/lib/public-booking-time';
 import { parsePs5RentalPrice, resolvePs5RentalAvailability } from '@/lib/ps5-rental';
+import { AssistantAISettings } from '@/components/admin/AssistantAISettings';
 
 type Setting = { id: string; key: string; value: string; label: string | null };
 type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | 'ps5_rental_status' | 'ps5_rental_price' | 'ps5_rental_controller' | 'assistant' | null;
+type SettingsCategory = 'all' | 'venue' | 'rentals' | 'assistant';
+const SETTINGS_TABS: Array<{ id: SettingsCategory; label: string }> = [
+  { id: 'all', label: 'All settings' }, { id: 'venue', label: 'Venue & Booking' },
+  { id: 'rentals', label: 'PS5 Rentals' }, { id: 'assistant', label: 'Emiily AI' },
+];
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AdminSettingsPage() {
@@ -28,6 +34,8 @@ export default function AdminSettingsPage() {
   const [modalId, setModalId] = useState<ModalId>(null);
   const [draft,   setDraft]   = useState<Record<string, string>>({});
   const [saving,  setSaving]  = useState(false);
+  const [category, setCategory] = useState<SettingsCategory>('all');
+  const [search, setSearch] = useState('');
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const showToast = (type: 'success' | 'error', msg: string) => {
@@ -113,6 +121,15 @@ export default function AdminSettingsPage() {
   const ps5RentalPrice            = settings['ps5_rental_price_per_day']     ?? '1200';
   const ps5ExtraControllerPrice   = settings['ps5_rental_extra_controller']  ?? '500';
   const assistantReleaseMode      = settings['assistant_release_mode'] ?? 'OFF';
+  const normalizedSearch = search.trim().toLowerCase();
+  const visible = (group: Exclude<SettingsCategory, 'all'>, terms: string) =>
+    (category === 'all' || category === group) && (!normalizedSearch || terms.toLowerCase().includes(normalizedSearch));
+  const visibleCount = [
+    ['venue', 'extra controller price booking charge'], ['venue', 'venue capacity simultaneous booking screens'],
+    ['venue', 'early opening hours override'], ['venue', 'live station availability homepage'],
+    ['rentals', 'ps5 rental service status'], ['rentals', 'ps5 rental daily price'], ['rentals', 'ps5 extra controller price per day'],
+    ['assistant', 'emiily ai api key model daily request limit'], ['assistant', 'emi assistant release mode beta allowlist users'],
+  ].filter(([group, terms]) => visible(group as Exclude<SettingsCategory, 'all'>, terms)).length;
 
   // Draft variants (inside modal)
   const draftSpecialDate    = draft[SPECIAL_OPENING_DATE_KEY];
@@ -196,28 +213,35 @@ export default function AdminSettingsPage() {
       {loading ? (
         <div className="loading-state"><div className="spinner" />Loading settings…</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', maxWidth: 680 }}>
+        <div className="admin-settings-shell">
+          <div className="admin-settings-toolbar">
+            <div className="admin-settings-search"><Search size={17} aria-hidden="true" /><input aria-label="Search settings" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search settings…" />{search && <button type="button" onClick={() => setSearch('')} aria-label="Clear settings search"><X size={15} /></button>}</div>
+            <div className="admin-settings-tabs" role="tablist" aria-label="Settings categories">{SETTINGS_TABS.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={category === tab.id} className={category === tab.id ? 'active' : ''} onClick={() => setCategory(tab.id)}>{tab.label}</button>)}</div>
+          </div>
+          <div className="admin-settings-result-count">{visibleCount} setting{visibleCount === 1 ? '' : 's'}</div>
+          <div className="admin-settings-grid">
+          {visible('assistant', 'emiily ai api key model daily request limit') && <AssistantAISettings />}
 
           {/* ── Controller Price ── */}
-          <SettingCard
+          {visible('venue', 'extra controller price booking charge') && <SettingCard
             icon={<Gamepad2 size={20} />}
             title="Extra Controller Price"
             description="Charge per extra controller per booking. 1 controller is always included free."
             value={`₹${controllerPrice} / controller`}
             onEdit={() => openModal('controller_price')}
-          />
+          />}
 
           {/* ── Venue Capacity ── */}
-          <SettingCard
+          {visible('venue', 'venue capacity simultaneous booking screens') && <SettingCard
             icon={<Monitor size={20} />}
             title="Venue Capacity"
             description="Max concurrent bookings allowed at the same time (limited by number of TVs / screens)."
             value={`${venueCapacity} simultaneous booking${parseInt(venueCapacity) === 1 ? '' : 's'}`}
             onEdit={() => openModal('venue_capacity')}
-          />
+          />}
 
           {/* ── Early Hours Override ── */}
-          <SettingCard
+          {visible('venue', 'early opening hours override') && <SettingCard
             icon={<Clock size={20} />}
             title="Early Hours Override"
             description="Temporarily open the venue earlier than normal hours for today only."
@@ -234,55 +258,56 @@ export default function AdminSettingsPage() {
               : undefined
             }
             onEdit={() => openModal('opening_boost')}
-          />
+          />}
 
           {/* ── Show Stations Availability ── */}
-          <SettingCard
+          {visible('venue', 'live station availability homepage') && <SettingCard
             icon={<Monitor size={20} />}
             title="User Live Station Availability"
             description="Enable or disable showing the Live Station Availability timeline block on the user home page."
             value={showStationsAvailability ? 'Enabled — Visible to users' : 'Disabled — Hidden from users'}
             badge={showStationsAvailability ? 'active' : undefined}
             onEdit={() => openModal('stations_availability')}
-          />
+          />}
 
           {/* ── PS5 Rental Enabled ── */}
-          <SettingCard
+          {visible('rentals', 'ps5 rental service status') && <SettingCard
             icon={<Package size={20} />}
             title="PS5 Rental Service"
             description="Enable or disable the PS5 home rental service for users."
             value={ps5RentalStatus === 'AVAILABLE' ? 'Available — Accepting orders' : ps5RentalStatus === 'COMING_SOON' ? 'Coming Soon — Visible, not accepting orders' : 'Disabled — Hidden from homepage'}
             badge={ps5RentalStatus === 'AVAILABLE' ? 'active' : undefined}
             onEdit={() => openModal('ps5_rental_status')}
-          />
+          />}
 
           {/* ── PS5 Rental Price ── */}
-          <SettingCard
+          {visible('rentals', 'ps5 rental daily price') && <SettingCard
             icon={<Package size={20} />}
             title="PS5 Rental Price (Per Day)"
             description="Daily rental price for PS5 console with 1 controller included."
             value={`₹${ps5RentalPrice} / day`}
             onEdit={() => openModal('ps5_rental_price')}
-          />
+          />}
 
           {/* ── PS5 Extra Controller Price ── */}
-          <SettingCard
+          {visible('rentals', 'ps5 extra controller price per day') && <SettingCard
             icon={<Gamepad2 size={20} />}
             title="PS5 Extra Controller (Per Day)"
             description="Additional charge per extra controller per day of rental."
             value={`₹${ps5ExtraControllerPrice} / controller / day`}
             onEdit={() => openModal('ps5_rental_controller')}
-          />
+          />}
 
-          <SettingCard
+          {visible('assistant', 'emi assistant release mode beta allowlist users') && <SettingCard
             icon={<Bot size={20} />}
             title="Emi Assistant"
             description="Control the customer assistant rollout. Beta is restricted to the email allowlist."
             value={assistantReleaseMode === 'ON' ? 'On — all customers and guests' : assistantReleaseMode === 'BETA' ? 'Beta — allowlisted customers' : 'Off'}
             badge={assistantReleaseMode === 'ON' ? 'active' : assistantReleaseMode === 'BETA' ? 'warning' : undefined}
             onEdit={() => openModal('assistant')}
-          />
-
+          />}
+          {!visibleCount && <div className="admin-settings-empty"><Search size={26} /><strong>No matching settings</strong><span>Try another search or choose a different category.</span><button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setCategory('all'); }}>Clear filters</button></div>}
+          </div>
         </div>
       )}
 
@@ -683,7 +708,7 @@ export default function AdminSettingsPage() {
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="modal-assistant-beta">Beta customer emails</label>
-              <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>Comma-separated. Admin accounts are always excluded.</p>
+              <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>Comma-separated. Admin accounts follow the same allowlist and public-help restrictions.</p>
               <textarea id="modal-assistant-beta" className="form-input" rows={4} maxLength={2000} placeholder="customer@example.com, tester@example.com" value={draft['assistant_beta_user_emails'] ?? ''} onChange={(e) => setDraft((p) => ({ ...p, assistant_beta_user_emails: e.target.value }))} />
             </div>
           </div>
@@ -705,7 +730,7 @@ function SettingCard({
   onEdit: () => void;
 }) {
   return (
-    <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)', padding: '20px 24px' }}>
+    <div className="card admin-setting-card">
       <span style={{ color: 'var(--color-accent-primary)', flexShrink: 0 }}>{icon}</span>
 
       <div style={{ flex: 1, minWidth: 0 }}>

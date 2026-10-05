@@ -7,7 +7,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { MessageCircle, X, ArrowLeft, RotateCcw, Send } from 'lucide-react';
-import type { AssistantCard, AssistantMessage, BookingQuote, GuidedState, GuidedView } from '@/types/assistant';
+import type { AssistantAllowance, AssistantCard, AssistantMessage, BookingQuote, GuidedState, GuidedView } from '@/types/assistant';
+import { PUBLIC_HELP_LINKS } from '@/lib/assistant/public-help';
 import { changeSelection, dateLabel, timeLabel, priceLabel, guidedStateSchema } from '@/lib/assistant/flow-state';
 import { AssistantEventParser } from '@/lib/assistant/stream';
 
@@ -79,6 +80,11 @@ export function EmiAssistant() {
   const [customGame, setCustomGame] = useState('');
   const [retry, setRetry] = useState<GuidedState | null>(null);
   const [retryText, setRetryText] = useState('');
+  const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [allowance, setAllowance] = useState<AssistantAllowance | null>(null);
+  const [usageError, setUsageError] = useState('');
+  const [usageRevision, setUsageRevision] = useState(0);
+  const [chatBusy, setChatBusy] = useState(false);
   const history = useRef<GuidedState[]>([]);
   const transcript = useRef<AssistantMessage[]>([]);
   const viewRef = useRef(view);
@@ -90,6 +96,7 @@ export function EmiAssistant() {
   const heading = useRef<HTMLHeadingElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
   const chatInput = useRef<HTMLInputElement>(null);
+  const chatEnd = useRef<HTMLDivElement>(null);
   const hidden = ['/login', '/register', '/forgot-password'].includes(pathname);
 
   const close = useCallback(() => { setOpen(false); requestAnimationFrame(() => launcher.current?.focus()); }, []);
@@ -111,6 +118,31 @@ export function EmiAssistant() {
   }, [open, hidden, close]);
   useEffect(() => { if (open) heading.current?.focus(); }, [view, open]);
   useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => { if (open && messages.length) chatEnd.current?.scrollIntoView({ block: 'nearest' }); }, [messages, open]);
+  useEffect(() => {
+    if (!open || chatBusy || sessionStatus !== 'authenticated' || !session?.user?.id) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let refreshSequence = 0;
+    const refresh = async () => {
+      const refreshId = ++refreshSequence;
+      try {
+        const response = await fetch('/api/assistant/usage', { cache: 'no-store', signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? 'Could not check your AI allowance.');
+        if (controller.signal.aborted || refreshId !== refreshSequence) return;
+        setAllowance(data); setUsageError('');
+        clearTimeout(timer);
+        timer = setTimeout(() => void refresh(), Math.max(1000, new Date(data.resetsAt).getTime() - Date.now() + 250));
+      } catch (failure) {
+        if (!controller.signal.aborted && refreshId === refreshSequence) setUsageError(failure instanceof Error ? failure.message : 'Could not check your AI allowance.');
+      }
+    };
+    void refresh();
+    const focus = () => void refresh();
+    window.addEventListener('focus', focus);
+    return () => { controller.abort(); clearTimeout(timer); window.removeEventListener('focus', focus); };
+  }, [open, chatBusy, sessionStatus, session?.user?.id, usageRevision]);
 
   const navigate = useCallback(async (state: GuidedState, remember = true) => {
     if (actionLock.current) return;
@@ -138,7 +170,9 @@ export function EmiAssistant() {
     if (sessionStatus === 'loading') return;
     const id = session?.user?.id ?? null;
     if (account.current !== undefined && account.current !== id) {
-      abort.current?.abort(); sequence.current++; history.current = []; transcript.current = []; setView(HOME); setError(''); setBusy(false);
+      abort.current?.abort(); abort.current = null; sequence.current++; history.current = []; transcript.current = []; setView(HOME); setError(''); setBusy(false);
+      setMessages([]); setAllowance(null); setUsageError(''); setChatBusy(false); setRetry(null); setRetryText(''); setInput(''); setNotice('');
+      actionLock.current = false; setMutating(false);
     }
     account.current = id;
     if (!id) return;
@@ -157,7 +191,8 @@ export function EmiAssistant() {
 
   const startOver = () => {
     if (actionLock.current) return;
-    abort.current?.abort(); sequence.current++; history.current = []; transcript.current = [];
+    abort.current?.abort(); abort.current = null; sequence.current++; history.current = []; transcript.current = [];
+    setMessages([]); setChatBusy(false); setUsageRevision((value) => value + 1);
     setView(HOME); setError(''); setNotice(''); setBusy(false); setRetry(null); setRetryText(''); setInput('');
   };
   const login = () => {
@@ -167,13 +202,15 @@ export function EmiAssistant() {
   };
   const confirm = async () => {
     if (!view.card?.actionToken || actionLock.current) return;
+    const id = ++sequence.current;
     const current = view; actionLock.current = true; setMutating(true); setError('');
     try {
       const response = await fetch('/api/assistant/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: current.card!.actionToken }) });
       const data = await response.json();
+      if (sequence.current !== id) return;
       if (response.status === 409 && data.code === 'QUOTE_STALE' && data.card) { setView({ ...current, card: data.card }); return; }
       if (!response.ok) throw new Error(data.error ?? 'The action could not be completed.');
-      history.current = []; transcript.current = [];
+      history.current = [];
       const remaining = current.state.queue ?? [];
       const completed = [...(current.state.completed ?? []), ...(current.state.stationId ? [current.state.stationId] : [])];
       let options = remaining.length ? [{ label: 'Continue to next station', state: {
@@ -194,43 +231,57 @@ export function EmiAssistant() {
           description = `${completed.length} booking(s) confirmed. Continue to recheck the next station when your connection returns.`;
         }
       }
+      if (sequence.current !== id) return;
       setView({ state: { task: 'HOME' }, title: 'Done', description, options, card: data.card });
       setNotice(remaining.length ? 'Booking confirmed. The next station still needs confirmation.' : 'Action completed.');
     } catch (failure) {
+      if (sequence.current !== id) return;
       setView({ ...current, card: undefined }); setRetry(current.state);
       setError(`${current.state.completed?.length ? `${current.state.completed.length} booking(s) succeeded. ` : ''}${failure instanceof Error ? failure.message : 'Unable to confirm.'}`);
-    } finally { actionLock.current = false; setMutating(false); }
+    } finally { if (sequence.current === id) { actionLock.current = false; setMutating(false); } }
   };
 
   const send = async (text: string) => {
-    if (!text.trim() || busy || mutating) return;
+    if (!text.trim() || busy || mutating || actionLock.current || abort.current || !session?.user?.id || allowance?.remaining === 0) return;
     const id = ++sequence.current;
     const controller = new AbortController(); abort.current = controller;
-    setBusy(true); setError(''); setRetryText(''); setNotice('Finding your options…'); setInput('');
-    let next: GuidedState | undefined;
+    setBusy(true); setChatBusy(true); setError(''); setRetry(null); setRetryText(''); setNotice('Checking EmiGuild information…'); setInput('');
+    setMessages((current) => [...current, { role: 'user' as const, content: text }].slice(-24));
+    let answered = false;
     try {
       const response = await fetch('/api/assistant/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ message: text, history: transcript.current.slice(-12), state: view.state }) });
-      if (!response.ok || !response.body) { const data = await response.json().catch(() => ({})); throw new Error(data.error ?? 'Chat is unavailable. Please use the buttons.'); }
+        body: JSON.stringify({ message: text, history: transcript.current.slice(-12).map(({ role, content }) => ({ role, content })) }) });
+      if (sequence.current !== id) return;
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => ({}));
+        if (sequence.current !== id) return;
+        if (data.usage) setAllowance(data.usage);
+        throw new Error(data.error ?? 'Chat is unavailable. Please use the buttons.');
+      }
       const reader = response.body.getReader(), decoder = new TextDecoder(), parser = new AssistantEventParser();
       while (true) {
         const { value, done } = await reader.read();
         if (sequence.current !== id) break;
         for (const event of parser.push(decoder.decode(value, { stream: !done }))) {
-          if (event.type === 'flow') next = guidedStateSchema.parse(event.state);
+          if (event.type === 'usage') setAllowance(event.usage);
           if (event.type === 'status') setNotice(event.message);
-          if (event.type === 'text_delta') setNotice(event.delta);
+          if (event.type === 'answer') {
+            const links = event.answer.links.filter((link) => Object.values(PUBLIC_HELP_LINKS).some((allowed) => allowed.href === link.href && allowed.label === link.label));
+            const message: AssistantMessage = { role: 'assistant', content: event.answer.content, links };
+            setMessages((current) => [...current, message].slice(-24));
+            transcript.current = [...transcript.current, { role: 'user' as const, content: text }, message].slice(-12);
+            answered = true;
+          }
           if (event.type === 'error') throw new Error(event.message);
         }
         if (done) break;
       }
-      transcript.current = [...transcript.current, { role: 'user' as const, content: text }, { role: 'assistant' as const, content: next ? `Opened ${next.task} options.` : 'Unsupported request.' }].slice(-12);
+      if (!answered && !controller.signal.aborted && sequence.current === id) throw new Error('The answer was interrupted. Check your allowance before retrying.');
     } catch (failure) {
-      if (!controller.signal.aborted) { setError(failure instanceof Error ? failure.message : 'Please use the buttons.'); setRetryText(text); }
+      if (!controller.signal.aborted && sequence.current === id) { setError(failure instanceof Error ? failure.message : 'Please use the buttons.'); setRetryText(text); }
     } finally {
-      if (sequence.current === id) { setBusy(false); abort.current = null; }
+      if (sequence.current === id) { setBusy(false); setChatBusy(false); setNotice(''); abort.current = null; setUsageRevision((value) => value + 1); }
     }
-    if (next && sequence.current === id && !controller.signal.aborted) { setTyping(false); await navigate(next); }
   };
   if (hidden) return null;
   const disabled = busy || mutating;
@@ -247,7 +298,7 @@ export function EmiAssistant() {
         <h2 ref={heading} tabIndex={-1}>{view.card?.actionToken ? 'Review your selection' : view.title}</h2>
         {view.description && <p>{view.description}</p>}
         <p className={notice ? 'emi-status' : 'emi-sr-only'} role="status">{notice}</p>
-        {error && <div className="emi-error" role="alert"><p>{error}</p>{retry && <button disabled={disabled} onClick={() => void navigate(retry, false)}>Refresh options</button>}{retryText && <button disabled={disabled} onClick={() => void send(retryText)}>Retry request</button>}</div>}
+        {error && <div className="emi-error" role="alert"><p>{error}</p>{retry && <button disabled={disabled} onClick={() => void navigate(retry, false)}>Refresh options</button>}{retryText && <button disabled={disabled || !session?.user?.id || allowance?.remaining === 0} onClick={() => void send(retryText)}>Retry AI request</button>}</div>}
         {view.state.task === 'BOOK' && view.state.stationId && <details className="emi-change"><summary>Change selections</summary>{(['stationId', 'date', 'startTime', 'duration', 'extraControllers', 'notes'] as const).filter((field) => view.state[field] !== undefined).map((field) => <button key={field} disabled={disabled} onClick={() => void navigate(changeSelection(view.state, field))}>Change {({ stationId: 'station', date: 'date', startTime: 'time', duration: 'duration', extraControllers: 'controllers', notes: 'game' })[field]}</button>)}</details>}
         {view.login && <button className="btn btn-primary" disabled={disabled} onClick={login}>Sign in</button>}
         {view.nextFilters && <NextFilters key={JSON.stringify(view.state)} view={view} busy={disabled} navigate={(state) => void navigate(state)} />}
@@ -255,9 +306,22 @@ export function EmiAssistant() {
         {view.card && <Confirmation card={view.card} busy={disabled} confirm={() => void confirm()} />}
         <div className={`emi-options ${view.state.task === 'HOME' ? 'emi-options-home' : ''}`}>{view.options.map((option, i) => <button key={`${option.label}-${i}`} disabled={disabled} onClick={() => void navigate(option.state)}><strong>{option.label}</strong>{option.detail && <span>{option.detail}</span>}</button>)}</div>
         {view.customGame && <form className="emi-fields" onSubmit={(event) => { event.preventDefault(); void navigate({ ...view.state, notes: customGame.trim(), gameChosen: true, query: undefined }); }}><label>Other game request<input value={customGame} maxLength={160} onChange={(e) => setCustomGame(e.target.value)} placeholder="Optional" /></label><button disabled={disabled || !customGame.trim()}>Use this request</button></form>}
+        <div className="emi-chat-log" role="log" aria-label="Emiily AI conversation" aria-live="polite">
+          {messages.map((message, index) => <div key={index} className={`emi-message ${message.role}`}><span className="emi-sr-only">{message.role === 'user' ? 'You' : 'Emiily'}</span><p className="emi-bubble">{message.content}</p>{message.links && <div className="emi-link-grid">{message.links.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</div>}</div>)}
+          <div ref={chatEnd} />
+        </div>
+        {typing && <div className="emi-ai-info">
+          <p>Ask about EmiGuild services or how to use the website. Don’t share passwords or private account details.</p>
+          {!session?.user?.id ? <><p>Sign in to use AI chat. You can still use the buttons above.</p><button className="btn btn-primary" disabled={disabled || sessionStatus === 'loading'} onClick={login}>Sign in for AI chat</button></> : <>
+            <p role="status">{allowance ? `${allowance.remaining} of ${allowance.limit} AI requests remaining today.` : 'Checking your AI allowance…'}</p>
+            {allowance?.remaining === 0 && <p>Resets at midnight IST ({new Date(allowance.resetsAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })}). The buttons still work.</p>}
+            <p>Each sent AI request counts, including out-of-scope questions, failed answers and retries. Buttons don’t use this allowance.</p>
+            {usageError && <p role="alert">{usageError} <button onClick={() => setUsageRevision((value) => value + 1)}>Refresh allowance</button></p>}
+          </>}
+        </div>}
       </div>
-      <button className="emi-type-toggle" disabled={mutating} onClick={() => { setTyping((v) => !v); requestAnimationFrame(() => chatInput.current?.focus()); }}>{typing ? 'Hide typing' : 'Type a request'}</button>
-      {typing && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="e.g. two PS5s after 8 PM" disabled={disabled} />{busy ? <button type="button" aria-label="Stop response" onClick={() => { abort.current?.abort(); sequence.current++; setBusy(false); setNotice('Request stopped.'); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || mutating}><Send size={17} /></button>}</form>}
+      <button className="emi-type-toggle" disabled={mutating} onClick={() => { setTyping((v) => !v); requestAnimationFrame(() => chatInput.current?.focus()); }}>{typing ? 'Hide AI typing' : 'Ask an EmiGuild question'}</button>
+      {typing && session?.user?.id && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="How do I change my password?" disabled={disabled || allowance?.remaining === 0} />{chatBusy ? <button type="button" aria-label="Stop response" onClick={() => { abort.current?.abort(); abort.current = null; sequence.current++; setBusy(false); setChatBusy(false); setNotice('Request stopped. Requests already sent still count.'); setUsageRevision((value) => value + 1); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || disabled || allowance?.remaining === 0}><Send size={17} /></button>}</form>}
       <div className="emi-direct-links"><Link href="/book">Book</Link><Link href="/#live-station-availability">Availability</Link><Link href="/my-bookings">My bookings</Link><Link href="/games">Games</Link><Link href="/daily-spin">Daily Spin</Link></div>
     </div>}
     <button ref={launcher} className="emi-launcher" tabIndex={open ? -1 : 0} aria-label={open ? 'Close Emiily assistant' : 'Open Emiily assistant'} aria-expanded={open} onClick={() => open ? close() : setOpen(true)}>{open ? <X size={23} /> : <MessageCircle size={24} />}{!open && <span>Ask Emiily</span>}</button>
