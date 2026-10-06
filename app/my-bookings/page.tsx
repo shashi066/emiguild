@@ -95,6 +95,9 @@ export default function MyBookingsPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [userPasses, setUserPasses] = useState<ActivePass[]>([]);
   const [rentals, setRentals]         = useState<Ps5Rental[]>([]);
+  const [rentalPage, setRentalPage] = useState(1);
+  const [rentalHasMore, setRentalHasMore] = useState(false);
+  const [rentalLoading, setRentalLoading] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [error, setError]             = useState('');
@@ -103,17 +106,14 @@ export default function MyBookingsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [bRes, pRes, rRes] = await Promise.all([
+      const [bRes, pRes] = await Promise.all([
         fetch('/api/bookings?limit=50'),
         fetch('/api/user/pass?history=1'),
-        fetch('/api/ps5-rental'),
       ]);
       const bData = await bRes.json();
       const pData = pRes.ok ? await pRes.json() : { passes: [] };
-      const rData = rRes.ok ? await rRes.json() : { rentals: [] };
       setBookings(bData.bookings ?? []);
       setUserPasses(pData.passes ?? []);
-      setRentals(rData.rentals ?? []);
     } catch {
       setError('Failed to load data.');
     } finally {
@@ -122,6 +122,18 @@ export default function MyBookingsPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    if (activeTab !== 'rental') return;
+    const controller = new AbortController();
+    setRentalLoading(true);
+    void fetch(`/api/ps5-rental?page=${rentalPage}`, { signal: controller.signal }).then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error('Could not load rentals.');
+      if (!controller.signal.aborted) { setRentals(data.rentals); setRentalHasMore(data.hasMore); }
+    }).catch(() => { if (!controller.signal.aborted) setError('Could not load rentals. Please reopen the Rentals tab to retry.'); })
+      .finally(() => { if (!controller.signal.aborted) setRentalLoading(false); });
+    return () => controller.abort();
+  }, [activeTab, rentalPage]);
 
   const handleCancel = async (id: string) => {
     if (!confirm('Are you sure you want to cancel this booking?')) return;
@@ -479,7 +491,7 @@ export default function MyBookingsPage() {
 
         {/* ── PS5 Rentals tab ── */}
         {activeTab === 'rental' && (
-          loading ? (
+          rentalLoading ? (
             <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-text-muted)' }}>Loading your rentals...</div>
           ) : rentals.length === 0 ? (
             <div className="card">
@@ -584,6 +596,11 @@ export default function MyBookingsPage() {
             </div>
           )
         )}
+        {activeTab === 'rental' && <nav aria-label="Your rental pages" style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 20 }}>
+          <button className="btn btn-ghost" disabled={rentalLoading || rentalPage === 1} onClick={() => setRentalPage((page) => page - 1)}>Previous</button>
+          <span>Page {rentalPage}</span>
+          <button className="btn btn-ghost" disabled={rentalLoading || !rentalHasMore} onClick={() => setRentalPage((page) => page + 1)}>Next</button>
+        </nav>}
       </div>
     </div>
   );

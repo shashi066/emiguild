@@ -37,12 +37,10 @@ test('Vault and lifecycle API integration', { skip: !base }, async (t) => {
     const [playerCookie, adminCookie] = await Promise.all([login(first.email), login(admin.email)]);
     await t.test('authentication and admin authorization are enforced', async () => {
       for (const path of ['/api/vault']) assert.equal((await api(path)).response.status, 401);
-      assert.equal((await api('/api/activity', '', { method: 'POST' })).response.status, 401);
-      assert.equal((await api(`/api/admin/lifecycle/preview?userId=${first.id}`, playerCookie)).response.status, 403);
-      assert.equal((await api('/api/admin/lifecycle/preview')).response.status, 403);
-      const cron = await api('/api/cron/lifecycle/email');
-      assert.equal(cron.response.status, 200);
-      assert.deepEqual(cron.body, { disabled: true, evaluated: 0, sent: 0 });
+      assert.equal((await api('/api/vault/summary')).response.status, 401);
+      for (const path of ['/api/activity', '/api/admin/lifecycle/preview', '/api/admin/lifecycle/settings', '/api/admin/lifecycle/test-email', '/api/cron/lifecycle/email']) {
+        assert.equal((await fetch(`${base}${path}`)).status, 404);
+      }
     });
     await t.test('authenticated pages render their entry points and unauthenticated Vault redirects', async () => {
       const redirect = await fetch(`${base}/vault`, { redirect: 'manual' });
@@ -50,7 +48,6 @@ test('Vault and lifecycle API integration', { skip: !base }, async (t) => {
       for (const [path, cookie, text] of [
         ['/vault', playerCookie, 'Your Vault'],
         ['/profile', playerCookie, 'Open your Vault'],
-        ['/admin/lifecycle', adminCookie, 'Email campaigns'],
       ]) {
         const response = await fetch(`${base}${path}`, { headers: { Cookie: cookie } });
         assert.equal(response.status, 200);
@@ -75,55 +72,11 @@ test('Vault and lifecycle API integration', { skip: !base }, async (t) => {
       assert.ok(result.body.items.some((row: { kind: string }) => row.kind === 'forge'));
       assert.match(result.response.headers.get('cache-control')!, /no-store/);
     });
-    await t.test('global settings are admin-only, private, persistent, and never write user consent', async () => {
-      await prisma.setting.deleteMany({ where: { key: { in: ['lifecycle_comeback_email', 'lifecycle_email_digest'] } } });
-      const path = '/api/admin/lifecycle/settings';
-      assert.equal((await api(path)).response.status, 403);
-      assert.equal((await api(path, playerCookie)).response.status, 403);
-      const options = { method: 'PUT', headers: { 'Content-Type': 'application/json', Origin: base! } };
-      assert.equal((await api(path, playerCookie, { ...options, body: JSON.stringify({ comebackEmail: true, emailDigest: true }) })).response.status, 403);
-      assert.deepEqual((await api(path, adminCookie)).body, { comebackEmail: false, emailDigest: false });
-      const before = await prisma.user.findUniqueOrThrow({ where: { id: first.id } });
-      assert.equal((await api(path, adminCookie, { ...options, body: JSON.stringify({ comebackEmail: 3, emailDigest: true }) })).response.status, 400);
-      const saved = await api(path, adminCookie, { ...options, body: JSON.stringify({ comebackEmail: true, emailDigest: true }) });
-      assert.equal(saved.response.status, 200);
-      assert.deepEqual((await api(path, adminCookie)).body, { comebackEmail: true, emailDigest: true });
-      assert.deepEqual(await prisma.user.findUniqueOrThrow({ where: { id: first.id } }), before);
-      assert.equal((await api(path, adminCookie, { ...options, headers: { ...options.headers, Origin: 'https://other.example' }, body: '{}' })).response.status, 403);
-      for (const method of ['GET', 'PUT']) assert.equal((await fetch(`${base}/api/profile/communication-preferences`, { method, headers: { Cookie: playerCookie } })).status, 404);
-      assert.equal((await api('/api/settings')).body.lifecycle_whatsapp_frequency, undefined);
-      const generic = await api('/api/admin/settings', adminCookie);
-      assert.ok(!generic.body.settings.some((row: { key: string }) => row.key.startsWith('lifecycle_') || row.key === 'daily_spin_max_retries'));
-      for (const key of ['daily_spin_retries_enabled', 'daily_spin_max_retries', 'lifecycle_whatsapp_frequency']) {
-        assert.equal((await api('/api/admin/settings', adminCookie, { ...options, body: JSON.stringify([{ key, value: '100' }]) })).response.status, 400);
-      }
-      for (const route of ['/profile', '/vault']) {
-        const response = await fetch(`${base}${route}`, { headers: { Cookie: playerCookie } });
-        assert.ok(!(await response.text()).includes('Communication preferences'));
-      }
-    });
-    await t.test('preview is read-only and has no sending side effects', async () => {
-      const before = await prisma.user.findMany({ where: { id: { in: [first.id, admin.id] } } });
-      const settings = await prisma.setting.findMany({ orderBy: { key: 'asc' } });
-      const result = await api(`/api/admin/lifecycle/preview?userId=${first.id}`, adminCookie);
-      assert.equal(result.response.status, 200); assert.equal(result.body.deliveryEnabled, false);
-      assert.ok(result.body.digest.candidate);
-      assert.ok(result.body.digest.suppressionReasons.includes('TRANSPORT_UNAVAILABLE'));
-      assert.equal(result.body.whatsapp, undefined);
-      assert.equal(await prisma.lifecycleEmailDelivery.count(), 0);
-      assert.deepEqual(await prisma.user.findMany({ where: { id: { in: [first.id, admin.id] } } }), before);
-      assert.deepEqual(await prisma.setting.findMany({ orderBy: { key: 'asc' } }), settings);
-      assert.equal((await api('/api/admin/lifecycle/preview?userId=missing', adminCookie)).response.status, 404);
-    });
-    await t.test('activity is throttled, scoped to the session, and suppresses previews', async () => {
-      await api(`/api/activity?userId=${other.id}`, playerCookie, { method: 'POST' });
-      const firstVisit = (await prisma.user.findUniqueOrThrow({ where: { id: first.id } })).lastWebsiteVisitAt;
-      assert.ok(firstVisit);
-      await api('/api/activity', playerCookie, { method: 'POST' });
-      assert.deepEqual((await prisma.user.findUniqueOrThrow({ where: { id: first.id } })).lastWebsiteVisitAt, firstVisit);
-      assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: other.id } })).lastWebsiteVisitAt, null);
-      const result = await api(`/api/admin/lifecycle/preview?userId=${first.id}`, adminCookie);
-      assert.ok(result.body.comeback.suppressionReasons.includes('RECENT_VISIT'));
+    await t.test('Vault summary is session scoped and compact', async () => {
+      const result = await api(`/api/vault/summary?userId=${other.id}`, playerCookie);
+      assert.equal(result.response.status, 200);
+      assert.ok(result.body.pendingCount >= 1);
+      assert.deepEqual(Object.keys(result.body), ['pendingCount']);
     });
     await t.test('concurrent daily spins create one immutable reward despite legacy 100 retries', async () => {
       for (const [key, value] of [['daily_spin_retries_enabled', 'true'], ['daily_spin_max_retries', '100']]) {
@@ -156,9 +109,7 @@ test('Vault and lifecycle API integration', { skip: !base }, async (t) => {
       await prisma.armoryTicket.update({ where: { id: ticket.id }, data: { status: 'REDEEMED' } });
       const refreshed = await api('/api/vault', playerCookie);
       assert.deepEqual(refreshed.body.items, []);
-      const preview = await api(`/api/admin/lifecycle/preview?userId=${first.id}`, adminCookie);
-      assert.equal(preview.body.digest.candidate, null);
-      assert.ok(preview.body.digest.suppressionReasons.includes('NO_ELIGIBLE_ITEMS'));
+
     });
   } finally {
     await prisma.user.deleteMany({ where: { id: { in: [first.id, other.id, admin.id] } } });

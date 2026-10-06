@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { z } from 'zod';
 import { PS5_RENTAL_STATUSES } from '@/lib/ps5-rental';
+import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
 
 const INTERNAL_SETTING_KEYS = new Set([
   ...MESSAGING_SETTING_KEYS, ...RETIRED_SPIN_SETTING_KEYS,
@@ -34,7 +35,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const settings = await prisma.setting.findMany({
-    where: { NOT: { key: { startsWith: 'assistant_ai_' } }, key: { notIn: Array.from(INTERNAL_SETTING_KEYS) } },
+    where: { OR: [{ key: { not: { startsWith: 'assistant_' } } }, { key: 'assistant_release_mode' }], key: { notIn: Array.from(INTERNAL_SETTING_KEYS) } },
     orderBy: { key: 'asc' },
   });
   return NextResponse.json({ settings });
@@ -52,18 +53,15 @@ export async function PUT(req: NextRequest) {
   if (!result.success) {
     return NextResponse.json({ error: 'Invalid data', issues: result.error.issues }, { status: 400 });
   }
-  if (result.data.some((setting) => INTERNAL_SETTING_KEYS.has(setting.key) || setting.key.startsWith('assistant_ai_'))) {
+  if (result.data.some((setting) => INTERNAL_SETTING_KEYS.has(setting.key) || (setting.key.startsWith('assistant_') && setting.key !== 'assistant_release_mode'))) {
     return NextResponse.json({ error: 'Internal settings cannot be edited.' }, { status: 400 });
   }
   for (const setting of result.data) {
     if (setting.key === 'daily_spin_reset_hour' && (!/^\d{1,2}$/.test(setting.value) || Number(setting.value) > 23)) {
       return NextResponse.json({ error: 'Spin reset hour must be a whole IST hour from 0 to 23.' }, { status: 400 });
     }
-    if (setting.key === 'assistant_release_mode' && !['OFF', 'BETA', 'ON'].includes(setting.value)) {
-      return NextResponse.json({ error: 'Assistant release mode must be OFF, BETA, or ON.' }, { status: 400 });
-    }
-    if (setting.key === 'assistant_beta_user_emails' && setting.value.length > 2_000) {
-      return NextResponse.json({ error: 'Assistant beta allowlist is too long.' }, { status: 400 });
+    if (setting.key === 'assistant_release_mode' && !['OFF', 'ON'].includes(setting.value)) {
+      return NextResponse.json({ error: 'Assistant release mode must be OFF or ON.' }, { status: 400 });
     }
     if (setting.key === 'ps5_rental_status' && !PS5_RENTAL_STATUSES.includes(setting.value as (typeof PS5_RENTAL_STATUSES)[number])) {
       return NextResponse.json({ error: 'Invalid PS5 rental status.' }, { status: 400 });
@@ -86,5 +84,6 @@ export async function PUT(req: NextRequest) {
     )
   );
 
+  invalidateAssistantKnowledge();
   return NextResponse.json({ settings: updated });
 }

@@ -1,27 +1,19 @@
 import { prisma } from '@/lib/prisma';
 
-export type AssistantReleaseMode = 'OFF' | 'BETA' | 'ON';
+export type AssistantReleaseMode = 'OFF' | 'ON';
 
 export async function getAssistantReleaseSettings() {
-  const rows = await prisma.setting.findMany({
-    where: { key: { in: ['assistant_release_mode', 'assistant_beta_user_emails'] } },
-    select: { key: true, value: true },
+  const row = await prisma.setting.findUnique({
+    where: { key: 'assistant_release_mode' },
+    select: { value: true },
   });
-  const values = Object.fromEntries(rows.map((row) => [row.key, row.value]));
-  const rawMode = values.assistant_release_mode?.toUpperCase();
-  const mode: AssistantReleaseMode = rawMode === 'ON' || rawMode === 'BETA' ? rawMode : 'OFF';
-  const betaEmails = new Set(
-    (values.assistant_beta_user_emails ?? '')
-      .split(',')
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean),
-  );
-  return { mode, betaEmails };
+  const rawMode = row?.value.toUpperCase();
+  // Compatibility for installations that saved the retired release value.
+  const mode: AssistantReleaseMode = rawMode === 'ON' || rawMode === 'BETA' ? 'ON' : 'OFF';
+  return { mode };
 }
 
-export async function canUseAssistant(user?: { email?: string | null; role?: string | null } | null) {
-  const { mode, betaEmails } = await getAssistantReleaseSettings();
-  if (mode === 'ON') return true;
-  if (mode === 'BETA' && user?.email) return betaEmails.has(user.email.toLowerCase());
-  return false;
+export async function canUseAssistant(_user?: object | null) {
+  const { mode } = await getAssistantReleaseSettings();
+  return mode === 'ON';
 }

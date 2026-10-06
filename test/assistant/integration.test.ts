@@ -15,7 +15,6 @@ test('assistant HTTP flows against a disposable database', { skip: !base }, asyn
   await prisma.station.deleteMany({ where: { name: { in: ['Test PS1', 'Test PS2'] } } });
   await prisma.game.deleteMany({ where: { name: 'Test FC' } });
   await prisma.lootItem.deleteMany({ where: { name: 'Test reward' } });
-  await prisma.setting.deleteMany({ where: { key: 'assistant_beta_user_emails' } });
   const password = 'assistant-test-only';
   const hash = await bcrypt.hash(password, 4);
   const admin = await prisma.user.create({ data: { name: 'Assistant Test Admin', email: 'assistant-admin@example.test', password: hash, role: 'ADMIN', phone: '9999999999' } });
@@ -200,14 +199,12 @@ test('assistant HTTP flows against a disposable database', { skip: !base }, asyn
     assert.equal((await guide({ task: 'PRICES' })).response.status, 429);
     await prisma.assistantUsageDaily.update({ where: { date_actorKey: { date: today, actorKey: `user:${admin.id}` } }, data: { guidedWindowCount: 0 } });
   });
-  await t.test('release OFF and BETA include admins in the same restrictions', async () => {
+  await t.test('release OFF blocks access and legacy BETA behaves as ON', async () => {
     await prisma.setting.update({ where: { key: 'assistant_release_mode' }, data: { value: 'OFF' } });
     assert.equal((await guide({ task: 'PRICES' })).response.status, 403);
     await prisma.setting.update({ where: { key: 'assistant_release_mode' }, data: { value: 'BETA' } });
-    assert.equal((await guide({ task: 'PRICES' })).response.status, 403);
-    await prisma.setting.upsert({ where: { key: 'assistant_beta_user_emails' }, create: { key: 'assistant_beta_user_emails', value: admin.email }, update: { value: admin.email } });
     assert.equal((await guide({ task: 'PRICES' })).response.status, 200);
-    assert.equal((await guide({ task: 'PRICES' }, '')).response.status, 403);
+    assert.equal((await guide({ task: 'PRICES' }, '')).response.status, 200);
     await prisma.setting.update({ where: { key: 'assistant_release_mode' }, data: { value: 'ON' } });
   });
   await prisma.$disconnect();

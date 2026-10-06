@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Gamepad2, RefreshCw, CheckCircle, AlertCircle,
   Package, Truck, RotateCcw, XCircle, ChevronDown,
@@ -58,6 +58,9 @@ export default function AdminPs5RentalsPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('ALL');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const loadSequence = useRef(0);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [commentModal, setCommentModal] = useState<{ id: string; comment: string } | null>(null);
@@ -68,15 +71,24 @@ export default function AdminPs5RentalsPage() {
   };
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/ps5-rentals?status=${filter}`);
+      const res = await fetch(`/api/admin/ps5-rentals?status=${filter}&page=${page}`);
       const data = await res.json();
+      if (sequence !== loadSequence.current) return;
+      if (!res.ok) throw new Error(data.error ?? 'Could not load rentals.');
       setRentals(data.rentals ?? []);
+      setHasMore(!!data.hasMore);
+    } catch {
+      if (sequence === loadSequence.current) {
+        setRentals([]); setHasMore(false);
+        setToast({ type: 'error', msg: 'Could not load rentals. Please refresh.' });
+      }
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [filter]);
+  }, [filter, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -180,7 +192,7 @@ export default function AdminPs5RentalsPage() {
             key={tab}
             type="button"
             className={`btn btn-sm ${filter === tab ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setFilter(tab)}
+            onClick={() => { setFilter(tab); setPage(1); }}
             id={`tab-${tab.toLowerCase()}`}
           >
             {tab === 'ALL' ? 'All' : tab.charAt(0) + tab.slice(1).toLowerCase()}
@@ -333,6 +345,11 @@ export default function AdminPs5RentalsPage() {
       )}
 
       {/* Comment Modal */}
+      <nav aria-label="Rental pages" style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 20 }}>
+        <button className="btn btn-ghost" disabled={loading || page === 1} onClick={() => setPage((value) => value - 1)}>Previous</button>
+        <span>Page {page}</span>
+        <button className="btn btn-ghost" disabled={loading || !hasMore} onClick={() => setPage((value) => value + 1)}>Next</button>
+      </nav>
       {commentModal && (
         <div
           style={{

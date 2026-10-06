@@ -157,14 +157,16 @@ export async function getAvailability(raw: unknown) {
     .filter((station) => (!args.stationId || station.id === args.stationId) && stationMatches(station, args.stationQuery));
   if (!stations.length) return { date: firstDate, duration, quantity: args.quantity, slots: [] };
   const specialOpening = await loadActiveSpecialOpening(new Date());
+  const lastDate = [addIndiaCalendarDays(firstDate, args.searchDays - 1)!, maxDate].sort()[0];
+  const [rangeBookings, capacitySetting] = await Promise.all([
+    prisma.booking.findMany({ where: { date: { gte: firstDate, lte: lastDate }, status: { not: 'CANCELLED' } }, select: { date: true, stationId: true, startTime: true, endTime: true } }),
+    prisma.setting.findUnique({ where: { key: 'venue_capacity' } }),
+  ]);
 
   for (let offset = 0; offset < args.searchDays; offset += 1) {
     const date = addIndiaCalendarDays(firstDate, offset);
     if (!date || date > maxDate) break;
-    const [bookings, capacitySetting] = await Promise.all([
-      prisma.booking.findMany({ where: { date, status: { not: 'CANCELLED' } }, select: { stationId: true, startTime: true, endTime: true } }),
-      prisma.setting.findUnique({ where: { key: 'venue_capacity' } }),
-    ]);
+    const bookings = rangeBookings.filter((booking) => booking.date === date);
     const byTime = new Map<string, Array<{ stationId: string; stationName: string; startTime: string; endTime: string; hourlyRate: number }>>();
     for (const station of stations) {
       if (!meetsStationMinimumDuration(duration, station.minDuration)) continue;

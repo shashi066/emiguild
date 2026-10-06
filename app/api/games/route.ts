@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
 
 // GET /api/games - Get all games
 export async function GET() {
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    invalidateAssistantKnowledge();
     return NextResponse.json(game, { status: 201 });
   } catch (error) {
     console.error('Error creating game:', error);
@@ -63,6 +65,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await prisma.game.delete({ where: { id } });
+    invalidateAssistantKnowledge();
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -97,6 +100,7 @@ export async function PATCH(request: NextRequest) {
       data: updateData,
     });
 
+    invalidateAssistantKnowledge();
     return NextResponse.json(game);
   } catch (error) {
     console.error('Error updating game:', error);

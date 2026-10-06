@@ -104,13 +104,24 @@ test('structured scope refusals cannot introduce links, markup, actions or arbit
   const personal = parsePublicAnswer(JSON.stringify({ scope: 'personal', answer: 'I read your records', linkIds: ['bookings'] }));
   assert.match(personal.content, /Use My Bookings below/); assert.doesNotMatch(personal.content, /I read/);
   const unsupported = parsePublicAnswer(JSON.stringify({ scope: 'unsupported', answer: 'SQL and revenue', linkIds: ['home'] }));
-  assert.match(unsupported.content, /public services/); assert.doesNotMatch(unsupported.content, /SQL/);
+  assert.match(unsupported.content, /related to EmiGuild/); assert.doesNotMatch(unsupported.content, /SQL|public services/);
   for (const output of [
     { scope: 'public', answer: 'Visit admin', linkIds: ['admin'] },
     { scope: 'public', answer: '<script>alert(1)</script>', linkIds: [] },
     { scope: 'public', answer: 'https://evil.test', linkIds: [] },
     { scope: 'public', answer: 'Okay', linkIds: [], actionToken: 'forged' },
   ]) assert.throws(() => parsePublicAnswer(JSON.stringify(output)));
+});
+
+test('verified contact questions use application-owned social, maps and phone destinations', () => {
+  const instagram = parsePublicAnswer(JSON.stringify({ scope: 'public', answer: 'Our verified Instagram account is @theemiguild.', linkIds: ['instagram'] }));
+  assert.deepEqual(instagram.links, [{ label: 'Instagram · @theemiguild', href: 'https://www.instagram.com/theemiguild', kind: 'external' }]);
+  const contact = parsePublicAnswer(JSON.stringify({ scope: 'public', answer: 'You can find EmiGuild on Google Maps or call +91 9989562474.', linkIds: ['maps', 'phone'] }));
+  assert.deepEqual(contact.links, [
+    { label: 'Find EmiGuild on Google Maps', href: 'https://maps.app.goo.gl/BguSp1D4LwCuX2PD9', kind: 'external' },
+    { label: 'Call +91 9989562474', href: 'tel:+919989562474', kind: 'phone' },
+  ]);
+  assert.throws(() => parsePublicAnswer(JSON.stringify({ scope: 'public', answer: 'Follow us.', linkIds: ['instagram.com/evil'] })));
 });
 
 test('model payload is one bounded structured request with public data only and no tool surface', () => {

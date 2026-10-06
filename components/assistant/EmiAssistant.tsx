@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { MessageCircle, X, ArrowLeft, RotateCcw, Send } from 'lucide-react';
-import type { AssistantAllowance, AssistantCard, AssistantMessage, BookingQuote, GuidedState, GuidedView } from '@/types/assistant';
+import type { AssistantAllowance, AssistantCard, AssistantLink, AssistantMessage, BookingQuote, GuidedState, GuidedView } from '@/types/assistant';
 import { PUBLIC_HELP_LINKS } from '@/lib/assistant/public-help';
 import { changeSelection, dateLabel, timeLabel, priceLabel, guidedStateSchema } from '@/lib/assistant/flow-state';
 import { AssistantEventParser } from '@/lib/assistant/stream';
@@ -15,6 +15,12 @@ import { AssistantEventParser } from '@/lib/assistant/stream';
 const TASKS = [ ['Book a Slot', 'BOOK'], ['Next Available', 'NEXT'], ['My Bookings', 'BOOKINGS'], ['Daily Spin', 'SPIN'], ['Games', 'GAMES'], ['Prices', 'PRICES'] ] as const;
 const HOME: GuidedView = { state: { task: 'HOME' }, title: 'What would you like to do?', options: TASKS.map(([label, task]) => ({ label, state: { task } })) };
 const PENDING = 'emi-assistant-pending';
+
+function AnswerLinks({ links }: { links: AssistantLink[] }) {
+  return <div className="emi-link-grid">{links.map((link) => link.kind === 'internal' || !link.kind
+    ? <Link key={link.href} href={link.href}>{link.label}</Link>
+    : <a key={link.href} href={link.href} {...(link.kind === 'external' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{link.label}</a>)}</div>;
+}
 
 function Confirmation({ card, busy, confirm }: { card: AssistantCard; busy: boolean; confirm: () => void }) {
   const quote = card.data?.quote as BookingQuote | undefined;
@@ -85,6 +91,7 @@ export function EmiAssistant() {
   const [usageError, setUsageError] = useState('');
   const [usageRevision, setUsageRevision] = useState(0);
   const [chatBusy, setChatBusy] = useState(false);
+  const usageSnapshot = useRef<{ userId: string; at: number; resetsAt: string } | null>(null);
   const history = useRef<GuidedState[]>([]);
   const transcript = useRef<AssistantMessage[]>([]);
   const viewRef = useRef(view);
@@ -124,7 +131,14 @@ export function EmiAssistant() {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     let refreshSequence = 0;
+    let refreshing = false;
+    const schedule = (resetsAt: string) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => void refresh(), Math.max(1000, new Date(resetsAt).getTime() - Date.now() + 250));
+    };
     const refresh = async () => {
+      if (refreshing) return;
+      refreshing = true;
       const refreshId = ++refreshSequence;
       try {
         const response = await fetch('/api/assistant/usage', { cache: 'no-store', signal: controller.signal });
@@ -132,14 +146,16 @@ export function EmiAssistant() {
         if (!response.ok) throw new Error(data.error ?? 'Could not check your AI allowance.');
         if (controller.signal.aborted || refreshId !== refreshSequence) return;
         setAllowance(data); setUsageError('');
-        clearTimeout(timer);
-        timer = setTimeout(() => void refresh(), Math.max(1000, new Date(data.resetsAt).getTime() - Date.now() + 250));
+        usageSnapshot.current = { userId: session.user.id, at: Date.now(), resetsAt: data.resetsAt };
+        schedule(data.resetsAt);
       } catch (failure) {
         if (!controller.signal.aborted && refreshId === refreshSequence) setUsageError(failure instanceof Error ? failure.message : 'Could not check your AI allowance.');
-      }
+      } finally { refreshing = false; }
     };
-    void refresh();
-    const focus = () => void refresh();
+    const snapshot = usageSnapshot.current;
+    if (snapshot?.userId === session.user.id && Date.now() - snapshot.at < 30000 && Date.parse(snapshot.resetsAt) > Date.now()) schedule(snapshot.resetsAt);
+    else void refresh();
+    const focus = () => { if (Date.now() - (usageSnapshot.current?.at ?? 0) >= 30000) void refresh(); };
     window.addEventListener('focus', focus);
     return () => { controller.abort(); clearTimeout(timer); window.removeEventListener('focus', focus); };
   }, [open, chatBusy, sessionStatus, session?.user?.id, usageRevision]);
@@ -245,9 +261,10 @@ export function EmiAssistant() {
     if (!text.trim() || busy || mutating || actionLock.current || abort.current || !session?.user?.id || allowance?.remaining === 0) return;
     const id = ++sequence.current;
     const controller = new AbortController(); abort.current = controller;
-    setBusy(true); setChatBusy(true); setError(''); setRetry(null); setRetryText(''); setNotice('Checking EmiGuild information…'); setInput('');
+    setBusy(true); setChatBusy(true); setError(''); setRetry(null); setRetryText(''); setNotice(''); setInput('');
     setMessages((current) => [...current, { role: 'user' as const, content: text }].slice(-24));
     let answered = false;
+    let receivedUsage = false;
     try {
       const response = await fetch('/api/assistant/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
         body: JSON.stringify({ message: text, history: transcript.current.slice(-12).map(({ role, content }) => ({ role, content })) }) });
@@ -255,7 +272,10 @@ export function EmiAssistant() {
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => ({}));
         if (sequence.current !== id) return;
-        if (data.usage) setAllowance(data.usage);
+        if (data.usage) {
+          setAllowance(data.usage); receivedUsage = true;
+          usageSnapshot.current = { userId: session.user.id, at: Date.now(), resetsAt: data.usage.resetsAt };
+        }
         throw new Error(data.error ?? 'Chat is unavailable. Please use the buttons.');
       }
       const reader = response.body.getReader(), decoder = new TextDecoder(), parser = new AssistantEventParser();
@@ -263,8 +283,11 @@ export function EmiAssistant() {
         const { value, done } = await reader.read();
         if (sequence.current !== id) break;
         for (const event of parser.push(decoder.decode(value, { stream: !done }))) {
-          if (event.type === 'usage') setAllowance(event.usage);
-          if (event.type === 'status') setNotice(event.message);
+          if (event.type === 'usage') {
+            setAllowance(event.usage); receivedUsage = true;
+            usageSnapshot.current = { userId: session.user.id, at: Date.now(), resetsAt: event.usage.resetsAt };
+          }
+          if (event.type === 'status') continue;
           if (event.type === 'answer') {
             const links = event.answer.links.filter((link) => Object.values(PUBLIC_HELP_LINKS).some((allowed) => allowed.href === link.href && allowed.label === link.label));
             const message: AssistantMessage = { role: 'assistant', content: event.answer.content, links };
@@ -278,9 +301,16 @@ export function EmiAssistant() {
       }
       if (!answered && !controller.signal.aborted && sequence.current === id) throw new Error('The answer was interrupted. Check your allowance before retrying.');
     } catch (failure) {
-      if (!controller.signal.aborted && sequence.current === id) { setError(failure instanceof Error ? failure.message : 'Please use the buttons.'); setRetryText(text); }
+      if (!controller.signal.aborted && sequence.current === id) {
+        const content = failure instanceof Error ? failure.message : 'AI chat is unavailable right now. You can still use the buttons.';
+        setMessages((current) => [...current, { role: 'assistant' as const, content }].slice(-24));
+        setRetryText(text);
+      }
     } finally {
-      if (sequence.current === id) { setBusy(false); setChatBusy(false); setNotice(''); abort.current = null; setUsageRevision((value) => value + 1); }
+      if (sequence.current === id) {
+        if (!receivedUsage) usageSnapshot.current = null;
+        setBusy(false); setChatBusy(false); setNotice(''); abort.current = null;
+      }
     }
   };
   if (hidden) return null;
@@ -288,7 +318,7 @@ export function EmiAssistant() {
   return <div className={`emi-assistant ${open ? 'is-open' : ''}`}>
     {open && <button className="emi-backdrop" tabIndex={-1} aria-label="Close Emiily assistant" onClick={close} />}
     {open && <div ref={panel} className="emi-panel" role="dialog" aria-modal="true" aria-label="Emiily, the EmiGuild assistant">
-      <header className="emi-header"><div className="emi-avatar"><Image src={emiilyPortrait} alt="Emiily" width={36} height={36} unoptimized loading="eager" /></div><div><strong>Emiily</strong><span>Choose an option. Typing is optional.</span></div><button className="emi-icon-button" aria-label="Close Emiily assistant" onClick={close}><X size={19} /></button></header>
+      <header className="emi-header"><div className="emi-avatar"><Image src={emiilyPortrait} alt="Emiily" width={36} height={36} sizes="36px" loading="lazy" /></div><div><div className="emi-name-row"><strong>Emiily</strong><span className="emi-beta-badge">Beta</span></div><span>Choose an option. Typing is optional.</span></div><button className="emi-icon-button" aria-label="Close Emiily assistant" onClick={close}><X size={19} /></button></header>
       <nav className="emi-flow-nav" aria-label="Assistant navigation">
         <button disabled={disabled || !history.current.length} onClick={() => { const previous = history.current.pop(); if (previous) void navigate(previous, false); }}><ArrowLeft size={14} />Back</button>
         <button disabled={mutating} onClick={startOver}><RotateCcw size={14} />Start over</button>
@@ -307,21 +337,22 @@ export function EmiAssistant() {
         <div className={`emi-options ${view.state.task === 'HOME' ? 'emi-options-home' : ''}`}>{view.options.map((option, i) => <button key={`${option.label}-${i}`} disabled={disabled} onClick={() => void navigate(option.state)}><strong>{option.label}</strong>{option.detail && <span>{option.detail}</span>}</button>)}</div>
         {view.customGame && <form className="emi-fields" onSubmit={(event) => { event.preventDefault(); void navigate({ ...view.state, notes: customGame.trim(), gameChosen: true, query: undefined }); }}><label>Other game request<input value={customGame} maxLength={160} onChange={(e) => setCustomGame(e.target.value)} placeholder="Optional" /></label><button disabled={disabled || !customGame.trim()}>Use this request</button></form>}
         <div className="emi-chat-log" role="log" aria-label="Emiily AI conversation" aria-live="polite">
-          {messages.map((message, index) => <div key={index} className={`emi-message ${message.role}`}><span className="emi-sr-only">{message.role === 'user' ? 'You' : 'Emiily'}</span><p className="emi-bubble">{message.content}</p>{message.links && <div className="emi-link-grid">{message.links.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</div>}</div>)}
+          {messages.map((message, index) => <div key={index} className={`emi-message ${message.role}`}><span className="emi-sr-only">{message.role === 'user' ? 'You' : 'Emiily'}</span><p className="emi-bubble">{message.content}</p>{message.links?.length ? <AnswerLinks links={message.links} /> : null}{message.role === 'assistant' && index === messages.length - 1 && retryText && <button className="btn btn-secondary btn-sm" disabled={disabled || !session?.user?.id || allowance?.remaining === 0} onClick={() => void send(retryText)}>Retry AI request</button>}</div>)}
+          {chatBusy && <div className="emi-message assistant" role="status" aria-label="Emiily is typing"><span className="emi-sr-only">Emiily is typing…</span><div className="emi-typing" aria-hidden="true"><span /><span /><span /></div></div>}
           <div ref={chatEnd} />
         </div>
         {typing && <div className="emi-ai-info">
-          <p>Ask about EmiGuild services or how to use the website. Don’t share passwords or private account details.</p>
+          <p><strong>Ask Emiily anything related to EmiGuild.</strong></p>
           {!session?.user?.id ? <><p>Sign in to use AI chat. You can still use the buttons above.</p><button className="btn btn-primary" disabled={disabled || sessionStatus === 'loading'} onClick={login}>Sign in for AI chat</button></> : <>
             <p role="status">{allowance ? `${allowance.remaining} of ${allowance.limit} AI requests remaining today.` : 'Checking your AI allowance…'}</p>
             {allowance?.remaining === 0 && <p>Resets at midnight IST ({new Date(allowance.resetsAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })}). The buttons still work.</p>}
-            <p>Each sent AI request counts, including out-of-scope questions, failed answers and retries. Buttons don’t use this allowance.</p>
-            {usageError && <p role="alert">{usageError} <button onClick={() => setUsageRevision((value) => value + 1)}>Refresh allowance</button></p>}
+            <details className="emi-ai-details"><summary>More info</summary><p>Don’t share passwords or private account details. Each sent request counts, including unsupported questions, failed answers and retries. Guided buttons don’t use this allowance. The allowance resets at midnight IST.</p></details>
+            {usageError && <p role="alert">{usageError} <button type="button" onClick={() => { usageSnapshot.current = null; setUsageRevision((value) => value + 1); }}>Refresh allowance</button></p>}
           </>}
         </div>}
       </div>
       <button className="emi-type-toggle" disabled={mutating} onClick={() => { setTyping((v) => !v); requestAnimationFrame(() => chatInput.current?.focus()); }}>{typing ? 'Hide AI typing' : 'Ask an EmiGuild question'}</button>
-      {typing && session?.user?.id && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="How do I change my password?" disabled={disabled || allowance?.remaining === 0} />{chatBusy ? <button type="button" aria-label="Stop response" onClick={() => { abort.current?.abort(); abort.current = null; sequence.current++; setBusy(false); setChatBusy(false); setNotice('Request stopped. Requests already sent still count.'); setUsageRevision((value) => value + 1); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || disabled || allowance?.remaining === 0}><Send size={17} /></button>}</form>}
+      {typing && session?.user?.id && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="How do I change my password?" disabled={disabled || allowance?.remaining === 0} />{chatBusy ? <button type="button" aria-label="Stop response" onClick={() => { usageSnapshot.current = null; abort.current?.abort(); abort.current = null; sequence.current++; setBusy(false); setChatBusy(false); setNotice('Request stopped. Requests already sent still count.'); setUsageRevision((value) => value + 1); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || disabled || allowance?.remaining === 0}><Send size={17} /></button>}</form>}
       <div className="emi-direct-links"><Link href="/book">Book</Link><Link href="/#live-station-availability">Availability</Link><Link href="/my-bookings">My bookings</Link><Link href="/games">Games</Link><Link href="/daily-spin">Daily Spin</Link></div>
     </div>}
     <button ref={launcher} className="emi-launcher" tabIndex={open ? -1 : 0} aria-label={open ? 'Close Emiily assistant' : 'Open Emiily assistant'} aria-expanded={open} onClick={() => open ? close() : setOpen(true)}>{open ? <X size={23} /> : <MessageCircle size={24} />}{!open && <span>Ask Emiily</span>}</button>

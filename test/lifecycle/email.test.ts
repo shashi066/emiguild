@@ -38,12 +38,11 @@ test('lifecycle configuration has no feature-specific or cron environment variab
  const envExample = readFileSync('.env.example', 'utf8');
  const lifecycleSource = [
   'lib/lifecycle/email.ts', 'lib/lifecycle/delivery.ts', 'app/email/unsubscribe/page.tsx',
-  'app/api/lifecycle/unsubscribe/route.ts', 'app/api/cron/lifecycle/email/route.ts',
+  'app/api/lifecycle/unsubscribe/route.ts',
  ].map((path) => readFileSync(path, 'utf8')).join('\n');
- for (const key of ['LIFECYCLE_EMAIL_ENABLED', 'LIFECYCLE_SITE_URL', 'LIFECYCLE_UNSUBSCRIBE_SECRET', 'CRON_SECRET']) {
+ for (const key of ['LIFECYCLE_EMAIL_ENABLED', 'LIFECYCLE_SITE_URL', 'LIFECYCLE_UNSUBSCRIBE_SECRET']) {
   assert.equal(envExample.includes(key), false);
   assert.equal(lifecycleSource.includes(key), false);
  }
- const cron = readFileSync('app/api/cron/lifecycle/email/route.ts', 'utf8');
- assert.equal(cron.includes('authorization'), false);
+ assert.equal(readFileSync('vercel.json', 'utf8').includes('/api/cron/lifecycle/email'), false);
 });

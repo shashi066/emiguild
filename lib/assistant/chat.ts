@@ -62,9 +62,9 @@ export function createPublicChatHandler(deps: PublicChatDependencies) {
     let knowledge: unknown;
     let allowance: AssistantAllowance & { allowed: boolean };
     try {
-      const current = await deps.usage(actorKey);
-      if (!current.remaining) return error('Your daily AI allowance is used. It resets at midnight IST. The buttons still work.', 429, current);
       config = await deps.config();
+      const current = await deps.usage(actorKey, undefined, config.dailyLimit);
+      if (!current.remaining) return error('Your daily AI allowance is used. It resets at midnight IST. The buttons still work.', 429, current);
       if (!config.apiKey) return error('AI chat is unavailable right now. You can still use the buttons.', 503, current);
       knowledge = await deps.knowledge();
       if (req.signal.aborted) return error('Request stopped before sending.', 499, current);

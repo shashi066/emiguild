@@ -26,7 +26,6 @@ const NAV_GROUPS = [
   { label: 'Customers', items: [
     { href: '/admin/users', label: 'Users', icon: Users },
     { href: '/admin/passes', label: 'Passes', icon: Award },
-    { href: '/admin/lifecycle', label: 'Messaging', icon: Gift },
   ] },
   { label: 'Activities & Rewards', items: [
     { href: '/admin/armory', label: 'Artifacts', icon: Shield },

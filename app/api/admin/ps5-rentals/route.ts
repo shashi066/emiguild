@@ -11,14 +11,19 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status');
+  const page = Math.max(1, Math.min(100000, Number(searchParams.get('page')) || 1));
+  if (!Number.isInteger(page)) return NextResponse.json({ error: 'Invalid page' }, { status: 400 });
+  const pageSize = 25;
 
   const rentals = await prisma.ps5Rental.findMany({
     where: status && status !== 'ALL' ? { status } : undefined,
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    skip: (page - 1) * pageSize,
+    take: pageSize + 1,
     include: {
       user: { select: { name: true, email: true, phone: true } },
     },
   });
 
-  return NextResponse.json({ rentals });
+  return NextResponse.json({ rentals: rentals.slice(0, pageSize), page, hasMore: rentals.length > pageSize });
 }

@@ -1,12 +1,14 @@
 # Assistant verification
 
+Performance: public knowledge is cached for 30 seconds with an IST-date cache key and invalidated by game, station, membership and settings writes. Booking confirmation and quota reservations stay uncached. Usage older than 90 days is deleted alongside the existing daily `/api/cron/guess-36/draw` job; no additional cron or environment variable is required. Retention failure is logged without blocking the draw. Assistant request handlers no longer run retention deletes.
+
 `npm run test:assistant` runs the isolated flow, schema, token, SSE and permission tests.
 
 HTTP tests in `integration.test.ts` require a disposable SQLite database whose URL contains `assistant-test`, and a Next server using that same database. Set `DATABASE_URL`, `ASSISTANT_TEST_URL`, `AUTH_URL`, `AUTH_SECRET`, and `ASSISTANT_ACTION_SECRET` in the test processes. The server and test process must share the action secret. Use a separate port and disable mail configuration. The suite creates test accounts, stations and rewards and replaces only its named fixtures when rerun.
 
 Run `npx tsx --test test/assistant/integration.test.ts` after pushing the local schema into that disposable database. It exercises real authentication, admin ownership, booking creation, Standard/Hour Pass/Guild pricing, cancellation restoration, duplicate confirmations, stale quotes, partial multi-station failure, Daily Spin, release settings, and separate rate limits. No OpenAI key is required.
 
-Deployment must apply both assistant migrations, including the guided-rate counters. `ASSISTANT_GUIDED_PER_MINUTE_LIMIT` defaults to 60 and is independent of AI daily limits. Administrators follow OFF/BETA/ON and the same beta email allowlist as customers.
+Deployment must apply both assistant migrations, including the guided-rate counters. `ASSISTANT_GUIDED_PER_MINUTE_LIMIT` defaults to 60 and is independent of AI daily limits. OFF hides Emiily; ON enables it for every visitor, with sign-in still required for AI. The Beta badge describes the product, not a separate access mode. Legacy BETA values normalize to ON; new settings accept only OFF and ON.
 
 ## Public AI help and admin configuration
 
@@ -20,6 +22,6 @@ Guests can use guided buttons but cannot invoke AI. Accounts, including admins, 
 
 The chat route accepts `{ message, history }` only. SSE adds `usage` and `answer` events; answers contain plain `content` plus validated application-owned links. AI requests never emit guided flow or action cards. Existing guided/action routes remain independent. `public-help.test.ts` exercises mocked model responses, provider request shape, refusals, invalid links, authentication, quota boundaries, failures/cancellation, encrypted key lifecycle and public knowledge projections. The HTTP suite also verifies admin authorization, key exclusion, real concurrent reservations and the existing booking/cancellation/spin flows using a disposable database, without a real provider call.
 
-Before rollout, use the existing BETA allowlist for manual live-model acceptance: password changes, forgot password, station/game/plan/rental questions, uncertain refunds, personal booking/balance questions, admin revenue requests, unrelated questions and instruction override attempts. Confirm only grounded public answers and approved customer links appear. A mocked model cannot establish actual model answer quality.
+Before rollout, use ON in the test environment for manual live-model acceptance with any signed-in test account: password changes, forgot password, station/game/plan/rental questions, uncertain refunds, personal booking/balance questions, admin revenue requests, unrelated questions and instruction override attempts. Confirm only grounded public answers and approved customer links appear. A mocked model cannot establish actual model answer quality.
 
 Manual browser checks: six quick actions; AI sign-in prompt; actual chat messages and remaining allowance; full booking without typing; chat retained through guided navigation/confirmation; clearing on Start over/account switch; guest draft restoration; two separate station confirmations; keyboard focus loop/Escape; mobile sheet and safe-area padding; reduced motion; interruption/retry; quota exhaustion with buttons still usable; refresh and midnight reset. Confirm key values never reappear after save, and no Markdown/HTML is rendered as model-controlled markup.

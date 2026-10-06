@@ -49,7 +49,7 @@ export default function AdminSettingsPage() {
       const res  = await fetch('/api/admin/settings');
       const data = await res.json();
       const map: Record<string, string> = {};
-      (data.settings as Setting[]).forEach((s) => { map[s.key] = s.value; });
+      (data.settings as Setting[]).forEach((s) => { map[s.key] = s.key === 'assistant_release_mode' && s.value === 'BETA' ? 'ON' : s.value; });
       setSettings(map);
     } finally {
       setLoading(false);
@@ -128,7 +128,7 @@ export default function AdminSettingsPage() {
     ['venue', 'extra controller price booking charge'], ['venue', 'venue capacity simultaneous booking screens'],
     ['venue', 'early opening hours override'], ['venue', 'live station availability homepage'],
     ['rentals', 'ps5 rental service status'], ['rentals', 'ps5 rental daily price'], ['rentals', 'ps5 extra controller price per day'],
-    ['assistant', 'emiily ai api key model daily request limit'], ['assistant', 'emi assistant release mode beta allowlist users'],
+    ['assistant', 'emiily ai api key model daily request limit'], ['assistant', 'emi assistant release mode on off'],
   ].filter(([group, terms]) => visible(group as Exclude<SettingsCategory, 'all'>, terms)).length;
 
   // Draft variants (inside modal)
@@ -179,7 +179,6 @@ export default function AdminSettingsPage() {
 
   const saveAssistant = () => persist([
     { key: 'assistant_release_mode', value: draft['assistant_release_mode'] ?? 'OFF', label: 'Emi Assistant Release Mode' },
-    { key: 'assistant_beta_user_emails', value: draft['assistant_beta_user_emails'] ?? '', label: 'Emi Assistant Beta Users' },
   ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -298,12 +297,12 @@ export default function AdminSettingsPage() {
             onEdit={() => openModal('ps5_rental_controller')}
           />}
 
-          {visible('assistant', 'emi assistant release mode beta allowlist users') && <SettingCard
+          {visible('assistant', 'emi assistant release mode on off') && <SettingCard
             icon={<Bot size={20} />}
             title="Emi Assistant"
-            description="Control the customer assistant rollout. Beta is restricted to the email allowlist."
-            value={assistantReleaseMode === 'ON' ? 'On — all customers and guests' : assistantReleaseMode === 'BETA' ? 'Beta — allowlisted customers' : 'Off'}
-            badge={assistantReleaseMode === 'ON' ? 'active' : assistantReleaseMode === 'BETA' ? 'warning' : undefined}
+            description="Enable Emiily for all visitors. AI chat requires sign-in. Emiily is still in beta."
+            value={assistantReleaseMode === 'ON' ? 'On — all visitors' : 'Off'}
+            badge={assistantReleaseMode === 'ON' ? 'active' : undefined}
             onEdit={() => openModal('assistant')}
           />}
           {!visibleCount && <div className="admin-settings-empty"><Search size={26} /><strong>No matching settings</strong><span>Try another search or choose a different category.</span><button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setCategory('all'); }}>Clear filters</button></div>}
@@ -702,14 +701,8 @@ export default function AdminSettingsPage() {
               <label className="form-label" htmlFor="modal-assistant-mode">Release mode</label>
               <select id="modal-assistant-mode" className="form-input" value={draft['assistant_release_mode'] ?? 'OFF'} onChange={(e) => setDraft((p) => ({ ...p, assistant_release_mode: e.target.value }))}>
                 <option value="OFF">Off — hidden for everyone</option>
-                <option value="BETA">Beta — allowlisted signed-in customers</option>
-                <option value="ON">On — customers and public visitors</option>
+                <option value="ON">On — all visitors (AI still requires sign-in)</option>
               </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="modal-assistant-beta">Beta customer emails</label>
-              <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>Comma-separated. Admin accounts follow the same allowlist and public-help restrictions.</p>
-              <textarea id="modal-assistant-beta" className="form-input" rows={4} maxLength={2000} placeholder="customer@example.com, tester@example.com" value={draft['assistant_beta_user_emails'] ?? ''} onChange={(e) => setDraft((p) => ({ ...p, assistant_beta_user_emails: e.target.value }))} />
             </div>
           </div>
         </Modal>

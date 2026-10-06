@@ -4,6 +4,7 @@ import { prisma } from '../../lib/prisma';
 import { ensureArmoryDefaults } from '../../lib/armory';
 import { GameId } from '../../lib/lifecycle/rules';
 import { getVaultState } from '../../lib/lifecycle/server';
+import { getVaultSummary } from '../../lib/lifecycle/summary';
 import { gameLoaders, loadGameSections, artifactProgress, guess36Progress, spinProgress, towerProgress, guildDropProgress, watchPartyProgress, tournamentProgress } from '../../lib/lifecycle/games';
 import { getTowerProgressSnapshot } from '../../lib/tower';
 import { getEffectiveSpinDate } from '../../lib/daily-spin';
@@ -36,11 +37,11 @@ test('game progress uses owned, published, current account state without writes'
     await Promise.all(['armory_enabled', 'daily_spin_enabled', 'tower_enabled', 'guess_36_enabled'].map((key) => setting(key, 'true')));
     await setting('daily_spin_reset_hour', '0');
     const empty = await getVaultState(user.id, now);
-    assert.equal(empty.games.length, 7);
+    assert.equal(empty.games.length, 5);
     assert.ok(empty.games.every((row) => row.status !== 'error'));
     assert.equal(empty.games.find((row) => row.id === 'guild-drop')?.status, 'empty');
-    assert.equal(empty.games.find((row) => row.id === 'watch-party')?.status, 'empty');
-    assert.equal(empty.games.find((row) => row.id === 'tournaments')?.status, 'empty');
+    assert.equal(empty.games.find((row) => row.id === 'watch-party'), undefined);
+    assert.equal(empty.games.find((row) => row.id === 'tournaments'), undefined);
     assert.equal(await prisma.guess36Round.count({ where: { roundDate: '2026-10-01' } }), 0, 'read-only Vault must not create today’s round');
 
     await t.test('Guess 36 hides pending results and shows only the player’s selection and published reward', async () => {
@@ -154,7 +155,13 @@ test('game progress uses owned, published, current account state without writes'
       const settings = await prisma.setting.findMany({ orderBy: { key: 'asc' } });
       const rounds = await prisma.guess36Round.findMany({ orderBy: { roundDate: 'asc' } });
       const state = await getVaultState(user.id, now);
-      assert.equal(state.games.length, 7); assert.ok(state.games.every((row) => row.status !== 'error'));
+      assert.equal(state.games.length, 5); assert.ok(state.games.every((row) => row.status !== 'error'));
+      const destinations = new Set(state.items.filter((item) => Date.parse(item.validUntil) > now.getTime()).map((item) => item.href));
+      for (const game of state.games) {
+        if (game.deadline && Date.parse(game.deadline.at) <= now.getTime()) continue;
+        if (game.facts?.canClaim || game.facts?.dailyAvailable || (game.id === 'guess36' && game.status === 'available') || (game.id === 'tower' && game.status === 'active')) destinations.add(game.href);
+      }
+      assert.equal((await getVaultSummary(user.id, now)).pendingCount, destinations.size);
       assert.deepEqual(await prisma.user.findUniqueOrThrow({ where: { id: user.id } }), before);
       assert.deepEqual(await prisma.setting.findMany({ orderBy: { key: 'asc' } }), settings);
       assert.deepEqual(await prisma.guess36Round.findMany({ orderBy: { roundDate: 'asc' } }), rounds);

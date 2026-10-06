@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { changeSelection, guidedStateSchema, guidedWindow, timeLabel } from '../../lib/assistant/flow-state';
-import { intentToState, HANDOFF_TOOL } from '../../lib/assistant/intent';
 import { canCancelOwnBooking, customerScopedAdmin } from '../../lib/assistant/customer-scope';
 import { AssistantEventParser } from '../../lib/assistant/stream';
 import { getGuidedView } from '../../lib/assistant/guided';
@@ -16,7 +15,6 @@ function stub(t: { after: (fn: () => void) => void }, object: any, key: string, 
   t.after(() => { object[key] = original; });
 }
 
-const intent = { task: 'BOOK', stationQuery: null, date: null, startTime: null, duration: null, extraControllers: null, notes: null, quantity: null, afterTime: null };
 const user = { user: { id: 'self' }, requestUrl: 'http://localhost:3000', cookieHeader: '' };
 const tomorrow = addIndiaCalendarDays(getIndiaClock().date, 1)!;
 const station = { id: 'ps1', name: 'PS1', hourlyRate: 100, minDuration: 0.5, hasControllers: true };
@@ -31,18 +29,6 @@ test('guided state rejects injected identity, mutation fields and invalid values
   for (const patch of [{ userId: 'other' }, { role: 'ADMIN' }, { token: 'bad' }, { duration: 0.75 }, { extraControllers: 4 }, { notes: 'x'.repeat(161) }]) {
     assert.equal(guidedStateSchema.safeParse({ task: 'BOOK', ...patch }).success, false);
   }
-});
-test('typed follow-ups preserve known details but require explicit benefit selection', () => {
-  const previous: GuidedState = { task: 'BOOK', stationId: 'ps1', date: tomorrow, startTime: '18:00', duration: 1, extraControllers: 0, benefitMode: 'HOUR_PASS', hourPassId: 'pass' };
-  const next = intentToState({ ...intent, duration: 2 }, previous)!;
-  assert.equal(next.stationId, 'ps1'); assert.equal(next.date, tomorrow); assert.equal(next.startTime, '18:00');
-  assert.equal(next.duration, 2); assert.equal(next.extraControllers, undefined); assert.equal(next.hourPassId, undefined);
-});
-test('interpretation can only hand off; unsupported and multi-station requests are bounded', () => {
-  assert.equal(intentToState({ ...intent, task: 'UNSUPPORTED' }), null);
-  assert.equal(intentToState({ ...intent, quantity: 2, startTime: '20:00' })?.task, 'NEXT');
-  assert.equal(HANDOFF_TOOL.strict, true);
-  assert.deepEqual([...HANDOFF_TOOL.parameters.required].sort(), Object.keys(HANDOFF_TOOL.parameters.properties).sort());
 });
 test('admin assistant requests only remove privileges and enforce ownership and cutoff', () => {
   assert.equal(customerScopedAdmin('ADMIN', new Headers({ 'x-emiguild-customer-scope': '1' })), false);
@@ -68,11 +54,11 @@ test('SSE parser handles fragmented and CRLF frames without duplicate events', (
 });
 test('release modes apply equally to admins and customers', async (t) => {
   let mode = 'OFF';
-  stub(t, prisma.setting, 'findMany', async () => [{ key: 'assistant_release_mode', value: mode }, { key: 'assistant_beta_user_emails', value: 'admin@example.test' }]);
+  stub(t, prisma.setting, 'findUnique', async () => ({ value: mode }));
   const admin = { role: 'ADMIN', email: 'admin@example.test' };
   assert.equal(await canUseAssistant(admin), false);
-  mode = 'BETA'; assert.equal(await canUseAssistant(admin), true); assert.equal(await canUseAssistant(null), false);
-  assert.equal(await canUseAssistant({ role: 'ADMIN', email: 'unlisted@example.test' }), false);
+  mode = 'BETA'; assert.equal(await canUseAssistant(admin), true); assert.equal(await canUseAssistant(null), true);
+  assert.equal(await canUseAssistant({ role: 'USER', email: 'anyone@example.test' }), true);
   mode = 'ON'; assert.equal(await canUseAssistant(admin), true); assert.equal(await canUseAssistant(null), true);
 });
 test('button booking reaches a signed quote without AI, writes, or benefit auto-selection', async (t) => {
@@ -120,7 +106,7 @@ test('next availability defaults to one hour and rechecks capacity after each st
   assert.equal(v.options[0].state.notes, 'FC');
   assert.equal(v.options[0].state.gameChosen, true);
   assert.equal(v.card, undefined);
-  occupied = [{ stationId: 'other', startTime: '16:00', endTime: '23:00' }];
+  occupied = [{ date: addIndiaCalendarDays(getIndiaClock().date, 30)!, stationId: 'other', startTime: '16:00', endTime: '23:00' }];
   const noGroup = await getGuidedView({ task: 'NEXT', date: addIndiaCalendarDays(getIndiaClock().date, 30)!, quantity: 2, afterTime: '18:00', search: true }, user);
   assert.equal(noGroup.title, 'No matching slots found');
 });

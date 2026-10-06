@@ -64,7 +64,7 @@ export async function spinProgress(userId: string, now: Date): Promise<GameResul
   }) };
 }
 
-export async function artifactProgress(userId: string, now: Date): Promise<GameResult> {
+export async function artifactProgress(userId: string, now: Date, includeGoals = true): Promise<GameResult> {
   const [forge, inventory, loadout, sets] = await Promise.all([
     getForgeAvailability(userId, now),
     prisma.armoryInventory.findMany({ where: { userId, quantity: { gt: 0 } }, select: { artifactId: true, quantity: true } }),
@@ -72,7 +72,7 @@ export async function artifactProgress(userId: string, now: Date): Promise<GameR
       headgear: { include: { set: true } }, armor: { include: { set: true } },
       gloves: { include: { set: true } }, boots: { include: { set: true } },
     } }),
-    prisma.armorySet.findMany({ where: { active: true, rewards: { some: { active: true } } }, include: { artifacts: true, rewards: { where: { active: true } } } }),
+    includeGoals ? prisma.armorySet.findMany({ where: { active: true, rewards: { some: { active: true } } }, include: { artifacts: true, rewards: { where: { active: true } } } }) : Promise.resolve([]),
   ]);
   const equipped = { HEADGEAR: loadout?.headgear ?? null, ARMOR: loadout?.armor ?? null, GLOVES: loadout?.gloves ?? null, BOOTS: loadout?.boots ?? null };
   const pieces = Object.values(equipped).filter((piece) => piece && inventory.some((row) => row.artifactId === piece.id));
@@ -123,10 +123,10 @@ export async function towerProgress(userId: string, now: Date): Promise<GameResu
 }
 
 export async function guildDropProgress(userId: string, now: Date): Promise<GameResult> {
-  const entries = await prisma.drawEntry.findMany({ where: { userId, draw: { status: { not: 'DRAFT' } } }, include: { draw: true }, orderBy: { createdAt: 'desc' } });
-  const current = entries.filter(({ draw }) => ['ACTIVE', 'CLOSED'].includes(draw.status) && !draw.winnerPickedAt);
-  const latest = entries.filter(({ draw }) => draw.status === 'CLOSED' && draw.winnerId && draw.winnerPickedAt && draw.winnerPickedAt <= now)
-    .sort((a, b) => b.draw.winnerPickedAt!.getTime() - a.draw.winnerPickedAt!.getTime())[0];
+  const [current, latest] = await Promise.all([
+    prisma.drawEntry.findMany({ where: { userId, draw: { status: { in: ['ACTIVE', 'CLOSED'] }, winnerPickedAt: null } }, include: { draw: true }, orderBy: { createdAt: 'desc' } }),
+    prisma.drawEntry.findFirst({ where: { userId, draw: { status: 'CLOSED', winnerId: { not: null }, winnerPickedAt: { lte: now } } }, include: { draw: true }, orderBy: { draw: { winnerPickedAt: 'desc' } } }),
+  ]);
   const details = current.map(({ draw }) => `${draw.title}: ${draw.endsAt && draw.endsAt <= now ? 'awaiting result' : 'entry confirmed'}.`);
   if (latest) details.push(`Latest result — ${latest.draw.title}: ${latest.draw.winnerId === userId ? `you won ${latest.draw.prize}` : 'another player won'}.`);
   const next = current.map(({ draw }) => draw.endsAt).filter((date): date is Date => !!date && date > now).sort((a, b) => a.getTime() - b.getTime())[0];
@@ -178,7 +178,7 @@ export const gameLoaders: Record<GameId, (userId: string, now: Date) => Promise<
   'guild-drop': guildDropProgress, 'watch-party': watchPartyProgress, tournaments: tournamentProgress,
 };
 
-export async function loadGameSections(userId: string, now: Date, loaders = gameLoaders): Promise<GameResult[]> {
+export async function loadGameSections(userId: string, now: Date, loaders: Partial<typeof gameLoaders> = gameLoaders): Promise<GameResult[]> {
   const entries = Object.entries(loaders) as [GameId, (userId: string, now: Date) => Promise<GameResult>][];
   const results = await Promise.allSettled(entries.map(([, load]) => load(userId, now)));
   return results.map((result, index) => {

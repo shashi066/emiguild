@@ -84,16 +84,21 @@ export async function POST(req: NextRequest) {
 }
 
 // GET — fetch user's own rentals
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const page = Number(request.nextUrl.searchParams.get('page') ?? 1);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 100000) return NextResponse.json({ error: 'Invalid page' }, { status: 400 });
+  const pageSize = 25;
   const rentals = await prisma.ps5Rental.findMany({
     where: { userId: session.user.id },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    skip: (page - 1) * pageSize,
+    take: pageSize + 1,
   });
 
-  return NextResponse.json({ rentals });
+  return NextResponse.json({ rentals: rentals.slice(0, pageSize), page, hasMore: rentals.length > pageSize });
 }

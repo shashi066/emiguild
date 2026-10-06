@@ -18,8 +18,6 @@ export async function startGuidedRequest(actorKey: string) {
     if (allowed) await tx.assistantUsageDaily.update({ where, data: { ...window, guidedRequestCount: { increment: 1 } } });
     return allowed;
   });
-  const retentionDate = addIndiaCalendarDays(date, -90);
-  if (retentionDate) await prisma.assistantUsageDaily.deleteMany({ where: { date: { lt: retentionDate } } });
   return result;
 }
 
@@ -70,10 +68,6 @@ export async function startAssistantRequest(actorKey: string, limit: number, now
     });
     return { reserved, usage };
   });
-  const retentionDate = addIndiaCalendarDays(date, -90);
-  if (retentionDate) {
-    void prisma.assistantUsageDaily.deleteMany({ where: { date: { lt: retentionDate } } }).catch(() => undefined);
-  }
   return { allowed: reserved.count === 1, ...assistantAllowance(date, usage.requestCount, limit) };
 }
 
