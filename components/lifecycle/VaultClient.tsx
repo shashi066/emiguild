@@ -42,6 +42,7 @@ export function VaultClient() {
     const deadlines = [
       ...state.items.map((item) => Date.parse(item.validUntil)),
       ...state.games.flatMap((game) => [
+        ...(game.facts?.review ? [Date.parse(game.facts.review.nextResetAt)] : []),
         ...(game.deadline ? [Date.parse(game.deadline.at)] : []),
         ...(game.facts?.tokenExpiries ?? []).map(Date.parse),
         ...(game.facts?.events ?? []).flatMap((event) => event.at ? [Date.parse(event.at)] : []),

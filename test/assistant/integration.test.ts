@@ -67,6 +67,7 @@ test('assistant HTTP flows against a disposable database', { skip: !base }, asyn
     assert.ok(!(await (await fetch(url, { headers: { Cookie: adminCookie } })).text()).includes(config.apiKey));
     const publicSettings = await (await fetch(`${base}/api/settings`)).json();
     assert.equal(publicSettings.assistant_ai_config, undefined);
+    assert.ok(Object.keys(publicSettings).every((key) => ['controller_price', 'special_opening_date', 'special_opening_enabled', 'special_opening_time'].includes(key)));
     const bookingPage = await fetch(`${base}/book`);
     assert.equal(bookingPage.status, 200);
     const bookingHtml = await bookingPage.text();
@@ -164,6 +165,54 @@ test('assistant HTTP flows against a disposable database', { skip: !base }, asyn
     const standardResult = await act(standard.data.card.actionToken);
     assert.equal(standardResult.response.status, 200, JSON.stringify(standardResult.data));
     assert.equal(standardResult.data.card.data.booking.totalPrice, 145);
+  });
+  await t.test('controller price and pass balance changes require fresh confirmation', async () => {
+    let laterDate = addIndiaCalendarDays(nextDate, 2)!;
+    while ([0, 6].includes(new Date(`${laterDate}T12:00:00Z`).getUTCDay())) laterDate = addIndiaCalendarDays(laterDate, 1)!;
+    const prepared = await guide({ ...draft, date: laterDate, benefitMode: 'STANDARD' });
+    await prisma.setting.update({ where: { key: 'controller_price' }, data: { value: '35' } });
+    const stale = await act(prepared.data.card.actionToken);
+    assert.equal(stale.response.status, 409); assert.equal(stale.data.code, 'QUOTE_STALE');
+    assert.equal(stale.data.card.data.quote.controllerUnitPrice, 35);
+    await prisma.setting.update({ where: { key: 'controller_price' }, data: { value: '25' } });
+    const passCard = await guide({ ...draft, date: laterDate, benefitMode: 'HOUR_PASS', hourPassId: pass.id });
+    assert.equal(passCard.response.status, 200, JSON.stringify(passCard.data));
+    await prisma.userPass.update({ where: { id: pass.id }, data: { usedHours: 10 } });
+    assert.notEqual((await act(passCard.data.card.actionToken)).response.status, 200);
+    assert.equal(await prisma.booking.count({ where: { userId: admin.id, date: laterDate } }), 0);
+    await prisma.userPass.update({ where: { id: pass.id }, data: { usedHours: 0 } });
+  });
+  await t.test('rentals enforce server price, ownership, concurrent transitions and pagination', async () => {
+    for (const [key, value] of Object.entries({ ps5_rental_status: 'AVAILABLE', ps5_rental_price_per_day: '1200', ps5_rental_extra_controller: '500' })) {
+      await prisma.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+    }
+    const game = await prisma.game.findFirstOrThrow({ where: { name: 'Test FC' } });
+    const payload = { rentalDays: 2, extraControllers: 1, selectedGameIds: [game.id], customerName: 'Test', customerPhone: '9999999998',
+      deliveryAddress: 'Test address only', deliveryCity: 'Hyderabad', deliveryPincode: '500001', acceptedTerms: true, totalPrice: 1 };
+    assert.equal((await api('/api/ps5-rental', payload, '')).response.status, 401);
+    const created = await api('/api/ps5-rental', payload, otherCookie);
+    assert.equal(created.response.status, 201, JSON.stringify(created.data));
+    const rental = created.data.rental;
+    assert.equal(rental.totalPrice, 3400);
+    const update = (path: string, cookie: string, body: unknown) => fetch(base + path, { method: 'PUT', headers: { Cookie: cookie, Origin: base!, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal((await update('/api/admin/ps5-rentals/' + rental.id, otherCookie, { status: 'CONFIRMED' })).status, 403);
+    assert.equal((await update('/api/ps5-rental/' + rental.id, adminCookie, {})).status, 403);
+    const results = await Promise.all(['CONFIRMED', 'CONFIRMED'].map((status) => update('/api/admin/ps5-rentals/' + rental.id, adminCookie, { status })));
+    assert.equal(results.filter((response) => response.status === 200).length, 1);
+    assert.equal(results.filter((response) => response.status === 409).length, 1);
+    assert.notEqual((await update('/api/ps5-rental/' + rental.id, otherCookie, {})).status, 200);
+    const comment = await update('/api/admin/ps5-rentals/' + rental.id, adminCookie, { adminComment: 'Test note' });
+    assert.equal(comment.status, 200);
+    assert.deepEqual(Object.keys((await comment.json()).rental.user), ['email']);
+    assert.equal((await update('/api/admin/ps5-rentals/' + rental.id, adminCookie, { status: 'CANCELLED' })).status, 200);
+    const next = await api('/api/ps5-rental', payload, otherCookie);
+    assert.equal(next.response.status, 201);
+    const cancellations = await Promise.all([0, 1].map(() => update('/api/ps5-rental/' + next.data.rental.id, otherCookie, {})));
+    assert.equal(cancellations.filter((response) => response.status === 200).length, 1);
+    assert.ok(cancellations.every((response) => [200, 400, 409].includes(response.status)));
+    const page = await fetch(base + '/api/ps5-rental?page=2', { headers: { Cookie: otherCookie } });
+    assert.equal(page.status, 200);
+    assert.deepEqual((await page.json()).rentals, []);
   });
   await t.test('multi-station continuation reports a fresh conflict without undoing the first booking', async () => {
     const collision = await prisma.booking.create({ data: { userId: other.id, stationId: second.id, date: nextDate, startTime: '18:00', endTime: '19:00', duration: 1, totalPrice: 100, status: 'CONFIRMED' } });

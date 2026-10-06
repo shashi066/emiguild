@@ -18,8 +18,7 @@ type ButtonVariant =
   | 'drop'
   | 'tournament'
   | 'armory'
-  | 'watch'
-  | 'ps5';
+  | 'watch';
 type AnimationVariant = 'none' | 'spin' | 'lucky' | 'tournament';
 
 interface HeroButtonProps {
@@ -31,9 +30,6 @@ interface HeroButtonProps {
   animation?: AnimationVariant;
   className?: string;
   id?: string;
-  badge?: string;
-  badgeClassName?: string;
-  showShimmer?: boolean;
   onClick?: () => void;
   disabled?: boolean;
 }
@@ -101,11 +97,6 @@ const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
     border: '1px solid rgba(34, 211, 238, 0.48)',
     color: '#d8fbff',
   },
-  ps5: {
-    background: 'rgba(0, 112, 209, 0.18)',
-    border: '1px solid rgba(0, 212, 255, 0.45)',
-    color: '#e0f2fe',
-  },
 };
 
 const animationClasses: Record<AnimationVariant, string> = {
@@ -113,13 +104,6 @@ const animationClasses: Record<AnimationVariant, string> = {
   spin: 'spin-float-btn',
   lucky: 'guild-drop-btn',
   tournament: 'tournament-btn',
-};
-
-const animationStyles: Record<AnimationVariant, React.CSSProperties> = {
-  none: {},
-  spin: {},
-  lucky: {},
-  tournament: {},
 };
 
 export default function HeroButton({
@@ -131,23 +115,18 @@ export default function HeroButton({
   animation = 'none',
   className = '',
   id,
-  badge,
-  badgeClassName,
-  showShimmer,
   onClick,
   disabled = false,
 }: HeroButtonProps) {
   const baseClass = variant === 'primary' ? 'btn btn-primary btn-lg' : 'btn btn-ghost btn-lg';
   const animClass = animationClasses[animation];
   const combinedClass = [baseClass, animClass, className].filter(Boolean).join(' ');
-  const style = { ...variantStyles[variant], ...animationStyles[animation] };
+  const style = variantStyles[variant];
 
   const content = (
     <>
-      {showShimmer && <span className="hero-btn-shimmer" aria-hidden="true" />}
       <Icon size={18} />
       <span>{label}</span>
-      {badge && <span className={badgeClassName || 'hero-btn-badge'} aria-hidden="true">{badge}</span>}
       {targetId === 'stations' && <ChevronRightIcon />}
     </>
   );

@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { TowerReviewButton } from '@/components/TowerReviewButton';
-import { ArrowRight, Castle, Check, Flame, Gift, Hammer, RotateCw, Target, Trophy, Tv, User, Shield, Footprints, HardHat, Hand, ChevronRight } from 'lucide-react';
+import { ArrowRight, Castle, Check, Flame, Gift, Hammer, RotateCw, Target, User, Shield, Footprints, HardHat, Hand, ChevronRight } from 'lucide-react';
 import { AccountState, GameProgress, orderVaultItems, formatVaultTime } from '@/lib/lifecycle/rules';
 import { selectNextUnlock, selectVaultAction } from '@/lib/lifecycle/vault-presentation';
 import styles from './vault.module.css';
 
-const icons = { guess36: Target, spin: RotateCw, artifacts: Hammer, tower: Castle, 'guild-drop': Gift, 'watch-party': Tv, tournaments: Trophy };
+const icons = { guess36: Target, spin: RotateCw, artifacts: Hammer, tower: Castle, 'guild-drop': Gift };
 function Action({ href, children, primary = false }: { href: string; children: React.ReactNode; primary?: boolean }) {
   return <Link className={primary ? styles.primaryButton : styles.linkButton} href={href}>{children}<ArrowRight size={18} aria-hidden="true" /></Link>;
 }

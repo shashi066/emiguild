@@ -9,11 +9,10 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { MessageCircle, X, ArrowLeft, RotateCcw, Send } from 'lucide-react';
 import type { AssistantAllowance, AssistantCard, AssistantLink, AssistantMessage, BookingQuote, GuidedState, GuidedView } from '@/types/assistant';
 import { PUBLIC_HELP_LINKS } from '@/lib/assistant/public-help';
-import { changeSelection, dateLabel, timeLabel, priceLabel, guidedStateSchema } from '@/lib/assistant/flow-state';
+import { changeSelection, dateLabel, timeLabel, priceLabel, guidedStateSchema, HOME_OPTIONS } from '@/lib/assistant/flow-state';
 import { AssistantEventParser } from '@/lib/assistant/stream';
 
-const TASKS = [ ['Book a Slot', 'BOOK'], ['Next Available', 'NEXT'], ['My Bookings', 'BOOKINGS'], ['Daily Spin', 'SPIN'], ['Games', 'GAMES'], ['Prices', 'PRICES'] ] as const;
-const HOME: GuidedView = { state: { task: 'HOME' }, title: 'What would you like to do?', options: TASKS.map(([label, task]) => ({ label, state: { task } })) };
+const HOME: GuidedView = { state: { task: 'HOME' }, title: 'What would you like to do?', options: HOME_OPTIONS };
 const PENDING = 'emi-assistant-pending';
 
 function AnswerLinks({ links }: { links: AssistantLink[] }) {
@@ -328,7 +327,7 @@ export function EmiAssistant() {
         <h2 ref={heading} tabIndex={-1}>{view.card?.actionToken ? 'Review your selection' : view.title}</h2>
         {view.description && <p>{view.description}</p>}
         <p className={notice ? 'emi-status' : 'emi-sr-only'} role="status">{notice}</p>
-        {error && <div className="emi-error" role="alert"><p>{error}</p>{retry && <button disabled={disabled} onClick={() => void navigate(retry, false)}>Refresh options</button>}{retryText && <button disabled={disabled || !session?.user?.id || allowance?.remaining === 0} onClick={() => void send(retryText)}>Retry AI request</button>}</div>}
+        {error && <div className="emi-error" role="alert"><p>{error}</p>{retry && <button disabled={disabled} onClick={() => void navigate(retry, false)}>Refresh options</button>}</div>}
         {view.state.task === 'BOOK' && view.state.stationId && <details className="emi-change"><summary>Change selections</summary>{(['stationId', 'date', 'startTime', 'duration', 'extraControllers', 'notes'] as const).filter((field) => view.state[field] !== undefined).map((field) => <button key={field} disabled={disabled} onClick={() => void navigate(changeSelection(view.state, field))}>Change {({ stationId: 'station', date: 'date', startTime: 'time', duration: 'duration', extraControllers: 'controllers', notes: 'game' })[field]}</button>)}</details>}
         {view.login && <button className="btn btn-primary" disabled={disabled} onClick={login}>Sign in</button>}
         {view.nextFilters && <NextFilters key={JSON.stringify(view.state)} view={view} busy={disabled} navigate={(state) => void navigate(state)} />}

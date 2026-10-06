@@ -5,7 +5,7 @@ import { ensureArmoryDefaults } from '../../lib/armory';
 import { GameId } from '../../lib/lifecycle/rules';
 import { getVaultState } from '../../lib/lifecycle/server';
 import { getVaultSummary } from '../../lib/lifecycle/summary';
-import { gameLoaders, loadGameSections, artifactProgress, guess36Progress, spinProgress, towerProgress, guildDropProgress, watchPartyProgress, tournamentProgress } from '../../lib/lifecycle/games';
+import { gameLoaders, loadGameSections, artifactProgress, guess36Progress, spinProgress, towerProgress, guildDropProgress } from '../../lib/lifecycle/games';
 import { getTowerProgressSnapshot } from '../../lib/tower';
 import { getEffectiveSpinDate } from '../../lib/daily-spin';
 
@@ -19,9 +19,9 @@ test('one failed game keeps other game sections and does not fabricate messaging
     return { items: [], game: { id, title: id, status: 'empty', summary: 'No current activity', details: [], href: '/', action: 'View' } };
   };
   const sections = await loadGameSections('test', now, loaders);
-  assert.equal(sections.length, 7);
+  assert.equal(sections.length, 5);
   assert.equal(sections.find((row) => row.game.id === 'tower')?.game.status, 'error');
-  assert.equal(sections.filter((row) => row.game.status === 'empty').length, 6);
+  assert.equal(sections.filter((row) => row.game.status === 'empty').length, 4);
   assert.deepEqual(sections.flatMap((row) => row.items), []);
 });
 
@@ -40,8 +40,6 @@ test('game progress uses owned, published, current account state without writes'
     assert.equal(empty.games.length, 5);
     assert.ok(empty.games.every((row) => row.status !== 'error'));
     assert.equal(empty.games.find((row) => row.id === 'guild-drop')?.status, 'empty');
-    assert.equal(empty.games.find((row) => row.id === 'watch-party'), undefined);
-    assert.equal(empty.games.find((row) => row.id === 'tournaments'), undefined);
     assert.equal(await prisma.guess36Round.count({ where: { roundDate: '2026-10-01' } }), 0, 'read-only Vault must not create today’s round');
 
     await t.test('Guess 36 hides pending results and shows only the player’s selection and published reward', async () => {
@@ -126,29 +124,6 @@ test('game progress uses owned, published, current account state without writes'
       assert.ok(state.game.details.some((line) => line.includes('awaiting result')));
       assert.ok(state.game.details.some((line) => line.includes('you won')));
       assert.ok(!state.game.details.some((line) => line.includes('draft')));
-    });
-    await t.test('Watch Party shows invited events and settled own predictions without private events', async () => {
-      for (const [suffix, status] of [['party', 'ACTIVE'], ['private', 'DRAFT'], ['settled', 'CLOSED']]) {
-        const party = await prisma.watchParty.create({ data: { id: `${prefix}-${suffix}`, title: `${suffix} event`, homeTeam: 'A', awayTeam: 'B', kickoffAt: later, status,
-          ...(suffix === 'settled' ? { predictionStatus: 'SETTLED', settledAt: now } : {}) } });
-        await prisma.watchPartyInvite.create({ data: { partyId: party.id, userId: user.id } });
-        if (suffix === 'settled') await prisma.watchPartyPrediction.create({ data: { userId: user.id, partyId: party.id, optionKey: 'HOME', optionLabel: 'A', stakeUnits: 100, payoutUnits: 200, status: 'WON' } });
-      }
-      const state = await watchPartyProgress(user.id, now);
-      assert.equal(state.game.summary, '1 current event');
-      assert.ok(state.game.details.some((line) => line.includes('20 EMIC credited')));
-      assert.ok(!JSON.stringify(state).includes('private event'));
-    });
-    await t.test('Tournaments use account-linked registration and recorded matches only', async () => {
-      const tournament = await prisma.tournament.create({ data: { id: `${prefix}-tournament`, name: 'Player tournament', date: '2026-10-01', status: 'ONGOING' } });
-      const player = await prisma.tournamentPlayer.create({ data: { tournamentId: tournament.id, userId: user.id, name: 'Player' } });
-      const rival = await prisma.tournamentPlayer.create({ data: { tournamentId: tournament.id, userId: other.id, name: 'Rival' } });
-      await prisma.tournamentMatch.create({ data: { tournamentId: tournament.id, round: 1, matchIndex: 0, player1Id: player.id, player2Id: rival.id, winnerId: player.id, status: 'COMPLETED' } });
-      await prisma.tournamentMatch.create({ data: { tournamentId: tournament.id, round: 2, matchIndex: 0, player1Id: player.id } });
-      const current = await tournamentProgress(user.id);
-      assert.ok(current.game.details.some((line) => line.includes('round 2 upcoming') && line.includes('1 recorded wins')));
-      await prisma.tournament.update({ where: { id: tournament.id }, data: { status: 'FINISHED' } });
-      assert.equal((await tournamentProgress(user.id)).game.status, 'completed');
     });
     await t.test('Vault reads leave account, game records, and settings untouched', async () => {
       const before = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });

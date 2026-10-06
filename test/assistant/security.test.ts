@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ASSISTANT_TOOLS } from '../../lib/assistant/tools';
+import { publicHelpRequest } from '../../lib/assistant/chat';
 import { createActionToken, quoteFingerprint, verifyActionToken } from '../../lib/assistant/tokens';
 import { assistantActor } from '../../lib/assistant/usage';
 import { getVenueRemainingCapacity } from '../../lib/booking-availability';
@@ -20,25 +20,13 @@ const draft: BookingDraft = {
   appliedBenefitType: null,
 };
 
-test('assistant exposes only the approved read and prepare tool surface', () => {
-  assert.deepEqual(
-    ASSISTANT_TOOLS.map((tool) => tool.name),
-    [
-      'get_stations_and_prices', 'get_availability', 'get_games',
-      'get_my_bookings', 'get_booking_options', 'get_daily_spin_status',
-      'prepare_booking', 'prepare_cancellation', 'prepare_daily_spin',
-    ],
-  );
-  for (const tool of ASSISTANT_TOOLS) {
-    assert.equal(tool.strict, true);
-    assert.equal(tool.parameters.additionalProperties, false);
-    assert.deepEqual(
-      [...tool.parameters.required].sort(),
-      Object.keys(tool.parameters.properties).sort(),
-      `${tool.name} must require every strict-schema property`,
-    );
-  }
-  assert.equal(ASSISTANT_TOOLS.some((tool) => /revenue|admin|customer|sql|create_booking|cancel_booking/.test(tool.name)), false);
+test('AI receives only approved knowledge and bounded chat, with no tools or private identity', () => {
+  const request = publicHelpRequest('Where is EmiGuild?', [{ role: 'user', content: 'Hi' }], { venue: 'EmiGuild' }, 'test-model');
+  assert.equal('tools' in request, false);
+  assert.equal(request.store, false);
+  assert.equal(request.max_output_tokens, 600);
+  assert.deepEqual(JSON.parse(request.input[0].content), { history: [{ role: 'user', content: 'Hi' }], request: 'Where is EmiGuild?' });
+  assert.ok(request.instructions.includes('EmiGuild'));
 });
 
 test('booking confirmation tokens bind exact data and reject tampering', () => {

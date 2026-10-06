@@ -5,12 +5,19 @@ import { ActivityWindow, DAY, DeliveryHistory, EmailCampaign, EvaluationInput, e
 import { emailConfiguration } from './email';
 
 export async function loadEmailEvaluation(userId: string, now = new Date(), options: { ignoreSchedule?: boolean; transportAvailable?: boolean } = {}) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, include: { lifecycleEmailState: true } });
-  if (!user) return null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, email: true, createdAt: true, lastWebsiteVisitAt: true, lifecycleEmailState: { select: { unsubscribedAt: true, nextComebackCheckAt: true } } } });
+  if (!user || user.role !== 'USER' || user.lifecycleEmailState?.unsubscribedAt
+    || (user.lastWebsiteVisitAt && now.getTime() - user.lastWebsiteVisitAt.getTime() < 3 * DAY)) return null;
+  const settings = await getMessagingSettings();
+  if (!settings.emailDigest && !settings.comebackEmail) return null;
+  const rows = await prisma.lifecycleEmailDelivery.findMany({
+    where: { userId, campaign: { not: 'TEST' }, dispatchedAt: { gt: new Date(now.getTime() - 7 * DAY) } },
+    select: { campaign: true, status: true, dispatchedAt: true },
+  });
+  if (rows.some((row) => ['SENDING', 'ACCEPTED', 'UNKNOWN'].includes(row.status))) return null;
   const start = new Date(now.getTime() - 3 * DAY);
-  const [state, settings, rows, counts] = await Promise.all([
-    getVaultState(user.id, now), getMessagingSettings(),
-    prisma.lifecycleEmailDelivery.findMany({ where: { userId, campaign: { not: 'TEST' }, dispatchedAt: { gt: new Date(now.getTime() - 7 * DAY) } }, orderBy: { dispatchedAt: 'desc' } }),
+  const [state, counts] = await Promise.all([
+    getVaultState(user.id, now),
     Promise.allSettled([
       prisma.userDailySpin.count({ where: { userId, createdAt: { gte: start, lt: now } } }),
       prisma.armoryDailyClaim.count({ where: { userId, createdAt: { gte: start, lt: now } } }),

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
@@ -42,19 +43,24 @@ export async function PUT(
     return NextResponse.json({ error: `Cannot change rental from ${existing.status} to ${status}.`, code: 'INVALID_STATUS_TRANSITION' }, { status: 409 });
   }
 
-  const rental = await prisma.ps5Rental.update({
-    where: { id },
-    data: {
-      ...(status ? { status } : {}),
-      ...(status === 'RETURNED' || status === 'CANCELLED' ? { activeUserId: null } : {}),
-      ...(adminComment !== undefined ? { adminComment } : {}),
-      ...(startDate ? { startDate } : {}),
-      ...(endDate ? { endDate } : {}),
-    },
-    include: {
-      user: { select: { name: true, email: true, phone: true } },
-    },
-  });
+  try {
+    const rental = await prisma.ps5Rental.update({
+      where: { id, status: existing.status },
+      data: {
+        ...(status ? { status } : {}),
+        ...(status === 'RETURNED' || status === 'CANCELLED' ? { activeUserId: null } : {}),
+        ...(adminComment !== undefined ? { adminComment } : {}),
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {}),
+      },
+      include: {
+        user: { select: { email: true } },
+      },
+    });
 
-  return NextResponse.json({ rental });
+    return NextResponse.json({ rental });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') return NextResponse.json({ error: 'Rental changed. Refresh and try again.' }, { status: 409 });
+    throw error;
+  }
 }

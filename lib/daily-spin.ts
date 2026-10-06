@@ -1,3 +1,4 @@
+import { getIstDateKey, getNextIstMidnight } from '@/lib/armory-clock';
 import { prisma } from '@/lib/prisma';
 
 export const STREAK_EPIC_TARGET = 10;
@@ -8,50 +9,9 @@ const STREAK_RESET_RARITIES = new Set(['EPIC', 'LEGENDARY']);
 // If the current IST hour is less than resetHour, it counts as the previous day.
 export function getEffectiveSpinDate(resetHour: number = 0, now: Date = new Date()): { spinDate: string; nextReset: Date } {
 
-  // Get current time in IST
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: false,
-  });
-
-  // Parse the formatted parts
-  const parts = formatter.formatToParts(now);
-  const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '0', 10);
-
-  const istYear = getPart('year');
-  const istMonth = getPart('month') - 1; // 0-indexed for Date
-  const istDay = getPart('day');
-  const istHour = getPart('hour') === 24 ? 0 : getPart('hour'); // some browsers return 24 for midnight
-
-  // Create a Date object representing the IST time (treating the local parts as UTC for manipulation)
-  const istDate = new Date(Date.UTC(istYear, istMonth, istDay, istHour));
-
-  if (istHour < resetHour) {
-    // If before reset hour, it belongs to the previous "spin day"
-    istDate.setUTCDate(istDate.getUTCDate() - 1);
-  }
-
-  const year = istDate.getUTCFullYear();
-  const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(istDate.getUTCDate()).padStart(2, '0');
-  const spinDateStr = `${year}-${month}-${day}`;
-
-  // Calculate next reset time in absolute UTC by adding 1 day to the effective date and setting hour to resetHour
-  // Then converting back from IST to UTC
-  // Effective Date is: istDate (UTC representation of IST date)
-  const nextResetIst = new Date(Date.UTC(year, istDate.getUTCMonth(), istDate.getUTCDate() + 1, resetHour, 0, 0, 0));
-
-  // Since nextResetIst is treating IST values as UTC, to get actual UTC we subtract the 5.5 hour offset
-  const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
-  const nextResetUtc = new Date(nextResetIst.getTime() - istOffsetMs);
-
-  return { spinDate: spinDateStr, nextReset: nextResetUtc };
+  const offset = normalizeSpinResetHour(resetHour) * 60 * 60_000;
+  const shifted = new Date(now.getTime() - offset);
+  return { spinDate: getIstDateKey(shifted), nextReset: new Date(getNextIstMidnight(shifted).getTime() + offset) };
 }
 
 export function normalizeSpinResetHour(value: unknown) {
@@ -169,4 +129,13 @@ export async function getSpinState(userId: string, now: Date = new Date()) {
     prisma.lootItem.findMany({ where: { enabled: true } }),
   ]);
   return { settings, spinDate, nextReset, spin, streak, items, ...getSpinAvailability(settings, spin) };
+}
+
+export async function getSpinEligibility(userId: string, now = new Date()) {
+  const settings = await getSpinSettings();
+  const { spinDate, nextReset } = getEffectiveSpinDate(settings.resetHour, now);
+  const spin = await prisma.userDailySpin.findUnique({
+    where: { userId_spinDate: { userId, spinDate } }, select: { attempts: true },
+  });
+  return { settings, spinDate, nextReset, ...getSpinAvailability(settings, spin) };
 }

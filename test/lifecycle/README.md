@@ -1,13 +1,15 @@
-# Vault and legacy email verification
+# Vault and Messaging verification
 
-Run `npm run test:lifecycle`. Database tests require `LIFECYCLE_DB_TESTS=1` and a disposable SQLite database whose filename includes `lifecycle-test`. HTTP tests additionally require `LIFECYCLE_TEST_URL` and a test server using that same database. Never run fixture tests against player data.
+Run `npm run test:lifecycle`. Database tests require `LIFECYCLE_DB_TESTS=1` and a disposable SQLite database whose filename includes `lifecycle-test`. HTTP tests additionally require `LIFECYCLE_TEST_URL` and a test server using that database. Never run fixtures against player data. Leave Gmail credentials empty; delivery tests inject a fake transport.
 
-## Retired messaging
+## Messaging / Mail
 
-Messaging admin pages, preview/settings/test-send endpoints, website activity tracking and the email cron have been removed. Existing unsubscribe links and records are preserved. Legacy email helpers and their tests remain for compatibility but have no scheduled or admin entry point.
+Admin → Customers → Messaging / Mail (`/admin/lifecycle`) has campaign switches and an admin-only test send. Player Preview and its lookup/API remain removed. Loading/saving settings never sends mail.
+The restored daily schedule targets 18:00 IST and requires the existing `CRON_SECRET` bearer token; absent/incorrect authentication is rejected before database work. Mail uses existing Gmail credentials and AUTH_SECRET, and automatic delivery is production-only.
+Visits outside admin pages are throttled to five minutes on client/server and pause promotional mail for 72 hours. Campaigns share a rolling seven-day cap, durable reservations, and unsubscribe suppression. Interrupted/ambiguous sends are not automatically retried. Both switches off skips player evaluation.
+Use fake transport tests for delivery caps/concurrency and HTTP tests for admin authorization, origin validation, cron authentication and visit throttling. No real email is sent by the test suite.
 
-The Vault loads only its five displayed sections. Its homepage badge uses `/api/vault/summary`, which returns only `pendingCount`. Both endpoints remain private and read-only; clients deduplicate overlapping requests and reuse results for up to 15 seconds. Explicit refresh and deadline refresh bypass the freshness window.
+## Vault
 
-Database tests compare summary counts to full Vault actions, preserve ownership and expiry rules, and verify reads do not mutate game state. No schema changes are required for these optimizations.
-
-Booking and password-reset email transports are unchanged.
+The Vault loads its five displayed sections. Its homepage badge uses `/api/vault/summary`, returning only pendingCount. Both endpoints are private and read-only; clients deduplicate requests with a 15-second freshness window. Explicit/deadline refresh bypasses that window. The embedded Tower review button consumes parent state without a second Vault request.
+No new schema migration. Booking/password-reset transports and existing unsubscribe links remain unchanged.

@@ -49,7 +49,7 @@ export default async function Ps5RentalPage() {
   if (!session?.user?.id) redirect('/login?callbackUrl=/ps5-rental');
   const [games, user] = await Promise.all([
     prisma.game.findMany({
-      where: { isActive: true },
+      where: { isActive: true }, select: { id: true, name: true, category: true },
       orderBy: [{ category: 'asc' }, { position: 'asc' }, { name: 'asc' }],
     }),
     prisma.user.findUnique({
@@ -76,7 +76,6 @@ export default async function Ps5RentalPage() {
         </Link>
 
         <Ps5RentalClient
-          enabled
           pricePerDay={pricePerDay}
           controllerPrice={controllerPrice}
           groupedGames={groupedGames}

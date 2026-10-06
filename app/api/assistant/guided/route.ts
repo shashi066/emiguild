@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   };
   try {
     if (!await startGuidedRequest(actor.actorKey)) return json({ error: 'Too many selections. Please try again in a minute.' }, 429);
-    const view = await getGuidedView(parsed.data, { user: session?.user?.id ? { id: session.user.id } : null, requestUrl: req.url, cookieHeader: req.headers.get('cookie') ?? '' });
+    const view = await getGuidedView(parsed.data, { user: session?.user?.id ? { id: session.user.id } : null });
     await recordAssistantUsage(actor.actorKey, { toolCallCount: 1, preparedActions: view.card?.actionToken ? 1 : 0 });
     return json(view);
   } catch (error) {

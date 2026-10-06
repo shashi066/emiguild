@@ -46,8 +46,8 @@ test('guided throttle resets at the minute boundary independently of AI allowanc
 });
 test('SSE parser handles fragmented and CRLF frames without duplicate events', () => {
   const parser = new AssistantEventParser();
-  assert.deepEqual(parser.push('event: flow\r\ndata: {"type":"flow",'), []);
-  assert.deepEqual(parser.push('"state":{"task":"BOOK"}}\r\n\r\n'), [{ type: 'flow', state: { task: 'BOOK' } }]);
+  assert.deepEqual(parser.push('event: status\r\ndata: {"type":"status",'), []);
+  assert.deepEqual(parser.push('"message":"Checking"}\r\n\r\n'), [{ type: 'status', message: 'Checking' }]);
   assert.deepEqual(parser.push('event: done\ndata: {"type":"done"}\n\n'), [{ type: 'done' }]);
   assert.deepEqual(parser.push(''), []);
   assert.equal(timeLabel('20:30'), '8:30 PM'); assert.equal(timeLabel('00:00'), '12:00 AM');

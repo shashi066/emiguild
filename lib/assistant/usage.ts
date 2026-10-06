@@ -86,26 +86,15 @@ export async function recordAssistantUsage(actorKey: string, counters: {
   completedActions?: number;
   errorCount?: number;
 }, date = getIndiaClock().date) {
-  const data = {
-    inputTokens: { increment: Math.max(0, counters.inputTokens ?? 0) },
-    outputTokens: { increment: Math.max(0, counters.outputTokens ?? 0) },
-    toolCallCount: { increment: Math.max(0, counters.toolCallCount ?? 0) },
-    preparedActions: { increment: Math.max(0, counters.preparedActions ?? 0) },
-    completedActions: { increment: Math.max(0, counters.completedActions ?? 0) },
-    errorCount: { increment: Math.max(0, counters.errorCount ?? 0) },
-  };
-  await prisma.assistantUsageDaily.upsert({
-    where: { date_actorKey: { date, actorKey } },
-    create: {
-      date,
-      actorKey,
-      inputTokens: counters.inputTokens ?? 0,
-      outputTokens: counters.outputTokens ?? 0,
-      toolCallCount: counters.toolCallCount ?? 0,
-      preparedActions: counters.preparedActions ?? 0,
-      completedActions: counters.completedActions ?? 0,
-      errorCount: counters.errorCount ?? 0,
-    },
-    update: data,
-  });
+  const counts = Object.fromEntries(Object.entries(counters).map(([key, value]) => [key, Math.max(0, value ?? 0)]));
+  if (!Object.keys(counts).length) return;
+  try {
+    await prisma.assistantUsageDaily.upsert({
+      where: { date_actorKey: { date, actorKey } },
+      create: { date, actorKey, ...counts },
+      update: Object.fromEntries(Object.entries(counts).map(([key, value]) => [key, { increment: value }])),
+    });
+  } catch (error) {
+    console.error('Assistant metrics unavailable:', error);
+  }
 }

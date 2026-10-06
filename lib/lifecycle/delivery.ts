@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { DAY, digestPeriod, MessageCandidate } from './rules';
+import { getMessagingSettings } from './settings';
 import { loadEmailEvaluation } from './evaluation';
 import { emailConfiguration, gmailLifecycleTransport, lifecycleUnsubscribeSecret, MailTransport, renderLifecycleEmail, signUnsubscribe } from './email';
 
@@ -66,7 +67,7 @@ export async function sendPlayerEmail(userId: string, options: DeliveryOptions =
   if (!lease.count) return 'BUSY';
   try {
     const evaluation = await loadEmailEvaluation(userId, now, { transportAvailable: true });
-    if (!evaluation || evaluation.user.role !== 'USER') return 'SKIPPED';
+    if (!evaluation) return 'SUPPRESSED';
     const { input, preview } = evaluation;
     if (input.settings.comebackEmail && now.getTime() - Date.parse(input.createdAt) >= 3 * DAY && (!input.nextComebackCheckAt || Date.parse(input.nextComebackCheckAt) <= now.getTime())) {
       await prisma.lifecycleEmailState.update({ where: { userId }, data: { lastComebackEvaluatedAt: now, nextComebackCheckAt: new Date(now.getTime() + 3 * DAY) } });
@@ -99,6 +100,8 @@ export async function sendAdminTest(userId: string, options: DeliveryOptions = {
 export async function runLifecycleEmails(options: DeliveryOptions = {}) {
   const now = options.now ?? new Date();
   if (!emailConfiguration().enabled && !options.testMode) return { disabled: true, evaluated: 0, sent: 0 };
+  const settings = await getMessagingSettings();
+  if (!settings.emailDigest && !settings.comebackEmail) return { disabled: true, evaluated: 0, sent: 0 };
   const leaseToken = randomUUID();
   await prisma.setting.upsert({ where: { key: CRON_LOCK_KEY }, create: { key: CRON_LOCK_KEY, value: '' }, update: {} });
   const lock = await prisma.setting.updateMany({ where: { key: CRON_LOCK_KEY, OR: [{ value: '' }, { updatedAt: { lte: new Date(now.getTime() - LEASE_MS) } }] }, data: { value: leaseToken, updatedAt: now } });

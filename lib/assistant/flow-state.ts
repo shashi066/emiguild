@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { GuidedState } from '@/types/assistant';
+import type { GuidedState, GuidedOption, GuidedTask } from '@/types/assistant';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const time = z.string().regex(/^(?:[01]\d|2[0-3]):[03]0$/);
@@ -41,3 +41,8 @@ export function guidedWindow(previous: { guidedWindowStart: number; guidedWindow
   const count = previous.guidedWindowStart === minute ? previous.guidedWindowCount : 0;
   return { allowed: count < limit, guidedWindowStart: minute, guidedWindowCount: count < limit ? count + 1 : count };
 }
+
+export const HOME_OPTIONS: GuidedOption[] = [
+  ['Book a Slot', 'BOOK'], ['Next Available', 'NEXT'], ['My Bookings', 'BOOKINGS'],
+  ['Daily Spin', 'SPIN'], ['Games', 'GAMES'], ['Prices', 'PRICES'],
+].map(([label, task]) => ({ label, state: { task: task as GuidedTask } }));

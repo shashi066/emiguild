@@ -113,6 +113,7 @@ test('forge availability uses executable configuration rules', () => {
   assert.equal(getForgeConfigurationError({ enabled: true, sets: [{ dropPercentage: 90, artifacts: [{ setId: 'set', slotDropPercentage: 100 }] }] }), 'BAD_DROP_TOTAL');
 });
 test('activity writes reject cross-origin requests', () => {
+  assert.equal(isSameOrigin(new Request('http://localhost/api/activity')), false);
   assert.equal(isSameOrigin(new Request('http://localhost/api/activity', { headers: { origin: 'https://other.example' } })), false);
   assert.equal(isSameOrigin(new Request('http://localhost/api/activity', { headers: { origin: 'http://localhost' } })), true);
 });

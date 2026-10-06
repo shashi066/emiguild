@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard, BookOpen, Monitor, Users,
-  Gamepad2, ChevronRight, ChevronDown, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity, Tv, Menu, X, Castle, CupSoda, Target, ShoppingBag, Search,
+  Gamepad2, ChevronRight, ChevronDown, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity, Tv, Menu, X, Castle, CupSoda, Target, ShoppingBag, Search, Mail,
 } from 'lucide-react';
 
 const NAV_GROUPS = [
@@ -25,6 +25,7 @@ const NAV_GROUPS = [
   ] },
   { label: 'Customers', items: [
     { href: '/admin/users', label: 'Users', icon: Users },
+    { href: '/admin/lifecycle', label: 'Messaging / Mail', icon: Mail },
     { href: '/admin/passes', label: 'Passes', icon: Award },
   ] },
   { label: 'Activities & Rewards', items: [
@@ -67,6 +68,8 @@ export function AdminSidebar() {
     exact ? pathname === href : pathname.startsWith(href);
   const normalizedQuery = query.trim().toLowerCase();
 
+  const visibleGroups = NAV_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => !normalizedQuery || item.label.toLowerCase().includes(normalizedQuery) || group.label.toLowerCase().includes(normalizedQuery)) })).filter((group) => group.items.length);
+
   return (
     <aside className={`admin-sidebar ${mobileMenuOpen ? 'admin-sidebar--open' : ''}`}>
       <div className="admin-sidebar-mobile-head">
@@ -107,9 +110,8 @@ export function AdminSidebar() {
           {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear menu search"><X size={14} /></button>}
         </div>
         <nav aria-label="Admin navigation" className="admin-nav-groups">
-          {NAV_GROUPS.map((group) => {
-            const items = group.items.filter((item) => !normalizedQuery || item.label.toLowerCase().includes(normalizedQuery) || group.label.toLowerCase().includes(normalizedQuery));
-            if (!items.length) return null;
+          {visibleGroups.map((group) => {
+            const items = group.items;
             const containsActive = group.items.some((item) => isActive(item.href, 'exact' in item ? item.exact : undefined));
             const isCollapsed = !normalizedQuery && collapsed[group.label] && !containsActive;
             return <section className="admin-nav-group" key={group.label}>
@@ -125,7 +127,7 @@ export function AdminSidebar() {
               })}</div>}
             </section>;
           })}
-          {!NAV_GROUPS.some((group) => group.items.some((item) => !normalizedQuery || item.label.toLowerCase().includes(normalizedQuery) || group.label.toLowerCase().includes(normalizedQuery))) && <p className="admin-nav-empty">No admin pages found.</p>}
+          {!visibleGroups.length && <p className="admin-nav-empty">No admin pages found.</p>}
         </nav>
 
         {/* Footer link */}

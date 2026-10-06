@@ -7,7 +7,7 @@ export function lifecycleJson(body: unknown, status = 200) {
 export function isSameOrigin(request: Request) {
   const origin = request.headers.get('origin');
   if (request.headers.get('sec-fetch-site') === 'cross-site') return false;
-  if (!origin) return true;
+  if (!origin) return false;
   try {
     const source = new URL(origin);
     const target = new URL(request.url);

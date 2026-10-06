@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
@@ -30,10 +31,15 @@ export async function PUT(
     );
   }
 
-  const updated = await prisma.ps5Rental.update({
-    where: { id },
-    data: { status: 'CANCELLED', activeUserId: null },
-  });
+  try {
+    const updated = await prisma.ps5Rental.update({
+      where: { id, userId: session.user.id, status: 'PENDING' },
+      data: { status: 'CANCELLED', activeUserId: null },
+    });
 
-  return NextResponse.json({ rental: updated });
+    return NextResponse.json({ rental: updated });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') return NextResponse.json({ error: 'Rental changed. Refresh and try again.' }, { status: 409 });
+    throw error;
+  }
 }

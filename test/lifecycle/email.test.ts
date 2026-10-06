@@ -34,7 +34,7 @@ test('sending reuses the existing production mail configuration', () => {
  assert.equal(emailConfiguration({ ...env, GMAIL_APP_PASSWORD: '' }).enabled, false);
  assert.equal(emailConfiguration({ ...env, AUTH_SECRET: '' }).enabled, false);
 });
-test('lifecycle configuration has no feature-specific or cron environment variables', () => {
+test('lifecycle configuration reuses mail credentials and restores the authenticated schedule', () => {
  const envExample = readFileSync('.env.example', 'utf8');
  const lifecycleSource = [
   'lib/lifecycle/email.ts', 'lib/lifecycle/delivery.ts', 'app/email/unsubscribe/page.tsx',
@@ -44,5 +44,5 @@ test('lifecycle configuration has no feature-specific or cron environment variab
   assert.equal(envExample.includes(key), false);
   assert.equal(lifecycleSource.includes(key), false);
  }
- assert.equal(readFileSync('vercel.json', 'utf8').includes('/api/cron/lifecycle/email'), false);
+ assert.equal(readFileSync('vercel.json', 'utf8').includes('/api/cron/lifecycle/email'), true);
 });

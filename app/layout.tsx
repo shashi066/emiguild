@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Navbar } from '@/components/layout/Navbar';
 import { SessionProvider } from '@/components/providers/SessionProvider';
+import { ActivityTracker } from '@/components/lifecycle/ActivityTracker';
 import { auth } from '@/auth';
 import { canUseAssistant } from '@/lib/assistant/access';
 import { EmiAssistant } from '@/components/assistant/EmiAssistant';
@@ -59,6 +60,7 @@ export default async function RootLayout({
       <body>
         <SessionProvider session={session}>
           <Navbar />
+          <ActivityTracker />
           <main>{children}</main>
           {assistantEnabled && <EmiAssistant />}
         </SessionProvider>

@@ -16,7 +16,7 @@ export type VaultItem = {
   validUntil: string;
   expires: boolean;
 };
-export type GameId = 'guess36' | 'spin' | 'artifacts' | 'tower' | 'guild-drop' | 'watch-party' | 'tournaments';
+export type GameId = 'guess36' | 'spin' | 'artifacts' | 'tower' | 'guild-drop';
 export type GameProgress = {
   id: GameId;
   title: string;

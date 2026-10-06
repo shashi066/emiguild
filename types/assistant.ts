@@ -39,16 +39,10 @@ export type BookingQuote = BookingDraft & {
 export type AssistantCard = {
   id: string;
   kind:
-    | 'availability'
-    | 'stations'
-    | 'games'
-    | 'bookings'
     | 'booking_confirmation'
     | 'cancellation_confirmation'
     | 'spin_confirmation'
-    | 'login'
-    | 'result'
-    | 'fallback';
+    | 'result';
   title: string;
   description?: string;
   data?: Record<string, unknown>;
@@ -60,10 +54,7 @@ export type AssistantCard = {
 export type AssistantStreamEvent =
   | { type: 'answer'; answer: AssistantAnswer }
   | { type: 'usage'; usage: AssistantAllowance }
-  | { type: 'flow'; state: GuidedState }
   | { type: 'status'; message: string }
-  | { type: 'text_delta'; delta: string }
-  | { type: 'card'; card: AssistantCard }
   | { type: 'error'; message: string; code?: string }
   | { type: 'done'; usage?: { inputTokens: number; outputTokens: number } };
 

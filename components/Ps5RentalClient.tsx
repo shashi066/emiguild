@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 
 interface Props {
-  enabled: boolean;
   pricePerDay: number;
   controllerPrice: number;
   groupedGames: Record<string, { id: string; name: string }[]>;
@@ -69,7 +68,7 @@ const TERMS_AND_CONDITIONS = `
 `.trim();
 
 export default function Ps5RentalClient({
-  enabled, pricePerDay, controllerPrice,
+  pricePerDay, controllerPrice,
   groupedGames, userName, userPhone,
 }: Props) {
   const [step, setStep] = useState(0);
@@ -157,19 +156,7 @@ export default function Ps5RentalClient({
   };
 
   // ── Disabled state ──
-  if (!enabled) {
-    return (
-      <div className="card" style={{ textAlign: 'center', padding: 'var(--space-3xl)' }}>
-        <Gamepad2 size={48} style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-lg)' }} />
-        <h2 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: 'var(--space-sm)' }}>
-          PS5 Rental Unavailable
-        </h2>
-        <p style={{ color: 'var(--color-text-muted)' }}>
-          The PS5 home rental service is currently not available. Please check back later!
-        </p>
-      </div>
-    );
-  }
+
 
   // ── Success state ──
   if (success) {

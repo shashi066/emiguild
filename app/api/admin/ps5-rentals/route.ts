@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     skip: (page - 1) * pageSize,
     take: pageSize + 1,
     include: {
-      user: { select: { name: true, email: true, phone: true } },
+      user: { select: { email: true } },
     },
   });
 

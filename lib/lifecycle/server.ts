@@ -3,7 +3,7 @@ import { getArtifactRewardTicketDisplay } from '@/lib/reward-ticket';
 import { serializeTowerRewardTicket } from '@/lib/tower';
 import { serializeGuess36RewardTicket } from '@/lib/guess-36';
 import { AccountState, VaultItem, orderVaultItems } from './rules';
-import { loadGameSections, gameLoaders } from './games';
+import { loadGameSections } from './games';
 
 async function getRewardItems(userId: string, now: Date): Promise<VaultItem[]> {
   const tickets = await prisma.armoryTicket.findMany({ where: { userId, status: 'UNUSED', expiresAt: { gt: now } }, include: { set: { select: { name: true } } } });
@@ -28,7 +28,7 @@ export async function getVaultState(userId: string, now: Date = new Date()): Pro
       console.error('Vault rewards failed', error);
       return { items: [] as VaultItem[], unavailable: true };
     }),
-    loadGameSections(userId, now, { guess36: gameLoaders.guess36, spin: gameLoaders.spin, artifacts: gameLoaders.artifacts, tower: gameLoaders.tower, 'guild-drop': gameLoaders['guild-drop'] }),
+    loadGameSections(userId, now),
   ]);
   return { userId, evaluatedAt: now.toISOString(), rewardsUnavailable: rewards.unavailable,
     items: orderVaultItems([...rewards.items, ...sections.flatMap((section) => section.items)], now),

@@ -144,13 +144,14 @@ export default function BookPageInner({
 
   // Load controller price from settings
   useEffect(() => {
+    if (initialSettings) return;
     fetch('/api/settings')
       .then((r) => r.json())
       .then((d) => {
         setSettingsMap(d);
         setControllerPrice(parseFloat(d.controller_price ?? '0'));
       });
-  }, []);
+  }, [initialSettings]);
 
   // Fetch active pass when session is available
   useEffect(() => {

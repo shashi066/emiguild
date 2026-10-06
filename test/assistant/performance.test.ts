@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { prisma } from '../../lib/prisma';
+import { getGuidedView } from '../../lib/assistant/guided';
+import { getEffectiveSpinDate } from '../../lib/daily-spin';
+import { recordAssistantUsage } from '../../lib/assistant/usage';
 import { getAvailability } from '../../lib/assistant/tools';
 import { getIndiaClock, addIndiaCalendarDays } from '../../lib/public-booking-time';
 import { createVaultReader } from '../../lib/vault-client';
@@ -43,4 +46,44 @@ test('scheduled retention deletes only dates older than 90 days', async (t) => {
     calls++; assert.equal(args.where.date.lt, addIndiaCalendarDays(getIndiaClock().date, -90)); return { count: 3 };
   });
   assert.deepEqual(await cleanupAssistantUsage(), { count: 3 }); assert.equal(calls, 1);
+});
+
+test('Games requires one narrow game read and no station read', async (t) => {
+  let calls = 0;
+  stub(t, prisma.station, 'findMany', async () => { throw new Error('Unnecessary station read'); });
+  stub(t, prisma.game, 'findMany', async (args: any) => {
+    calls++; assert.deepEqual(args.select, { id: true, name: true });
+    return [{ id: 'g', name: 'FC' }];
+  });
+  const view = await getGuidedView({ task: 'GAMES' }, { user: null });
+  assert.equal(view.options[0].label, 'FC'); assert.equal(calls, 1);
+});
+
+test('guided spin uses one settings and one eligibility read without inventory or streak', async (t) => {
+  process.env.ASSISTANT_ACTION_SECRET = 'test-guided-secret';
+  let settings = 0, spins = 0;
+  stub(t, prisma.setting, 'findMany', async () => { settings++; return []; });
+  stub(t, prisma.userDailySpin, 'findUnique', async (args: any) => { spins++; assert.deepEqual(args.select, { attempts: true }); return null; });
+  stub(t, prisma.userDailySpin, 'findMany', async () => { throw new Error('Unnecessary streak query'); });
+  stub(t, prisma.lootItem, 'findMany', async () => { throw new Error('Unnecessary inventory query'); });
+  const view = await getGuidedView({ task: 'SPIN' }, { user: { id: 'player' } });
+  assert.equal(view.card?.kind, 'spin_confirmation');
+  assert.equal(settings, 1); assert.equal(spins, 1);
+});
+
+test('optional metrics failure does not reject the completed operation', async (t) => {
+  stub(t, prisma.assistantUsageDaily, 'upsert', async () => { throw new Error('metrics unavailable'); });
+  t.mock.method(console, 'error', () => {});
+  await assert.doesNotReject(recordAssistantUsage('user:test', { completedActions: 1 }));
+});
+
+test('spin reset clock handles IST midnight, custom hours, month and year boundaries', () => {
+  for (const [time, hour, date, next] of [
+    ['2026-12-31T18:30:00Z', 0, '2027-01-01', '2027-01-01T18:30:00.000Z'],
+    ['2026-10-01T00:29:59Z', 6, '2026-09-30', '2026-10-01T00:30:00.000Z'],
+    ['2026-10-01T00:30:00Z', 6, '2026-10-01', '2026-10-02T00:30:00.000Z'],
+  ] as const) {
+    const result = getEffectiveSpinDate(hour, new Date(time));
+    assert.equal(result.spinDate, date); assert.equal(result.nextReset.toISOString(), next);
+  }
 });

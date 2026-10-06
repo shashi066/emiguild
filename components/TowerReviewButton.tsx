@@ -16,7 +16,8 @@ export function TowerReviewButton({
   initialReview?: TowerReviewState;
   onTokenGranted?: (grant: TowerReviewGrant) => void;
 }) {
-  const [review, setReview] = useState(initialReview);
+  const [ownReview, setReview] = useState(initialReview);
+  const review = statusSource === 'vault' ? initialReview : ownReview;
   const [enabled, setEnabled] = useState(true);
   const [busy, setBusy] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
@@ -24,7 +25,7 @@ export function TowerReviewButton({
   const submitting = useRef(false);
 
   useEffect(() => {
-    if (busy) return;
+    if (busy || statusSource === 'vault') return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
@@ -34,7 +35,7 @@ export function TowerReviewButton({
       controller = requestController;
       clearTimeout(timer);
       try {
-        const response = await fetch(statusSource === 'vault' ? '/api/vault' : '/api/tower/current', { cache: 'no-store', signal: requestController.signal });
+        const response = await fetch('/api/tower/current', { cache: 'no-store', signal: requestController.signal });
         if (response.status === 401) {
           if (!disposed) {
             setAuthRequired(true);
@@ -43,9 +44,7 @@ export function TowerReviewButton({
           return;
         }
         if (!response.ok) throw new Error('Unable to refresh daily token.');
-        const body = await response.json();
-        const section = statusSource === 'vault' ? body.games?.find((game: { id: string }) => game.id === 'tower') : null;
-        const data = statusSource === 'vault' ? { review: section?.facts?.review, enabled: section && !['disabled', 'error'].includes(section.status) } : body;
+        const data = await response.json();
         if (!data.review) throw new Error('Unable to refresh daily token.');
         if (disposed || submitting.current) return;
         setAuthRequired(false);

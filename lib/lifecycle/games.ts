@@ -4,8 +4,6 @@ import { getSpinState } from '@/lib/daily-spin';
 import { getGuess36Current } from '@/lib/guess-36';
 import { guess36SelectionLabel } from '@/lib/guess-36-rules';
 import { getTowerProgressSnapshot } from '@/lib/tower';
-import { fanPickStatusLabel } from '@/lib/watch-party-presentation';
-import { EMIC_UNIT_FACTOR } from '@/lib/emic';
 import { GameId, GameProgress, VaultItem } from './rules';
 
 export type GameResult = { game: GameProgress; items: VaultItem[] };
@@ -15,8 +13,6 @@ export const GAME_LINKS: Record<GameId, { title: string; href: string }> = {
   artifacts: { title: 'Artifacts', href: '/armory' },
   tower: { title: 'Tower', href: '/tower' },
   'guild-drop': { title: 'Guild Drop', href: '/draws' },
-  'watch-party': { title: 'Watch Party', href: '/watch-party' },
-  tournaments: { title: 'Tournaments', href: '/tournaments' },
 };
 function game(id: GameId, data: Partial<GameProgress>): GameProgress {
   return { id, ...GAME_LINKS[id], status: 'empty', summary: 'No current activity', details: [], action: 'View game', ...data };
@@ -137,45 +133,9 @@ export async function guildDropProgress(userId: string, now: Date): Promise<Game
   }) };
 }
 
-export async function watchPartyProgress(userId: string, now: Date): Promise<GameResult> {
-  const [invites, latest] = await Promise.all([
-    prisma.watchPartyInvite.findMany({ where: { userId, party: { status: 'ACTIVE' } }, include: { party: { include: { predictions: { where: { userId } } } } }, orderBy: { party: { kickoffAt: 'asc' } } }),
-    prisma.watchPartyPrediction.findFirst({ where: { userId, status: { in: ['WON', 'LOST', 'VOID'] }, party: { status: 'CLOSED', settledAt: { lte: now } } }, include: { party: true }, orderBy: { party: { settledAt: 'desc' } } }),
-  ]);
-  const details = invites.map((invite) => {
-    const pick = invite.party.predictions[0];
-    return `${invite.party.title}: ${invite.enteredAt ? 'joined' : invite.checkedInAt ? 'checked in' : 'invited'}; ${pick ? `pick ${pick.optionLabel} — ${fanPickStatusLabel(pick.status)}` : 'no prediction yet'}.`;
-  });
-  if (latest) details.push(`Latest result — ${latest.party.title}: ${fanPickStatusLabel(latest.status)}${latest.payoutUnits != null ? ` (${latest.payoutUnits / EMIC_UNIT_FACTOR} EMIC credited)` : ''}.`);
-  const next = invites.map(({ party }) => party.predictionLockAt ?? party.kickoffAt).filter((date) => date > now).sort((a, b) => a.getTime() - b.getTime())[0];
-  return { items: [], game: game('watch-party', { status: invites.length ? 'active' : latest ? 'completed' : 'empty', summary: invites.length ? `${invites.length} current event${invites.length === 1 ? '' : 's'}` : 'No current events',
-    facts: { events: invites.map((invite) => ({ id: invite.party.id, title: invite.party.title, participation: invite.enteredAt ? 'Joined' : 'Invited', at: invite.party.kickoffAt.toISOString() })) },
-    details, action: 'View Watch Parties', ...(next ? { deadline: { at: next.toISOString(), label: 'Next prediction cutoff' } } : {}),
-  }) };
-}
-
-export async function tournamentProgress(userId: string): Promise<GameResult> {
-  const players = await prisma.tournamentPlayer.findMany({ where: { userId }, include: { tournament: true,
-    matchesAsP1: true, matchesAsP2: true, matchesWon: true }, orderBy: { tournament: { updatedAt: 'desc' } } });
-  const current = players.filter(({ tournament }) => ['REGISTRATION_OPEN', 'REGISTRATION_CLOSED', 'ONGOING'].includes(tournament.status));
-  const latest = players.find(({ tournament }) => tournament.status === 'FINISHED');
-  const details = current.map((player) => {
-    const matches = [...player.matchesAsP1, ...player.matchesAsP2].sort((a, b) => a.round - b.round || a.matchIndex - b.matchIndex);
-    const next = matches.find((match) => match.status !== 'COMPLETED');
-    const eliminated = matches.some((match) => match.status === 'COMPLETED' && match.winnerId && match.winnerId !== player.id);
-    return `${player.tournament.name}: ${eliminated ? 'eliminated' : next ? `round ${next.round}${next.status === 'IN_PROGRESS' ? ' in progress' : ' upcoming'}` : 'registered; awaiting next match'}; ${player.matchesWon.filter((match) => match.status === 'COMPLETED' && !match.isBye).length} recorded wins.`;
-  });
-  if (latest) {
-    const matches = [...latest.matchesAsP1, ...latest.matchesAsP2].sort((a, b) => b.round - a.round);
-    const last = matches[0];
-    details.push(`Latest completed — ${latest.tournament.name}: ${last?.status === 'COMPLETED' ? last.winnerId === latest.id ? 'won last match' : 'lost last match' : 'no recorded match result'}; ${latest.matchesWon.filter((match) => match.status === 'COMPLETED' && !match.isBye).length} wins.`);
-  }
-  return { items: [], game: game('tournaments', { status: current.length ? 'active' : latest ? 'completed' : 'empty', summary: current.length ? `${current.length} current registration${current.length === 1 ? '' : 's'}` : 'No current registrations', details, action: 'View tournaments' }) };
-}
-
 export const gameLoaders: Record<GameId, (userId: string, now: Date) => Promise<GameResult>> = {
   guess36: guess36Progress, spin: spinProgress, artifacts: artifactProgress, tower: towerProgress,
-  'guild-drop': guildDropProgress, 'watch-party': watchPartyProgress, tournaments: tournamentProgress,
+  'guild-drop': guildDropProgress,
 };
 
 export async function loadGameSections(userId: string, now: Date, loaders: Partial<typeof gameLoaders> = gameLoaders): Promise<GameResult[]> {

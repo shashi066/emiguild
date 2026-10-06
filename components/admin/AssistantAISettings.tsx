@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { AdminModalShell } from './AdminModalShell';
 import { Bot, Edit2, KeyRound, Save, X } from 'lucide-react';
 
 type Config = { model: string; dailyLimit: number; keyConfigured: boolean };
 
-export function AssistantAISettings() {
+export function AssistantAISettings({ hidden = false }: { hidden?: boolean }) {
   const [config, setConfig] = useState<Config>({ model: 'gpt-6-luna', dailyLimit: 10, keyConfigured: false });
+  const [draft, setDraft] = useState(config);
   const [apiKey, setApiKey] = useState('');
   const [clearApiKey, setClearApiKey] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -34,7 +36,7 @@ export function AssistantAISettings() {
     try {
       const response = await fetch('/api/admin/assistant-config', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, dailyLimit: config.dailyLimit, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}), clearApiKey }),
+        body: JSON.stringify({ model: draft.model, dailyLimit: draft.dailyLimit, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}), clearApiKey }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Could not save AI settings.');
@@ -47,7 +49,7 @@ export function AssistantAISettings() {
   };
 
   return <>
-    <div className="card admin-setting-card admin-ai-setting-card">
+    <div hidden={hidden} className="card admin-setting-card admin-ai-setting-card">
       <span className="admin-setting-icon"><Bot size={20} /></span>
       <div className="admin-setting-copy">
         <strong>Emiily AI Configuration</strong>
@@ -59,11 +61,11 @@ export function AssistantAISettings() {
         {notice && <span className="admin-setting-notice" role="status">{notice}</span>}
         {!editing && error && <span className="form-error" role="alert">{error}</span>}
       </div>
-      <button className="btn btn-ghost btn-sm" type="button" disabled={loading} onClick={() => { setError(''); setNotice(''); setEditing(true); }}><Edit2 size={14} /> Edit</button>
+      <button className="btn btn-ghost btn-sm" type="button" disabled={loading} onClick={() => { setDraft(config); setApiKey(''); setClearApiKey(false); setError(''); setNotice(''); setEditing(true); }}><Edit2 size={14} /> Edit</button>
     </div>
 
-    {editing && <div className="admin-settings-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setEditing(false); }}>
-      <form className="card admin-settings-modal" role="dialog" aria-modal="true" aria-labelledby="assistant-ai-title" onSubmit={save}>
+    {editing && <AdminModalShell labelledBy="assistant-ai-title" onClose={() => { if (!saving) setEditing(false); }} lightweight>
+      <form onSubmit={save}>
         <div className="admin-settings-modal-head">
           <div><span className="admin-setting-icon"><KeyRound size={19} /></span><div><h2 id="assistant-ai-title">Emiily AI Configuration</h2><p>Public EmiGuild help only; guided buttons use a separate allowance.</p></div></div>
           <button className="btn btn-ghost btn-sm" type="button" aria-label="Close" disabled={saving} onClick={() => setEditing(false)}><X size={18} /></button>
@@ -77,18 +79,18 @@ export function AssistantAISettings() {
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="assistant-ai-model">Model ID</label>
-            <input id="assistant-ai-model" className="form-input" required maxLength={100} value={config.model} disabled={saving} onChange={(e) => setConfig((current) => ({ ...current, model: e.target.value }))} />
+            <input id="assistant-ai-model" className="form-input" required maxLength={100} value={draft.model} disabled={saving} onChange={(e) => setDraft((current) => ({ ...current, model: e.target.value }))} />
             <small>Must support Responses and structured output.</small>
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="assistant-ai-limit">Requests per account per day</label>
-            <input id="assistant-ai-limit" className="form-input" type="number" required min={1} max={1000} step={1} value={Number.isNaN(config.dailyLimit) ? '' : config.dailyLimit} disabled={saving} onChange={(e) => setConfig((current) => ({ ...current, dailyLimit: e.target.valueAsNumber }))} />
+            <input id="assistant-ai-limit" className="form-input" type="number" required min={1} max={1000} step={1} value={Number.isNaN(draft.dailyLimit) ? '' : draft.dailyLimit} disabled={saving} onChange={(e) => setDraft((current) => ({ ...current, dailyLimit: e.target.valueAsNumber }))} />
             <small>Resets at midnight IST and applies equally to customers and admins.</small>
           </div>
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="admin-settings-modal-actions"><button className="btn btn-ghost" type="button" disabled={saving} onClick={() => setEditing(false)}>Cancel</button><button className="btn btn-primary" type="submit" disabled={saving}><Save size={15} />{saving ? 'Saving…' : 'Save AI settings'}</button></div>
       </form>
-    </div>}
+    </AdminModalShell>}
   </>;
 }

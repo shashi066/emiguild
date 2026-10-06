@@ -7,7 +7,6 @@ import { createActionToken, quoteFingerprint, verifyActionToken } from '@/lib/as
 import { recordAssistantUsage } from '@/lib/assistant/usage';
 import { prisma } from '@/lib/prisma';
 import { canCancelOwnBooking } from '@/lib/assistant/customer-scope';
-import { getSpinState } from '@/lib/daily-spin';
 import { dateLabel, timeLabel } from '@/lib/assistant/flow-state';
 
 export const runtime = 'nodejs';
@@ -55,21 +54,6 @@ export async function POST(req: NextRequest) {
     if (action.action === 'BOOKING') {
       if (await prisma.booking.findUnique({ where: { id: `assistant-${action.jti}` }, select: { id: true } })) {
         return NextResponse.json({ error: 'This booking was already confirmed. Check My Bookings.' }, { status: 409 });
-      }
-      const currentQuote = await quoteBooking(session.user.id, action.draft);
-      const currentHash = quoteFingerprint(currentQuote);
-      if (currentHash !== action.quoteHash) {
-        const refreshedToken = createActionToken({
-          action: 'BOOKING', userId: session.user.id, draft: action.draft, quoteHash: currentHash,
-        });
-        return NextResponse.json({
-          error: 'The price or eligibility changed. Review the refreshed quote.',
-          code: 'QUOTE_STALE',
-          card: {
-            id: crypto.randomUUID(), kind: 'booking_confirmation', title: 'Review updated booking',
-            data: { quote: currentQuote }, actionToken: refreshedToken, actionLabel: 'Confirm updated booking',
-          },
-        }, { status: 409 });
       }
       const { response, data } = await customerFetch(req, '/api/bookings', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-assistant-confirmation': body.token }, body: JSON.stringify({
@@ -120,12 +104,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const spin = await getSpinState(session.user.id);
-    if (action.spinDate !== spin.spinDate || !spin.canSpin) {
-      return NextResponse.json({ error: 'Spin eligibility changed. Refresh Daily Spin to continue.' }, { status: 409 });
-    }
     const { response, data } = await customerFetch(req, '/api/daily-spin', { method: 'POST', headers: { 'x-assistant-confirmation': body.token } });
-    if (!response.ok) return NextResponse.json(data, { status: response.status });
+    if (!response.ok) return NextResponse.json(data, { status: response.status === 429 ? 409 : response.status });
     await recordAssistantUsage(`user:${session.user.id}`, { completedActions: 1 });
     return NextResponse.json({
       success: true,

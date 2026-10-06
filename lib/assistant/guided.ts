@@ -3,42 +3,37 @@ import { addIndiaCalendarDays, getIndiaClock, validatePublicBookingTime } from '
 import { loadActiveSpecialOpening } from '@/lib/special-opening-server';
 import { addHours } from '@/lib/utils';
 import { hasBookingConflict, isVenueAtCapacityDuring } from '@/lib/booking-availability';
-import { getSpinState } from '@/lib/daily-spin';
+import { getSpinEligibility } from '@/lib/daily-spin';
 import { canCancelOwnBooking } from './customer-scope';
-import { executeAssistantTool, getAvailability, type AssistantToolContext } from './tools';
-import { dateLabel, priceLabel, timeLabel, guidedStateSchema } from './flow-state';
+import { getAvailability, getGames, prepareBooking, prepareCancellation, prepareDailySpin } from './tools';
+import { getBookingOptions } from './quote';
+import { dateLabel, priceLabel, timeLabel, guidedStateSchema, HOME_OPTIONS } from './flow-state';
 import type { GuidedState, GuidedView, GuidedOption } from '@/types/assistant';
 
-export const HOME_OPTIONS: GuidedOption[] = [
-  ['Book a Slot', 'BOOK'], ['Next Available', 'NEXT'], ['My Bookings', 'BOOKINGS'],
-  ['Daily Spin', 'SPIN'], ['Games', 'GAMES'], ['Prices', 'PRICES'],
-].map(([label, task]) => ({ label, state: { task: task as GuidedState['task'] } }));
-
-export async function getGuidedView(raw: unknown, context: AssistantToolContext): Promise<GuidedView> {
+export async function getGuidedView(raw: unknown, context: { user: { id: string } | null }): Promise<GuidedView> {
   const state = guidedStateSchema.parse(raw);
   const today = getIndiaClock().date;
   const dates = Array.from({ length: 31 }, (_, i) => addIndiaCalendarDays(today, i)!);
   const view = (title: string, options: GuidedOption[] = [], extra: Partial<GuidedView> = {}): GuidedView => ({ state, title, options, ...extra });
   const option = (label: string, patch: Partial<GuidedState>, detail?: string): GuidedOption => ({ label, detail, state: { ...state, ...patch } });
-  const tool = (name: string, args: unknown) => executeAssistantTool(name, args, context);
-  const prepared = async (name: string, args: unknown) => {
-    const result = await tool(name, args);
-    return view(result.cards?.[0]?.title ?? 'Review', [], { card: result.cards?.[0] });
-  };
   const login = () => view('Sign in to continue', [], { login: true, description: 'Your selections will be kept.' });
   if (state.task === 'HOME') return view("Hi, I'm Emiily! How can I help you today?", HOME_OPTIONS);
   if (state.date && !dates.includes(state.date)) throw new Error('Choose a date within the next 30 days.');
 
   if (state.task === 'SPIN') {
     if (!context.user) return login();
-    const spin = await getSpinState(context.user.id);
+    const spin = await getSpinEligibility(context.user.id);
     if (!spin.settings.enabled) return view('Daily Spin is currently disabled.');
     if (!spin.canSpin) return view('Today’s spin is used', [], { description: `Next reset: ${new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).format(spin.nextReset)} IST.` });
-    return prepared('prepare_daily_spin', {});
+    const card = prepareDailySpin(context.user.id, spin);
+    return view(card.title, [], { card });
   }
   if (state.task === 'BOOKINGS') {
     if (!context.user) return login();
-    if (state.bookingId && state.cancel) return prepared('prepare_cancellation', { bookingId: state.bookingId });
+    if (state.bookingId && state.cancel) {
+      const card = await prepareCancellation(context.user.id, state.bookingId);
+      return view(card.title, [], { card });
+    }
     const bookings = await prisma.booking.findMany({
       where: { userId: context.user.id, date: { gte: today }, status: { in: ['PENDING', 'CONFIRMED', 'CHECKED_IN'] } },
       select: { id: true, userId: true, date: true, startTime: true, endTime: true, totalPrice: true, status: true, duration: true, station: { select: { name: true } } },
@@ -55,14 +50,8 @@ export async function getGuidedView(raw: unknown, context: AssistantToolContext)
       booking.station.name, { bookingId: booking.id }, `${dateLabel(booking.date, today)} · ${timeLabel(booking.startTime)}–${timeLabel(booking.endTime)} IST · ${priceLabel(booking.totalPrice)}`,
     )));
   }
-  const stations = await prisma.station.findMany({ where: { isActive: true }, select: { id: true, name: true, hourlyRate: true, minDuration: true, hasControllers: true }, orderBy: { position: 'asc' } });
-  if (state.task === 'PRICES') return view('Stations & prices', stations.map((station) => ({
-    label: station.name, detail: `${priceLabel(station.hourlyRate)}/hr · min ${station.minDuration} hr`, state: { task: 'BOOK', stationId: station.id },
-  })));
-
   if (state.task === 'GAMES' || (state.task === 'BOOK' && state.stationId && state.date && state.startTime && state.duration !== undefined && state.extraControllers !== undefined && !state.gameChosen)) {
-    const result = await tool('get_games', { query: state.query ?? null, category: null });
-    const games = result.output.games as Array<{ id: string; name: string }>;
+    const games = await getGames(state.query);
     const gameOptions: GuidedOption[] = games.map((game) => ({ label: game.name, state: state.task === 'GAMES'
       ? { task: 'BOOK', notes: game.name, gameChosen: true }
       : { ...state, notes: game.name, gameChosen: true, query: undefined } }));
@@ -71,6 +60,11 @@ export async function getGuidedView(raw: unknown, context: AssistantToolContext)
       description: 'Requests depend on availability at your station.', search: true, customGame: state.task === 'BOOK',
     });
   }
+
+  const stations = await prisma.station.findMany({ where: { isActive: true }, select: { id: true, name: true, hourlyRate: true, minDuration: true, hasControllers: true }, orderBy: { position: 'asc' } });
+  if (state.task === 'PRICES') return view('Stations & prices', stations.map((station) => ({
+    label: station.name, detail: `${priceLabel(station.hourlyRate)}/hr · min ${station.minDuration} hr`, state: { task: 'BOOK', stationId: station.id },
+  })));
 
   if (state.task === 'NEXT') {
     if (!state.search) return view('Find the next available slot', [], { nextFilters: { stations, dates } });
@@ -137,7 +131,7 @@ export async function getGuidedView(raw: unknown, context: AssistantToolContext)
   if (!state.gameChosen) return getGuidedView({ ...state }, context);
   if (!context.user) return login();
   if (!state.benefitMode) {
-    const { output } = await tool('get_booking_options', { stationId: station.id, date: state.date, duration: state.duration, extraControllers: state.extraControllers });
+    const output = await getBookingOptions(context.user.id, station.id, state.date, state.duration, state.extraControllers);
     const passes = output.hourPasses as Array<{ id: string; passType: string; remainingHours: number; eligible: boolean }>;
     const guild = output.guild as { passType: string; label: string; eligible: boolean } | null;
     const choices = [option('Standard', { benefitMode: 'STANDARD', hourPassId: undefined, appliedBenefitType: undefined }, 'Pay at venue')];
@@ -145,7 +139,8 @@ export async function getGuidedView(raw: unknown, context: AssistantToolContext)
     if (guild?.eligible) choices.push(option(guild.label, { benefitMode: 'GUILD', appliedBenefitType: guild.passType, hourPassId: undefined }, '50% discount · pay at venue'));
     return view('Choose a benefit', choices);
   }
-  return prepared('prepare_booking', { stationId: station.id, date: state.date, startTime: state.startTime, duration: state.duration,
+  const card = await prepareBooking(context.user.id, { stationId: station.id, date: state.date, startTime: state.startTime, duration: state.duration,
     extraControllers: state.extraControllers, notes: state.notes || null, benefitMode: state.benefitMode,
     hourPassId: state.hourPassId ?? null, appliedBenefitType: state.appliedBenefitType ?? null });
+  return view(card.title, [], { card });
 }

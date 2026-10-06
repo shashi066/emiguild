@@ -38,21 +38,48 @@ test('Vault and lifecycle API integration', { skip: !base }, async (t) => {
     await t.test('authentication and admin authorization are enforced', async () => {
       for (const path of ['/api/vault']) assert.equal((await api(path)).response.status, 401);
       assert.equal((await api('/api/vault/summary')).response.status, 401);
-      for (const path of ['/api/activity', '/api/admin/lifecycle/preview', '/api/admin/lifecycle/settings', '/api/admin/lifecycle/test-email', '/api/cron/lifecycle/email']) {
-        assert.equal((await fetch(`${base}${path}`)).status, 404);
-      }
+      assert.equal((await fetch(`${base}/api/admin/lifecycle/preview`)).status, 404);
+      assert.equal((await api('/api/admin/lifecycle/settings', playerCookie)).response.status, 403);
+      assert.equal((await api('/api/admin/lifecycle/settings')).response.status, 403);
+      assert.equal((await api('/api/activity', '', { method: 'POST' })).response.status, 401);
+      assert.equal((await api('/api/admin/lifecycle/test-email', playerCookie, { method: 'POST', headers: { Origin: base! } })).response.status, 403);
+      assert.equal((await api('/api/cron/lifecycle/email')).response.status, 401);
+      assert.equal((await api('/api/cron/lifecycle/email', '', { headers: { Authorization: 'Bearer wrong' } })).response.status, 401);
     });
     await t.test('authenticated pages render their entry points and unauthenticated Vault redirects', async () => {
       const redirect = await fetch(`${base}/vault`, { redirect: 'manual' });
       assert.ok([302, 303, 307, 308].includes(redirect.status));
       for (const [path, cookie, text] of [
         ['/vault', playerCookie, 'Your Vault'],
+        ['/admin/lifecycle', adminCookie, 'Messaging / Mail'],
         ['/profile', playerCookie, 'Open your Vault'],
       ]) {
         const response = await fetch(`${base}${path}`, { headers: { Cookie: cookie } });
         assert.equal(response.status, 200);
         assert.ok((await response.text()).includes(text));
       }
+    });
+    await t.test('mail settings save without dispatch; cross-origin requests and preview are blocked', async () => {
+      const before = await prisma.lifecycleEmailDelivery.count();
+      const save = (origin: string, body: unknown) => api('/api/admin/lifecycle/settings', adminCookie, { method: 'PUT', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const settings = { emailDigest: false, comebackEmail: false };
+      assert.equal((await save('https://other.test', settings)).response.status, 403);
+      assert.equal((await save(base!, { ...settings, userId: first.id })).response.status, 400);
+      assert.equal((await save(base!, settings)).response.status, 200);
+      assert.deepEqual((await api('/api/admin/lifecycle/settings', adminCookie)).body, settings);
+      assert.equal((await api('/api/admin/lifecycle/test-email', adminCookie, { method: 'POST', headers: { Origin: 'https://other.test' } })).response.status, 403);
+      assert.equal((await api('/api/admin/lifecycle/test-email', adminCookie, { method: 'POST', headers: { Origin: base! } })).response.status, 503);
+      if (process.env.CRON_SECRET) assert.equal((await api('/api/cron/lifecycle/email', '', { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } })).response.status, 200);
+      assert.equal(await prisma.lifecycleEmailDelivery.count(), before);
+    });
+    await t.test('website visits are authenticated, same-origin and server-throttled', async () => {
+      const visit = (origin = base!) => api('/api/activity', playerCookie, { method: 'POST', headers: { Origin: origin } });
+      assert.equal((await visit('https://other.test')).response.status, 403);
+      assert.equal((await visit()).response.status, 200);
+      const recorded = (await prisma.user.findUniqueOrThrow({ where: { id: first.id } })).lastWebsiteVisitAt;
+      assert.ok(recorded);
+      await visit();
+      assert.deepEqual((await prisma.user.findUniqueOrThrow({ where: { id: first.id } })).lastWebsiteVisitAt, recorded);
     });
     const now = new Date();
     const expiry = new Date(now.getTime() + 3600000);
