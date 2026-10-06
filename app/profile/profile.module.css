@@ -1,0 +1,11 @@
+.header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-lg); margin-bottom: var(--space-xl); }
+.title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; }
+.title svg { flex-shrink: 0;  }
+.vaultLink { min-height: 44px; flex-shrink: 0; }
+.identity { min-width: 0; overflow-wrap: anywhere; }
+.details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .header { align-items: stretch; }
+  .vaultLink { width: 100%; }
+  .details { grid-template-columns: minmax(0, 1fr); }
+}

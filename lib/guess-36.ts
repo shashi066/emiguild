@@ -117,7 +117,7 @@ function ticketReward(rewardSnapshot: string): Guess36CounterReward {
   return reward;
 }
 
-function serializePublicTicket(ticket: {
+export function serializeGuess36RewardTicket(ticket: {
   id: string;
   expiresAt: Date;
   rewardSnapshot: string;
@@ -135,7 +135,7 @@ function serializeTicket(ticket: {
   const status = ticket.status === 'REDEEMED'
     ? 'REDEEMED'
     : ticket.expiresAt.getTime() <= now.getTime() ? 'EXPIRED' : 'UNUSED';
-  return { ...serializePublicTicket(ticket), code: ticket.code, status };
+  return { ...serializeGuess36RewardTicket(ticket), code: ticket.code, status };
 }
 
 const entrySelect = { selectionType: true, selectionValue: true, createdAt: true } as const;
@@ -276,11 +276,15 @@ export async function updateGuess36Config(value: { enabled?: boolean; enabledMod
 export async function getGuess36Current(
   viewer?: { id: string; role: string } | null,
   now: Date = new Date(),
+  options: { readOnly?: boolean } = {},
 ): Promise<Guess36PublicState> {
   const [enabled, enabledModes, todayRound] = await Promise.all([
     readEnabled(),
     readModes(),
-    ensureTodayRound(now),
+    options.readOnly
+      ? prisma.guess36Round.findUnique({ where: { roundDate: getIstDateKey(now) } })
+        .then((round) => round ?? { id: '', status: 'OPEN', rewardsSnapshot: null })
+      : ensureTodayRound(now),
   ]);
   const today = getIstDateKey(now);
   const previousDate = getPreviousIstDateKey(now);
@@ -339,7 +343,7 @@ export async function getGuess36Current(
     authenticated: Boolean(viewer),
     eligible: viewer?.role === 'USER' || viewer?.role === 'ADMIN',
     history: history.map((round) => ({ date: round.roundDate, winningNumber: round.winningNumber! })),
-    rewardTickets: rewardTickets.map(serializePublicTicket),
+    rewardTickets: rewardTickets.map(serializeGuess36RewardTicket),
     today: {
       date: today,
       status: effectiveRoundStatus(today, todayRound.status, enabled, today, now) as 'OPEN' | 'PAUSED' | 'CLOSED',

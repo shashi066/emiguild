@@ -30,6 +30,7 @@ export function Navbar() {
     { href: '/daily-spin', label: 'Guild Spin',   icon: <RotateCw size={15} /> },
     { href: '/guess-36', label: 'Guess 36',   icon: <Target size={15} /> },
     { href: '/draws',      label: '🎁 Guild Drop', icon: null },
+    ...(session ? [{ href: '/vault', label: 'Vault', icon: <Shield size={15} /> }] : []),
     ...(session ? [{ href: '/my-bookings', label: 'My Bookings', icon: <BookOpen size={15} /> }] : []),
     ...(isAdmin  ? [{ href: '/admin',      label: 'Admin',       icon: <LayoutDashboard size={15} /> }] : []),
   ];
@@ -42,6 +43,7 @@ export function Navbar() {
   ];
 
   const desktopAccountLinks = [
+    ...(session ? [{ href: '/vault', label: 'Vault', icon: <Shield size={15} /> }] : []),
     ...(session ? [{ href: '/my-bookings', label: 'My Bookings', icon: <BookOpen size={15} /> }] : []),
     ...(isAdmin ? [{ href: '/admin', label: 'Admin', icon: <LayoutDashboard size={15} /> }] : []),
   ];

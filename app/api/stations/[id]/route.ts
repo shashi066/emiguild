@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -25,6 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
 
+    invalidateAssistantKnowledge();
     return NextResponse.json({ station });
   } catch (err) {
     console.error('[PATCH /api/stations/:id]', err);
@@ -40,5 +42,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
 
   await prisma.station.update({ where: { id }, data: { isActive: false } });
+  invalidateAssistantKnowledge();
   return NextResponse.json({ success: true });
 }

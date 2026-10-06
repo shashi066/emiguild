@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { Rental as Ps5Rental } from '@/types/ps5-rental';
+import { RentalStatus, RentalGames } from '@/components/Ps5RentalDetails';
 import Link from 'next/link';
 import {
   BookOpen, Calendar, Clock, Monitor, IndianRupee,
   XCircle, AlertCircle, CheckCircle, Plus, Award, Crown, Sword, Gamepad2,
+  Package, MapPin, Truck,
 } from 'lucide-react';
 import { formatTime, formatDate, formatCurrency, getTodayString } from '@/lib/utils';
 import {
@@ -64,10 +67,16 @@ const PASS_ICON: Record<string, string> = { BRONZE: '🥉', SILVER: '🥈', GOLD
 export default function MyBookingsPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [userPasses, setUserPasses] = useState<ActivePass[]>([]);
+  const [rentals, setRentals]         = useState<Ps5Rental[]>([]);
+  const [rentalPage, setRentalPage] = useState(1);
+  const [rentalHasMore, setRentalHasMore] = useState(false);
+  const [rentalError, setRentalError] = useState('');
+  const [rentalAttempt, setRentalAttempt] = useState(0);
+  const [rentalLoading, setRentalLoading] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [error, setError]             = useState('');
-  const [activeTab, setActiveTab]     = useState<'upcoming' | 'past' | 'pass'>('upcoming');
+  const [activeTab, setActiveTab]     = useState<'upcoming' | 'past' | 'pass' | 'rental'>('upcoming');
 
   const fetchData = async () => {
     setLoading(true);
@@ -88,6 +97,18 @@ export default function MyBookingsPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    if (activeTab !== 'rental') return;
+    const controller = new AbortController();
+    setRentalLoading(true); setRentalError(''); setRentals([]); setRentalHasMore(false);
+    void fetch(`/api/ps5-rental?page=${rentalPage}`, { signal: controller.signal }).then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error('Could not load rentals.');
+      if (!controller.signal.aborted) { setRentals(data.rentals); setRentalHasMore(data.hasMore); }
+    }).catch(() => { if (!controller.signal.aborted) setRentalError('Could not load rentals.'); })
+      .finally(() => { if (!controller.signal.aborted) setRentalLoading(false); });
+    return () => controller.abort();
+  }, [activeTab, rentalPage, rentalAttempt]);
 
   const handleCancel = async (id: string) => {
     if (!confirm('Are you sure you want to cancel this booking?')) return;
@@ -113,6 +134,26 @@ export default function MyBookingsPage() {
     }
   };
 
+  const handleCancelRental = async (id: string) => {
+    if (!confirm('Are you sure you want to cancel this rental order?')) return;
+    setCancellingId(id);
+    try {
+      const res = await fetch(`/api/ps5-rental/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELLED' }),
+      });
+      if (res.ok) {
+        setRentals((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'CANCELLED' } : r)));
+      } else {
+        const data = await res.json();
+        setError(data.error ?? 'Could not cancel this rental.');
+      }
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   const today = getTodayString();
   const upcoming = bookings.filter((b) => b.date >= today && b.status !== 'CANCELLED' && b.status !== 'CHECKED_IN');
   const past     = bookings.filter((b) => b.date < today  || b.status === 'CANCELLED'  || b.status === 'CHECKED_IN');
@@ -122,7 +163,7 @@ export default function MyBookingsPage() {
   );
   const displayList = activeTab === 'upcoming' ? upcoming : past;
 
-  const TabBtn = ({ tab, label, count }: { tab: 'upcoming' | 'past' | 'pass'; label: string; count?: number }) => (
+  const TabBtn = ({ tab, label, count }: { tab: 'upcoming' | 'past' | 'pass' | 'rental'; label: string; count?: number }) => (
     <button
       className={`btn ${activeTab === tab ? 'btn-primary' : 'btn-ghost'}`}
       onClick={() => setActiveTab(tab)}
@@ -165,10 +206,11 @@ export default function MyBookingsPage() {
           <TabBtn tab="upcoming" label="Upcoming" count={upcoming.length} />
           <TabBtn tab="past"     label="Past & Cancelled" count={past.length} />
           <TabBtn tab="pass"     label="My Passes" />
+          <TabBtn tab="rental"   label="PS5 Rentals" count={rentals.length} />
         </div>
 
         {/* ── Bookings list ── */}
-        {activeTab !== 'pass' && (
+        {(activeTab === 'upcoming' || activeTab === 'past') && (
           loading ? (
             <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-text-muted)' }}>
               Loading your bookings...
@@ -421,6 +463,99 @@ export default function MyBookingsPage() {
             </div>
           )
         )}
+
+        {/* ── PS5 Rentals tab ── */}
+        {activeTab === 'rental' && (
+          rentalLoading ? (
+            <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-text-muted)' }}>Loading your rentals...</div>
+          ) : rentalError ? <div role="alert" className="card"><p>{rentalError}</p><button className="btn btn-secondary" onClick={() => setRentalAttempt((value) => value + 1)}>Retry</button></div> : rentals.length === 0 ? (
+            <div className="card">
+              <div className="empty-state">
+                <div className="empty-state-icon"><Package size={32} /></div>
+                <div className="empty-state-title">No PS5 Rentals</div>
+                <p className="empty-state-text">You haven&apos;t rented a PS5 yet. Get one delivered to your doorstep!</p>
+                <Link href="/ps5-rental" className="btn btn-primary" style={{ marginTop: 'var(--space-md)' }}>
+                  <Package size={16} /> Rent a PS5
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+              {rentals.map((rental) => {
+                const orderDate = new Date(rental.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+
+                return (
+                  <div key={rental.id} className="card card-hover" style={{ padding: 'var(--space-lg)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+                      {/* Left side */}
+                      <div style={{ flex: 1, minWidth: 220 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-sm)', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, fontSize: '1rem' }}>PS5 Rental — {rental.rentalDays} Day{rental.rentalDays > 1 ? 's' : ''}</span>
+                          <RentalStatus status={rental.status} />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 'var(--space-lg)', flexWrap: 'wrap', fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-sm)' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Calendar size={14} style={{ color: 'var(--color-accent-primary)' }} />{orderDate}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Gamepad2 size={14} style={{ color: 'var(--color-accent-primary)' }} />1 + {rental.extraControllers} controller{rental.extraControllers !== 1 ? 's' : ''}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Truck size={14} style={{ color: 'var(--color-accent-primary)' }} />COD
+                          </span>
+                        </div>
+
+                        {/* Games */}
+                        <RentalGames value={rental.selectedGames} />
+
+                        {/* Delivery address */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                          <MapPin size={13} style={{ marginTop: 2, flexShrink: 0 }} />
+                          <span>{rental.deliveryAddress}, {rental.deliveryCity} — {rental.deliveryPincode}</span>
+                        </div>
+
+                        {/* Admin comment */}
+                        {rental.adminComment && (
+                          <div style={{ marginTop: 'var(--space-sm)', padding: '8px 12px', background: 'rgba(108,99,255,0.06)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                            <strong>Admin note:</strong> {rental.adminComment}
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>ID: #{rental.id.slice(-8).toUpperCase()}</div>
+                      </div>
+
+                      {/* Right side — price + cancel */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-sm)' }}>
+                        <div>
+                          <div style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '1.3rem', fontWeight: 700, color: 'var(--color-accent-primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <IndianRupee size={16} />{rental.totalPrice.toLocaleString()}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'right' }}>Cash on Delivery</div>
+                        </div>
+                        {rental.status === 'PENDING' && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleCancelRental(rental.id)}
+                            disabled={cancellingId === rental.id}
+                            id={`cancel-rental-${rental.id}`}
+                          >
+                            <XCircle size={14} />{cancellingId === rental.id ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+        {activeTab === 'rental' && <nav aria-label="Your rental pages" style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 20 }}>
+          <button className="btn btn-ghost" disabled={rentalLoading || rentalPage === 1} onClick={() => setRentalPage((page) => page - 1)}>Previous</button>
+          <span>Page {rentalPage}</span>
+          <button className="btn btn-ghost" disabled={rentalLoading || !rentalHasMore} onClick={() => setRentalPage((page) => page + 1)}>Next</button>
+        </nav>}
       </div>
     </div>
   );

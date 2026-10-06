@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -51,5 +52,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  invalidateAssistantKnowledge();
   return NextResponse.json({ station }, { status: 201 });
 }

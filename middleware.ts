@@ -14,7 +14,8 @@ export default auth((req: NextRequest & { auth: { user?: { role?: string } } | n
     nextUrl.pathname === '/forgot-password';
   const isProtectedRoute =
     nextUrl.pathname.startsWith('/my-bookings') ||
-    nextUrl.pathname.startsWith('/profile');
+    nextUrl.pathname.startsWith('/profile') ||
+    nextUrl.pathname.startsWith('/vault');
 
   // Redirect logged-in users away from auth pages
   if (isAuthRoute && isLoggedIn) {

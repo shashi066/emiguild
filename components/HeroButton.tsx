@@ -31,6 +31,7 @@ interface HeroButtonProps {
   className?: string;
   id?: string;
   onClick?: () => void;
+  disabled?: boolean;
 }
 
 const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
@@ -105,13 +106,6 @@ const animationClasses: Record<AnimationVariant, string> = {
   tournament: 'tournament-btn',
 };
 
-const animationStyles: Record<AnimationVariant, React.CSSProperties> = {
-  none: {},
-  spin: {},
-  lucky: {},
-  tournament: {},
-};
-
 export default function HeroButton({
   label,
   icon: Icon,
@@ -122,34 +116,39 @@ export default function HeroButton({
   className = '',
   id,
   onClick,
+  disabled = false,
 }: HeroButtonProps) {
   const baseClass = variant === 'primary' ? 'btn btn-primary btn-lg' : 'btn btn-ghost btn-lg';
   const animClass = animationClasses[animation];
   const combinedClass = [baseClass, animClass, className].filter(Boolean).join(' ');
-  const style = { ...variantStyles[variant], ...animationStyles[animation] };
+  const style = variantStyles[variant];
+
+  const content = (
+    <>
+      <Icon size={18} />
+      <span>{label}</span>
+      {targetId === 'stations' && <ChevronRightIcon />}
+    </>
+  );
 
   const button = (
-    <button type="button" className={combinedClass} style={style} id={id} onClick={onClick}>
-      <Icon size={18} />
-      {label}
+    <button type="button" className={combinedClass} style={style} id={id} onClick={onClick} disabled={disabled}>
+      {content}
     </button>
   );
 
   if (targetId) {
     return (
       <ScrollToSection targetId={targetId} className={combinedClass} style={style}>
-        <Icon size={18} />
-        {label}
-        {targetId === 'stations' && <ChevronRightIcon />}
+        {content}
       </ScrollToSection>
     );
   }
 
-  if (href) {
+  if (href && !disabled) {
     return (
-      <Link href={href} className={combinedClass} style={style}>
-        <Icon size={18} />
-        {label}
+      <Link href={href} className={combinedClass} style={style} id={id}>
+        {content}
       </Link>
     );
   }

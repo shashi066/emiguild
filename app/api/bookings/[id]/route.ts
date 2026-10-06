@@ -2,6 +2,7 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { customerScopedAdmin } from '@/lib/assistant/customer-scope';
 import { updateBookingSchema } from '@/lib/validations';
 import { addHours } from '@/lib/utils';
 import { encryptPhone } from '@/lib/crypto';
@@ -76,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
   const isOwner = booking.userId === session.user.id;
-  const isAdmin = session.user.role === 'ADMIN';
+  const isAdmin = customerScopedAdmin(session.user.role, req.headers);
 
   const body = await req.json();
 
@@ -167,6 +168,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const currentBooking = await tx.booking.findUnique({ where: { id } });
         if (!currentBooking) {
           throw new BookingUpdateError('Booking not found', 404);
+        }
+        if (!isAdmin && (currentBooking.userId !== session.user.id || isBookingStartPastInIndia(currentBooking.date, currentBooking.startTime, new Date(), 0))) {
+          throw new BookingUpdateError('This booking cannot be cancelled.', 403, 'CANCELLATION_CLOSED');
         }
         if (currentBooking.status === 'CANCELLED') {
           return tx.booking.findUniqueOrThrow({ where: { id }, include });

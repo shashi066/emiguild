@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Save, CheckCircle, AlertCircle,
-  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor,
+  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor, Package, Bot, Search,
 } from 'lucide-react';
 import {
   SPECIAL_OPENING_DATE_KEY,
@@ -13,9 +13,29 @@ import {
   getActiveSpecialOpening,
   getIndiaClock,
 } from '@/lib/public-booking-time';
+import { parsePs5RentalPrice, resolvePs5RentalAvailability } from '@/lib/ps5-rental';
+import { AdminModalShell } from '@/components/admin/AdminModalShell';
+import { AssistantAISettings } from '@/components/admin/AssistantAISettings';
+
+const SETTINGS_SEARCH = {
+  ai_config: ['assistant', 'emiily ai api key model daily request limit'],
+  controller_price: ['venue', 'extra controller price booking charge'],
+  venue_capacity: ['venue', 'venue capacity simultaneous booking screens'],
+  opening_boost: ['venue', 'early opening hours override'],
+  stations_availability: ['venue', 'live station availability homepage'],
+  ps5_rental_status: ['rentals', 'ps5 rental service status'],
+  ps5_rental_price: ['rentals', 'ps5 rental daily price'],
+  ps5_rental_controller: ['rentals', 'ps5 extra controller price per day'],
+  assistant: ['assistant', 'emi assistant release mode on off'],
+} as const;
 
 type Setting = { id: string; key: string; value: string; label: string | null };
-type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | null;
+type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | 'ps5_rental_status' | 'ps5_rental_price' | 'ps5_rental_controller' | 'assistant' | null;
+type SettingsCategory = 'all' | 'venue' | 'rentals' | 'assistant';
+const SETTINGS_TABS: Array<{ id: SettingsCategory; label: string }> = [
+  { id: 'all', label: 'All settings' }, { id: 'venue', label: 'Venue & Booking' },
+  { id: 'rentals', label: 'PS5 Rentals' }, { id: 'assistant', label: 'Emiily AI' },
+];
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AdminSettingsPage() {
@@ -27,6 +47,8 @@ export default function AdminSettingsPage() {
   const [modalId, setModalId] = useState<ModalId>(null);
   const [draft,   setDraft]   = useState<Record<string, string>>({});
   const [saving,  setSaving]  = useState(false);
+  const [category, setCategory] = useState<SettingsCategory>('all');
+  const [search, setSearch] = useState('');
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const showToast = (type: 'success' | 'error', msg: string) => {
@@ -40,7 +62,7 @@ export default function AdminSettingsPage() {
       const res  = await fetch('/api/admin/settings');
       const data = await res.json();
       const map: Record<string, string> = {};
-      (data.settings as Setting[]).forEach((s) => { map[s.key] = s.value; });
+      (data.settings as Setting[]).forEach((s) => { map[s.key] = s.key === 'assistant_release_mode' && s.value === 'BETA' ? 'ON' : s.value; });
       setSettings(map);
     } finally {
       setLoading(false);
@@ -108,6 +130,16 @@ export default function AdminSettingsPage() {
     indiaClock.date,
   );
   const showStationsAvailability = settings['show_stations_availability'] !== 'false';
+  const ps5RentalStatus           = resolvePs5RentalAvailability(settings);
+  const ps5RentalPrice            = settings['ps5_rental_price_per_day']     ?? '1200';
+  const ps5ExtraControllerPrice   = settings['ps5_rental_extra_controller']  ?? '500';
+  const assistantReleaseMode      = settings['assistant_release_mode'] ?? 'OFF';
+  const normalizedSearch = search.trim().toLowerCase();
+  const visible = (key: keyof typeof SETTINGS_SEARCH) => {
+    const [group, terms] = SETTINGS_SEARCH[key];
+    return (category === 'all' || category === group) && (!normalizedSearch || terms.includes(normalizedSearch));
+  };
+  const visibleCount = (Object.keys(SETTINGS_SEARCH) as Array<keyof typeof SETTINGS_SEARCH>).filter(visible).length;
 
   // Draft variants (inside modal)
   const draftSpecialDate    = draft[SPECIAL_OPENING_DATE_KEY];
@@ -140,6 +172,33 @@ export default function AdminSettingsPage() {
   const saveStationsAvailability = () =>
     persist([{ key: 'show_stations_availability', value: draft['show_stations_availability'] ?? 'true', label: 'User Live Station Availability' }]);
 
+  const savePs5RentalStatus = () =>
+    persist([{ key: 'ps5_rental_status', value: draft['ps5_rental_status'] ?? ps5RentalStatus, label: 'PS5 Rental Service Status' }]);
+
+  const savePs5RentalPrice = () => {
+    const value = parsePs5RentalPrice(draft['ps5_rental_price_per_day'], -1);
+    if (value < 0) return showToast('error', 'Enter a whole-number price between ₹0 and ₹100,000.');
+    return persist([{ key: 'ps5_rental_price_per_day', value: String(value), label: 'PS5 Rental Price Per Day' }]);
+  };
+
+  const savePs5RentalController = () => {
+    const value = parsePs5RentalPrice(draft['ps5_rental_extra_controller'], -1);
+    if (value < 0) return showToast('error', 'Enter a whole-number price between ₹0 and ₹100,000.');
+    return persist([{ key: 'ps5_rental_extra_controller', value: String(value), label: 'PS5 Rental Extra Controller Price Per Day' }]);
+  };
+
+  const saveAssistant = () => persist([
+    { key: 'assistant_release_mode', value: draft['assistant_release_mode'] ?? 'OFF', label: 'Emi Assistant Release Mode' },
+  ]);
+
+  const priceEditor = modalId === 'controller_price'
+    ? { key: 'controller_price', label: 'Extra Controller Price', fallback: '0', max: 9999, unit: '/ controller / hour', multiplier: 3, preview: '3 extra controllers for 1 hour', save: saveControllerPrice }
+    : modalId === 'ps5_rental_price'
+    ? { key: 'ps5_rental_price_per_day', label: 'PS5 Rental Price Per Day', fallback: '1200', max: 100000, unit: '/ day', multiplier: 7, preview: '7-day rental', save: savePs5RentalPrice }
+    : modalId === 'ps5_rental_controller'
+    ? { key: 'ps5_rental_extra_controller', label: 'PS5 Extra Controller Per Day', fallback: '500', max: 100000, unit: '/ controller / day', multiplier: 7, preview: '1 extra controller for 7 days', save: savePs5RentalController }
+    : null;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div>
@@ -171,28 +230,35 @@ export default function AdminSettingsPage() {
       {loading ? (
         <div className="loading-state"><div className="spinner" />Loading settings…</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', maxWidth: 680 }}>
+        <div className="admin-settings-shell">
+          <div className="admin-settings-toolbar">
+            <div className="admin-settings-search"><Search size={17} aria-hidden="true" /><input aria-label="Search settings" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search settings…" />{search && <button type="button" onClick={() => setSearch('')} aria-label="Clear settings search"><X size={15} /></button>}</div>
+            <div className="admin-settings-tabs" role="group" aria-label="Settings categories">{SETTINGS_TABS.map((tab) => <button key={tab.id} type="button" aria-pressed={category === tab.id} className={category === tab.id ? 'active' : ''} onClick={() => setCategory(tab.id)}>{tab.label}</button>)}</div>
+          </div>
+          <div className="admin-settings-result-count">{visibleCount} setting{visibleCount === 1 ? '' : 's'}</div>
+          <div className="admin-settings-grid">
+          <AssistantAISettings hidden={!visible('ai_config')} />
 
           {/* ── Controller Price ── */}
-          <SettingCard
+          {visible('controller_price') && <SettingCard
             icon={<Gamepad2 size={20} />}
             title="Extra Controller Price"
             description="Charge per extra controller per booking. 1 controller is always included free."
             value={`₹${controllerPrice} / controller`}
             onEdit={() => openModal('controller_price')}
-          />
+          />}
 
           {/* ── Venue Capacity ── */}
-          <SettingCard
+          {visible('venue_capacity') && <SettingCard
             icon={<Monitor size={20} />}
             title="Venue Capacity"
             description="Max concurrent bookings allowed at the same time (limited by number of TVs / screens)."
             value={`${venueCapacity} simultaneous booking${parseInt(venueCapacity) === 1 ? '' : 's'}`}
             onEdit={() => openModal('venue_capacity')}
-          />
+          />}
 
           {/* ── Early Hours Override ── */}
-          <SettingCard
+          {visible('opening_boost') && <SettingCard
             icon={<Clock size={20} />}
             title="Early Hours Override"
             description="Temporarily open the venue earlier than normal hours for today only."
@@ -209,72 +275,66 @@ export default function AdminSettingsPage() {
               : undefined
             }
             onEdit={() => openModal('opening_boost')}
-          />
+          />}
 
           {/* ── Show Stations Availability ── */}
-          <SettingCard
+          {visible('stations_availability') && <SettingCard
             icon={<Monitor size={20} />}
             title="User Live Station Availability"
             description="Enable or disable showing the Live Station Availability timeline block on the user home page."
             value={showStationsAvailability ? 'Enabled — Visible to users' : 'Disabled — Hidden from users'}
             badge={showStationsAvailability ? 'active' : undefined}
             onEdit={() => openModal('stations_availability')}
-          />
+          />}
 
+          {/* ── PS5 Rental Enabled ── */}
+          {visible('ps5_rental_status') && <SettingCard
+            icon={<Package size={20} />}
+            title="PS5 Rental Service"
+            description="Enable or disable the PS5 home rental service for users."
+            value={ps5RentalStatus === 'AVAILABLE' ? 'Available — Accepting orders' : ps5RentalStatus === 'COMING_SOON' ? 'Coming Soon — Visible, not accepting orders' : 'Disabled — Hidden from homepage'}
+            badge={ps5RentalStatus === 'AVAILABLE' ? 'active' : undefined}
+            onEdit={() => openModal('ps5_rental_status')}
+          />}
+
+          {/* ── PS5 Rental Price ── */}
+          {visible('ps5_rental_price') && <SettingCard
+            icon={<Package size={20} />}
+            title="PS5 Rental Price (Per Day)"
+            description="Daily rental price for PS5 console with 1 controller included."
+            value={`₹${ps5RentalPrice} / day`}
+            onEdit={() => openModal('ps5_rental_price')}
+          />}
+
+          {/* ── PS5 Extra Controller Price ── */}
+          {visible('ps5_rental_controller') && <SettingCard
+            icon={<Gamepad2 size={20} />}
+            title="PS5 Extra Controller (Per Day)"
+            description="Additional charge per extra controller per day of rental."
+            value={`₹${ps5ExtraControllerPrice} / controller / day`}
+            onEdit={() => openModal('ps5_rental_controller')}
+          />}
+
+          {visible('assistant') && <SettingCard
+            icon={<Bot size={20} />}
+            title="Emi Assistant"
+            description="Enable Emiily for all visitors. AI chat requires sign-in. Emiily is still in beta."
+            value={assistantReleaseMode === 'ON' ? 'On — all visitors' : 'Off'}
+            badge={assistantReleaseMode === 'ON' ? 'active' : undefined}
+            onEdit={() => openModal('assistant')}
+          />}
+          {!visibleCount && <div className="admin-settings-empty"><Search size={26} /><strong>No matching settings</strong><span>Try another search or choose a different category.</span><button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setCategory('all'); }}>Clear filters</button></div>}
+          </div>
         </div>
       )}
 
-      {/* ══ Modal: Controller Price ══════════════════════════════════════════════ */}
-      {modalId === 'controller_price' && (
-        <Modal
-          title="Extra Controller Price"
-          icon={<Gamepad2 size={18} />}
-          onClose={closeModal}
-          onSave={saveControllerPrice}
-          saving={saving}
-        >
-          <div className="form-group">
-            <label className="form-label" htmlFor="modal-controller-price">
-              Price per extra controller
-            </label>
-            <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-sm)' }}>
-              Charged per controller beyond the first for each booking session.
-            </p>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <span style={{
-                position: 'absolute', left: 14,
-                fontFamily: 'Orbitron, sans-serif', fontWeight: 700,
-                color: 'var(--color-accent-primary)', fontSize: '0.95rem',
-              }}>₹</span>
-              <input
-                id="modal-controller-price"
-                type="number"
-                className="form-input"
-                style={{ paddingLeft: 34, paddingRight: 120 }}
-                value={draft['controller_price'] ?? '0'}
-                min={0}
-                max={9999}
-                onChange={(e) => setDraft((p) => ({ ...p, controller_price: e.target.value }))}
-              />
-              <span style={{ position: 'absolute', right: 14, fontSize: '0.8rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                / controller
-              </span>
-            </div>
-            <div style={{
-              marginTop: 10, padding: '10px 14px',
-              background: 'rgba(108,99,255,0.05)', border: '1px solid rgba(108,99,255,0.15)',
-              borderRadius: 'var(--radius-md)', fontSize: '0.82rem', color: 'var(--color-text-secondary)',
-            }}>
-              Preview: 3 extra controllers = {' '}
-              <strong style={{ color: 'var(--color-accent-primary)' }}>
-                ₹{(parseFloat(draft['controller_price'] ?? '0') * 3).toFixed(0)}
-              </strong>
-            </div>
-          </div>
-        </Modal>
-      )}
 
       {/* ══ Modal: Venue Capacity ════════════════════════════════════════════════ */}
+      {priceEditor && <Modal title={priceEditor.label} icon={<Gamepad2 size={18} />} onClose={closeModal} onSave={priceEditor.save} saving={saving}>
+        <label className="form-label" htmlFor="setting-price">{priceEditor.label}</label>
+        <div className="admin-price-input"><span>₹</span><input id="setting-price" className="form-input" type="number" min={0} max={priceEditor.max} value={draft[priceEditor.key] ?? priceEditor.fallback} onChange={(event) => setDraft((previous) => ({ ...previous, [priceEditor.key]: event.target.value }))} /><small>{priceEditor.unit}</small></div>
+        <p className="admin-price-preview">{priceEditor.preview}: <strong>₹{(Number(draft[priceEditor.key] ?? priceEditor.fallback) * priceEditor.multiplier).toLocaleString('en-IN')}</strong></p>
+      </Modal>}
       {modalId === 'venue_capacity' && (
         <Modal
           title="Venue Capacity"
@@ -483,6 +543,48 @@ export default function AdminSettingsPage() {
           </div>
         </Modal>
       )}
+
+      {/* ══ Modal: PS5 Rental Enabled ══════════════════════════════════════════ */}
+      {modalId === 'ps5_rental_status' && (
+        <Modal
+          title="PS5 Rental Service"
+          icon={<Package size={18} />}
+          onClose={closeModal}
+          onSave={savePs5RentalStatus}
+          saving={saving}
+        >
+          <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="modal-ps5-status">Public availability</label>
+              <select id="modal-ps5-status" className="form-input" value={draft['ps5_rental_status'] ?? ps5RentalStatus} onChange={(e) => setDraft((p) => ({ ...p, ps5_rental_status: e.target.value }))}>
+                <option value="AVAILABLE">Available — accept orders</option>
+                <option value="COMING_SOON">Coming Soon — show announcement</option>
+                <option value="DISABLED">Disabled — hide from homepage</option>
+              </select>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {modalId === 'assistant' && (
+        <Modal
+          title="Emi Assistant"
+          icon={<Bot size={18} />}
+          onClose={closeModal}
+          onSave={saveAssistant}
+          saving={saving}
+        >
+          <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="modal-assistant-mode">Release mode</label>
+              <select id="modal-assistant-mode" className="form-input" value={draft['assistant_release_mode'] ?? 'OFF'} onChange={(e) => setDraft((p) => ({ ...p, assistant_release_mode: e.target.value }))}>
+                <option value="OFF">Off — hidden for everyone</option>
+                <option value="ON">On — all visitors (AI still requires sign-in)</option>
+              </select>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -499,7 +601,7 @@ function SettingCard({
   onEdit: () => void;
 }) {
   return (
-    <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)', padding: '20px 24px' }}>
+    <div className="card admin-setting-card">
       <span style={{ color: 'var(--color-accent-primary)', flexShrink: 0 }}>{icon}</span>
 
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -559,23 +661,14 @@ function Modal({
   saving:   boolean;
 }) {
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 'var(--space-xl)',
-      }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="card" style={{ width: '100%', maxWidth: 480 }}>
+    <AdminModalShell labelledBy="setting-editor-title" onClose={() => { if (!saving) onClose(); }} lightweight>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 id="setting-editor-title" style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
             {icon && <span style={{ color: 'var(--color-accent-primary)' }}>{icon}</span>}
             {title}
           </h2>
-          <button className="btn btn-ghost btn-sm" onClick={onClose} id="modal-x-btn" aria-label="Close">
+          <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving} id="modal-x-btn" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -605,7 +698,6 @@ function Modal({
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
-      </div>
-    </div>
+    </AdminModalShell>
   );
 }
