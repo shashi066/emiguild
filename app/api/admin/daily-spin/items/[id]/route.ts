@@ -4,7 +4,7 @@ import { auth } from '@/auth';
 import { encryptNumber } from '@/lib/crypto';
 
 // PATCH /api/admin/daily-spin/items/[id]
-export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session || session.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
