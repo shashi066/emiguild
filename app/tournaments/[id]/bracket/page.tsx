@@ -30,11 +30,6 @@ interface Tournament {
   matches: Match[];
 }
 
-const ROUND_NAMES: Record<number, string> = {
-  1: 'Round 1', 2: 'Round 2', 3: 'Round 3', 4: 'Round 4',
-  5: 'Quarter Finals', 6: 'Semi Finals', 7: 'Final',
-};
-
 function getRoundName(round: number, totalRounds: number): string {
   const fromEnd = totalRounds - round;
   if (fromEnd === 0) return 'Final';
@@ -135,9 +130,8 @@ export default function BracketPage() {
                   {getRoundName(round, totalRounds)}
                 </div>
                 <div className="bracket-matches">
-                  {roundMatches.map((match, mIdx) => {
+                  {roundMatches.map((match) => {
                     const isLastRound = round === totalRounds;
-                    const hasPlayers = match.player1Id || match.player2Id;
                     const isCompleted = match.status === 'COMPLETED';
                     const isInProgress = match.status === 'IN_PROGRESS';
 

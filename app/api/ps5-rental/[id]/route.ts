@@ -5,7 +5,7 @@ import { auth } from '@/auth';
 
 // PUT — cancel own rental (user only, must be PENDING)
 export async function PUT(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();

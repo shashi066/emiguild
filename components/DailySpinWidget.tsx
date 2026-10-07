@@ -56,7 +56,7 @@ const GRID_COLS = 3;
 const MIN_CELLS = 3;
 
 export function DailySpinWidget() {
-  const { data: session, status: sessionStatus } = useSession();
+  const { status: sessionStatus } = useSession();
   const [spinStatus, setSpinStatus] = useState<SpinStatus | null>(null);
   const [loading, setLoading]       = useState(true);
   const [spinning, setSpinning]     = useState(false);
@@ -219,7 +219,6 @@ export function DailySpinWidget() {
     );
   }
 
-  const GRID_ROWS = gridItems.length > 0 ? Math.ceil(gridItems.length / GRID_COLS) : 2;
   const streak = spinStatus?.streak;
 
   return (

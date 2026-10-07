@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await auth();
   const isAdmin = session?.user?.role === 'ADMIN';
   

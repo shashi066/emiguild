@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Search, User } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 interface Player {
   id: string;

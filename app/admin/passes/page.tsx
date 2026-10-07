@@ -65,7 +65,6 @@ export default function AdminPassesPage() {
   const [showDropdown, setShowDropdown]   = useState(false);
   const [selectedUser, setSelectedUser]   = useState<UserItem | null>(null);
   const [userPasses, setUserPasses]       = useState<ActivePass[]>([]);
-  const [loadingPasses, setLoadingPasses] = useState(false);
   const [selectedPass, setSelectedPass]   = useState<PassType>('SILVER');
   const [assigning, setAssigning]         = useState(false);
   const [revokingPassId, setRevokingPassId] = useState<string | null>(null);
@@ -157,16 +156,11 @@ export default function AdminPassesPage() {
   }).slice(0, 8);
 
   const fetchUserPasses = async (userId: string) => {
-    setLoadingPasses(true);
     setUserPasses([]);
-    try {
-      const res = await fetch(`/api/admin/passes?userId=${userId}&history=1`);
-      if (res.ok) {
-        const data = await res.json();
-        setUserPasses(data.passes ?? []);
-      }
-    } finally {
-      setLoadingPasses(false);
+    const res = await fetch(`/api/admin/passes?userId=${userId}&history=1`);
+    if (res.ok) {
+      const data = await res.json();
+      setUserPasses(data.passes ?? []);
     }
   };
 
@@ -791,7 +785,6 @@ export default function AdminPassesPage() {
                   <label className="form-label">Select Pass to Assign</label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
                     {passOptions.map((opt) => {
-                      const isGuild = isGuildMembershipType(opt.type);
                       const actCls = `active-${opt.type.toLowerCase()}`;
                       const active = selectedPass === opt.type;
                       return (

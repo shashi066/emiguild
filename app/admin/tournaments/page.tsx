@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Trophy, Plus, Trash2, Edit2, X, Users, Calendar } from 'lucide-react';
+import { Trophy, Plus, Trash2, X, Users, Calendar } from 'lucide-react';
 import '@/app/tournaments/tournament.css';
 
 interface Tournament {

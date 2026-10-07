@@ -1,8 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import {
-  BookOpen, Monitor, Users, IndianRupee,
-  TrendingUp, Clock, CheckCircle, XCircle,
+  BookOpen,
   ChevronRight, Gamepad2,
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatTime, getTodayString } from '@/lib/utils';
