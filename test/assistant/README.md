@@ -4,7 +4,7 @@ Performance: public knowledge is cached for 30 seconds with an IST-date cache ke
 
 `npm run test:assistant` runs the isolated flow, schema, token, SSE and permission tests.
 
-HTTP tests in `integration.test.ts` require a disposable SQLite database whose URL contains `assistant-test`, and a Next server using that same database. Set `DATABASE_URL`, `ASSISTANT_TEST_URL`, `AUTH_URL`, `AUTH_SECRET`, and `ASSISTANT_ACTION_SECRET` in the test processes. The server and test process must share the action secret. Use a separate port and disable mail configuration. The suite creates test accounts, stations and rewards and replaces only its named fixtures when rerun.
+HTTP tests in `integration.test.ts` require a disposable SQLite database whose URL contains `assistant-test`, and a Next server using that same database. Set `DATABASE_URL`, `ASSISTANT_TEST_URL`, `AUTH_URL`, and `AUTH_SECRET` in the test processes. The server and test process must share `AUTH_SECRET`, which also derives the action signing key. Use a separate port and disable mail configuration. The suite creates test accounts, stations and rewards and replaces only its named fixtures when rerun.
 
 Run `npx tsx --test test/assistant/integration.test.ts` after pushing the local schema into that disposable database. It exercises real authentication, admin ownership, booking creation, Standard/Hour Pass/Guild pricing, cancellation restoration, duplicate confirmations, stale quotes, partial multi-station failure, Daily Spin, release settings, and separate rate limits. No OpenAI key is required.
 

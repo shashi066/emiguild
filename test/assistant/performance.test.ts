@@ -60,7 +60,7 @@ test('Games requires one narrow game read and no station read', async (t) => {
 });
 
 test('guided spin uses one settings and one eligibility read without inventory or streak', async (t) => {
-  process.env.ASSISTANT_ACTION_SECRET = 'test-guided-secret';
+  process.env.AUTH_SECRET = 'test-guided-secret';
   let settings = 0, spins = 0;
   stub(t, prisma.setting, 'findMany', async () => { settings++; return []; });
   stub(t, prisma.userDailySpin, 'findUnique', async (args: any) => { spins++; assert.deepEqual(args.select, { attempts: true }); return null; });

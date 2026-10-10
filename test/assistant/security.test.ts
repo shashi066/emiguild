@@ -6,7 +6,7 @@ import { assistantActor } from '../../lib/assistant/usage';
 import { getVenueRemainingCapacity } from '../../lib/booking-availability';
 import type { BookingDraft } from '../../types/assistant';
 
-process.env.ASSISTANT_ACTION_SECRET = 'assistant-test-secret-with-enough-entropy';
+process.env.AUTH_SECRET = 'assistant-test-secret-with-enough-entropy';
 
 const draft: BookingDraft = {
   stationId: 'station-1',
@@ -42,6 +42,24 @@ test('booking confirmation tokens bind exact data and reject tampering', () => {
 
   const [encoded, signature] = token.split('.');
   assert.throws(() => verifyActionToken(`${encoded.slice(0, -1)}x.${signature}`), /Invalid confirmation token/);
+});
+
+test('confirmation tokens work without a separate assistant secret and follow AUTH_SECRET rotation', () => {
+  const previousAuthSecret = process.env.AUTH_SECRET;
+  try {
+    process.env.AUTH_SECRET = 'test-auth-secret';
+    const token = createActionToken({ action: 'DAILY_SPIN', userId: 'user-1', spinDate: '2026-10-02' });
+    assert.equal(verifyActionToken(token).userId, 'user-1');
+    const [encoded, signature] = token.split('.');
+    assert.throws(() => verifyActionToken(`${encoded.slice(0, -1)}x.${signature}`), /Invalid confirmation token/);
+    process.env.AUTH_SECRET = 'rotated-test-auth-secret';
+    assert.throws(() => verifyActionToken(token), /Invalid confirmation token/);
+    delete process.env.AUTH_SECRET;
+    assert.throws(() => createActionToken({ action: 'DAILY_SPIN', userId: 'user-1', spinDate: '2026-10-02' }), /AUTH_SECRET is not configured/);
+  } finally {
+    if (previousAuthSecret === undefined) delete process.env.AUTH_SECRET;
+    else process.env.AUTH_SECRET = previousAuthSecret;
+  }
 });
 
 test('expired confirmation tokens are rejected', () => {

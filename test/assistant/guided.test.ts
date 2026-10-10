@@ -62,7 +62,7 @@ test('release modes apply equally to admins and customers', async (t) => {
   mode = 'ON'; assert.equal(await canUseAssistant(admin), true); assert.equal(await canUseAssistant(null), true);
 });
 test('button booking reaches a signed quote without AI, writes, or benefit auto-selection', async (t) => {
-  process.env.ASSISTANT_ACTION_SECRET = 'test-guided-secret';
+  process.env.AUTH_SECRET = 'test-guided-secret';
   t.mock.method(globalThis, 'fetch', async () => { throw new Error('Guided booking must not call an AI or HTTP service'); });
   stub(t, prisma.station, 'findMany', async () => [station]);
   stub(t, prisma.station, 'findFirst', async () => station);
