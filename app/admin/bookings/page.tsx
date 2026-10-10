@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import {
   formatCurrency, formatDate, formatTime,
-  getTimeSlotsForDate, getDurationOptions, CLOSING_HOUR, getTodayString, isSlotAvailable,
+  getTimeSlotsForDate, getDurationOptions, CLOSING_HOUR, isSlotAvailable,
 } from '@/lib/utils';
 import { decryptPhone } from '@/lib/crypto';
 import {
@@ -1074,8 +1074,8 @@ export default function AdminBookingsPage() {
   const updateDayConfirmedBookings = (previous?: Booking, updated?: Booking) => {
     setDayConfirmedBookings((current) => {
       if (!current) return current;
-      const wasConfirmed = previous?.date === current.date && previous.status === 'CONFIRMED';
-      const isConfirmed = updated?.date === current.date && updated.status === 'CONFIRMED';
+      const wasConfirmed = previous?.date === current.date && (previous.status === 'CONFIRMED' || previous.status === 'CHECKED_IN');
+      const isConfirmed = updated?.date === current.date && (updated.status === 'CONFIRMED' || updated.status === 'CHECKED_IN');
       return { ...current, count: Math.max(0, current.count - Number(wasConfirmed) + Number(isConfirmed)) };
     });
   };
@@ -1293,7 +1293,7 @@ export default function AdminBookingsPage() {
           <div
             id="selected-day-confirmed-bookings"
             aria-live="polite"
-            title={`Confirmed bookings for ${formatDate(dateFilter)}, excluding pending, checked-in, and cancelled bookings`}
+            title={`Confirmed and checked-in bookings for ${formatDate(dateFilter)}, excluding pending and cancelled bookings`}
             style={{
               minHeight: 36,
               display: 'inline-flex',

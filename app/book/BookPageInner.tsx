@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   Calendar, Monitor, Clock, CheckCircle, ChevronRight,
-  ChevronLeft, AlertCircle, Snowflake, Gamepad2, Plus, Minus, Award, ArrowLeft,
+  ChevronLeft, AlertCircle, Snowflake, Gamepad2, Minus, Award, ArrowLeft,
 } from 'lucide-react';
 import {
   CLOSING_HOUR, formatTime, formatDate,

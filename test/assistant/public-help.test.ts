@@ -170,9 +170,9 @@ test('saved API key is preserved by model/limit edits, removable, and absent fro
   stub(t, prisma, '$transaction', async (work: any) => work(prisma));
   await saveAssistantConfig({ model: 'first-model', dailyLimit: 10, apiKey: 'sk-test-only-key' });
   assert.doesNotMatch(value!, /sk-test-only/);
-  assert.deepEqual(await getAssistantConfigSummary(), { model: 'first-model', dailyLimit: 10, keyConfigured: true });
+  assert.deepEqual(await getAssistantConfigSummary(), { model: 'first-model', dailyLimit: 10, keyConfigured: true, chatMode: 'EMIGUILD_ONLY' });
   await saveAssistantConfig({ model: 'second-model', dailyLimit: 7 });
-  assert.deepEqual(await getAssistantRuntimeConfig(), { model: 'second-model', dailyLimit: 7, apiKey: 'sk-test-only-key' });
+  assert.deepEqual(await getAssistantRuntimeConfig(), { model: 'second-model', dailyLimit: 7, apiKey: 'sk-test-only-key', chatMode: 'EMIGUILD_ONLY' });
   await saveAssistantConfig({ model: 'second-model', dailyLimit: 7, clearApiKey: true });
   assert.equal((await getAssistantRuntimeConfig()).apiKey, null);
 });

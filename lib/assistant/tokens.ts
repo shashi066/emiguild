@@ -7,9 +7,9 @@ type UnsignedAssistantAction =
   | { action: 'DAILY_SPIN'; userId: string; spinDate: string };
 
 function secret() {
-  const value = process.env.ASSISTANT_ACTION_SECRET;
-  if (!value) throw new Error('ASSISTANT_ACTION_SECRET is not configured.');
-  return value;
+  const authSecret = process.env.AUTH_SECRET;
+  if (!authSecret) throw new Error('AUTH_SECRET is not configured.');
+  return crypto.createHmac('sha256', authSecret).update('emiguild:assistant-action:v1').digest();
 }
 
 function sign(encodedPayload: string) {

@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
         })
       : Promise.resolve(null),
     isAdmin && date
-      ? prisma.booking.count({ where: { date, status: 'CONFIRMED' } })
+      ? prisma.booking.count({ where: { date, status: { in: ['CONFIRMED', 'CHECKED_IN'] } } })
       : Promise.resolve(null),
   ]);
 

@@ -4,13 +4,17 @@ Performance: public knowledge is cached for 30 seconds with an IST-date cache ke
 
 `npm run test:assistant` runs the isolated flow, schema, token, SSE and permission tests.
 
-HTTP tests in `integration.test.ts` require a disposable SQLite database whose URL contains `assistant-test`, and a Next server using that same database. Set `DATABASE_URL`, `ASSISTANT_TEST_URL`, `AUTH_URL`, `AUTH_SECRET`, and `ASSISTANT_ACTION_SECRET` in the test processes. The server and test process must share the action secret. Use a separate port and disable mail configuration. The suite creates test accounts, stations and rewards and replaces only its named fixtures when rerun.
+HTTP tests in `integration.test.ts` require a disposable SQLite database whose URL contains `assistant-test`, and a Next server using that same database. Set `DATABASE_URL`, `ASSISTANT_TEST_URL`, `AUTH_URL`, and `AUTH_SECRET` in the test processes. The server and test process must share `AUTH_SECRET`, which also derives the action signing key. Use a separate port and disable mail configuration. The suite creates test accounts, stations and rewards and replaces only its named fixtures when rerun.
 
 Run `npx tsx --test test/assistant/integration.test.ts` after pushing the local schema into that disposable database. It exercises real authentication, admin ownership, booking creation, Standard/Hour Pass/Guild pricing, cancellation restoration, duplicate confirmations, stale quotes, partial multi-station failure, Daily Spin, release settings, and separate rate limits. No OpenAI key is required.
 
 Deployment must apply both assistant migrations, including the guided-rate counters. `ASSISTANT_GUIDED_PER_MINUTE_LIMIT` defaults to 60 and is independent of AI daily limits. OFF hides Emiily; ON enables it for every visitor, with sign-in still required for AI. The Beta badge describes the product, not a separate access mode. Legacy BETA values normalize to ON; new settings accept only OFF and ON.
 
 ## Public AI help and admin configuration
+
+The Chat mode selector supports EmiGuild only (default), Gaming companion (venue help, general gaming and casual conversation), and General assistant (also coding, study help, writing and everyday questions). Older configurations default to EmiGuild only. Omitted mode updates preserve the saved value; mode changes apply to new requests without resetting the daily counter. All modes retain private-record and action restrictions, approved navigation links, and no live web access. `chat-mode.test.ts` covers compatibility, persistence, prompt boundaries, mode-aware parsing and provider propagation.
+
+Manual mode acceptance: save each mode and reload the settings; verify its badge and selector, cancel an unsaved change, and verify errors leave the modal open with edits intact. With a signed-in test account, try venue questions, gaming tips, casual chat, unrelated coding, mixed requests and mode override attempts. Only General assistant should answer unrelated substantive questions. Check private booking, balance and admin revenue requests stay restricted in every mode. Mocked tests verify wiring, not live-model answer quality.
 
 Configure the API key, model ID and daily per-account limit in **Admin → Settings → Emiily AI**. The default model is `gpt-6-luna` and the default allowance is 10. Limits must be integers from 1 to 1000. The selected model must support Responses structured output. Saving validates the configuration format without making a paid provider request. Runtime model/key failures produce a generic customer error and do not expose the credential.
 

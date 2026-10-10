@@ -9,7 +9,7 @@ import {
   XCircle, AlertCircle, CheckCircle, Plus, Award, Crown, Sword, Gamepad2,
   Package, MapPin, Truck,
 } from 'lucide-react';
-import { formatTime, formatDate, formatCurrency, getTodayString } from '@/lib/utils';
+import { formatTime, formatDate, getTodayString } from '@/lib/utils';
 import {
   guildMembershipName,
   isGuildMembershipType,

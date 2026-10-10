@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { SideQuestsMenu } from './SideQuestsMenu';
+import HomeVaultButton from '@/components/HomeVaultButton';
 import {
   Calendar, BookOpen, User, LogOut,
   LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw,
@@ -121,6 +122,11 @@ export function Navbar() {
           <div className="navbar-actions">
             {session ? (
               <>
+                {pathname === '/' && (
+                  <span className="navbar-vault-bell">
+                    <HomeVaultButton />
+                  </span>
+                )}
                 <Link href="/profile" className="btn btn-ghost btn-sm" id="navbar-profile-btn">
                   <User size={15} />
                   {session.user?.name?.split(' ')[0]}

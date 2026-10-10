@@ -7,7 +7,7 @@ import {
   parseBookingFnbItem,
 } from '@/lib/fnb';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session || session.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Admin access required.' }, { status: 403 });

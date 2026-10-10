@@ -341,7 +341,7 @@ export function EmiAssistant() {
           <div ref={chatEnd} />
         </div>
         {typing && <div className="emi-ai-info">
-          <p><strong>Ask Emiily anything related to EmiGuild.</strong></p>
+          <p><strong>Ask Emiily a question.</strong></p>
           {!session?.user?.id ? <><p>Sign in to use AI chat. You can still use the buttons above.</p><button className="btn btn-primary" disabled={disabled || sessionStatus === 'loading'} onClick={login}>Sign in for AI chat</button></> : <>
             <p role="status">{allowance ? `${allowance.remaining} of ${allowance.limit} AI requests remaining today.` : 'Checking your AI allowance…'}</p>
             {allowance?.remaining === 0 && <p>Resets at midnight IST ({new Date(allowance.resetsAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })}). The buttons still work.</p>}
@@ -350,7 +350,7 @@ export function EmiAssistant() {
           </>}
         </div>}
       </div>
-      <button className="emi-type-toggle" disabled={mutating} onClick={() => { setTyping((v) => !v); requestAnimationFrame(() => chatInput.current?.focus()); }}>{typing ? 'Hide AI typing' : 'Ask an EmiGuild question'}</button>
+      <button className="emi-type-toggle" disabled={mutating} onClick={() => { setTyping((v) => !v); requestAnimationFrame(() => chatInput.current?.focus()); }}>{typing ? 'Hide AI typing' : 'Ask Emiily a question'}</button>
       {typing && session?.user?.id && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="How do I change my password?" disabled={disabled || allowance?.remaining === 0} />{chatBusy ? <button type="button" aria-label="Stop response" onClick={() => { usageSnapshot.current = null; abort.current?.abort(); abort.current = null; sequence.current++; setBusy(false); setChatBusy(false); setNotice('Request stopped. Requests already sent still count.'); setUsageRevision((value) => value + 1); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || disabled || allowance?.remaining === 0}><Send size={17} /></button>}</form>}
       <div className="emi-direct-links"><Link href="/book">Book</Link><Link href="/#live-station-availability">Availability</Link><Link href="/my-bookings">My bookings</Link><Link href="/games">Games</Link><Link href="/daily-spin">Daily Spin</Link></div>
     </div>}
