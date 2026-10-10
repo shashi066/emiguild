@@ -4,7 +4,7 @@ import '../tournament.css';
 import { useEffect, useState } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Trophy, LayoutGrid, Users, GitBranch, Swords } from 'lucide-react';
+import { Trophy, LayoutGrid, Users, GitBranch } from 'lucide-react';
 
 interface Tournament {
   id: string;

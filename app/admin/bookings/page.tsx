@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import {
   formatCurrency, formatDate, formatTime,
-  getTimeSlotsForDate, getDurationOptions, CLOSING_HOUR, getTodayString, isSlotAvailable,
+  getTimeSlotsForDate, getDurationOptions, CLOSING_HOUR, isSlotAvailable,
 } from '@/lib/utils';
 import { decryptPhone } from '@/lib/crypto';
 import {

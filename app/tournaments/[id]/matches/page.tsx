@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { Swords, Check, Shield } from 'lucide-react';
 
 interface Player { id: string; name: string; }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Gamepad2, Plus, Trash2, Edit2, X, GripVertical } from 'lucide-react';
+import { Gamepad2, Plus, Trash2, Edit2, X } from 'lucide-react';
 
 type Game = {
   id: string;

@@ -662,7 +662,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       await grantTowerToken(secondCheckIn.id, { id: lossUser.id });
       const attempt = await startTowerAttempt(lossUser.id, baseNow);
       await prisma.towerAttempt.update({ where: { id: attempt.attemptId }, data: { redCards: JSON.stringify(Array(10).fill('A')) } });
-      const safe = await pickTowerCard(lossUser.id, attempt.attemptId, attempt.cards[1].id, baseNow);
+      await pickTowerCard(lossUser.id, attempt.attemptId, attempt.cards[1].id, baseNow);
       const continued = await continueTowerAttempt(lossUser.id, attempt.attemptId, 1, baseNow);
       const continuedRetry = await continueTowerAttempt(lossUser.id, attempt.attemptId, 1, baseNow);
       assert.equal(continued.canClaim, false);
@@ -772,7 +772,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       const attempt = await startTowerAttempt(expiryUser.id, beforeBoundary);
       assert.equal(attempt.runExpiresAt, granted.token.expiresAt.toISOString());
       await prisma.towerAttempt.update({ where: { id: attempt.attemptId }, data: { redCards: JSON.stringify(Array(10).fill('A')) } });
-      const safe = await pickTowerCard(expiryUser.id, attempt.attemptId, attempt.cards[1].id, beforeBoundary);
+      await pickTowerCard(expiryUser.id, attempt.attemptId, attempt.cards[1].id, beforeBoundary);
       const boundary = new Date(granted.token.expiresAt);
 
       await assert.rejects(

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Snowflake, Plus, Trash2, AlertCircle, RefreshCw,
+  Snowflake, Trash2, AlertCircle, RefreshCw,
   Calendar, Clock, Monitor, X, CheckCircle,
 } from 'lucide-react';
 import { formatDate, formatTime, getTodayString } from '@/lib/utils';

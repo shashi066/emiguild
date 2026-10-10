@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { RefreshCw, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 
 interface Match {
   id: string;
