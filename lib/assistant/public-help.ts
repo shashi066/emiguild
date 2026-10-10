@@ -70,15 +70,6 @@ Never request passwords, OTPs or personal records, or echo secrets from the conv
 Return JSON with scope, answer and linkIds. answer must be plain text without HTML, Markdown, URLs or path strings. Put navigation only in linkIds, using up to 3 relevant approved IDs. For general answers use no links unless an EmiGuild customer page is directly relevant.`;
 }
 
-export function privateVenueRevenueAnswer(message: string): AssistantAnswer | null {
-  const revenue = /\b(?:revenue|earnings|turnover|profit|income)\b/i.test(message);
-  const venue = /\b(?:emiguild|gamezone|your|yours|our|venue|counter)\b/i.test(message);
-  if (!revenue || !venue) return null;
-  // Definitions and general business advice do not request venue records.
-  if (/\b(?:what (?:is|does) (?:the )?(?:revenue|profit|income) (?:mean|definition)|define|calculate|improve|increase|difference between)\b/i.test(message)) return null;
-  return { content: 'I don’t have revenue of my own, and I can’t access or share EmiGuild’s private revenue records in this chat. Authorized admins can check revenue in the Admin Dashboard or Analytics.', links: [] };
-}
-
 export const publicAnswerSchema = z.object({
   scope: z.enum(['public', 'general', 'personal', 'unsupported', 'unknown']),
   answer: z.string().trim().min(1).max(2000),

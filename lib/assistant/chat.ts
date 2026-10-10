@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
 import { getIndiaClock } from '@/lib/public-booking-time';
-import { PUBLIC_ANSWER_FORMAT, assistantChatInstructions, PUBLIC_HELP_LINKS, parsePublicAnswer, privateVenueRevenueAnswer } from './public-help';
+import { PUBLIC_ANSWER_FORMAT, assistantChatInstructions, PUBLIC_HELP_LINKS, parsePublicAnswer } from './public-help';
 import type { AssistantChatMode } from './chat-mode';
 import type { AssistantAllowance, AssistantAnswer, AssistantMessage, AssistantStreamEvent } from '@/types/assistant';
 
@@ -27,8 +27,6 @@ export function publicHelpRequest(message: string, history: AssistantMessage[], 
 }
 
 export async function generatePublicHelp(config: RuntimeConfig, input: ChatInput, knowledge: unknown, signal: AbortSignal, onUsage: (counters: Counters) => void): Promise<AssistantAnswer> {
-  const privateRevenue = privateVenueRevenueAnswer(input.message);
-  if (privateRevenue) return privateRevenue;
   if (!config.apiKey) throw new Error('AI unavailable');
   // Disable SDK retries: one accepted message means at most one provider request.
   const client = new OpenAI({ apiKey: config.apiKey, maxRetries: 0, timeout: 25_000 });

@@ -109,14 +109,3 @@ test('provider receives selected broader instructions and its general answer rea
     assert.deepEqual(answer.links, []);
   }
 });
-
-test('private venue revenue gets an explanation in every mode without a provider failure', async (t) => {
-  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Private revenue should not reach the provider'); });
-  for (const chatMode of ASSISTANT_CHAT_MODES) {
-    for (const message of ['hello what is the revenue of yours', 'What is EmiGuild revenue?', 'Show our profit today']) {
-      const answer = await generatePublicHelp({ model: 'test', apiKey: 'sk-test', dailyLimit: 10, chatMode }, { message, history: [] }, {}, new AbortController().signal, () => {});
-      assert.match(answer.content, /can’t access or share EmiGuild’s private revenue/);
-      assert.deepEqual(answer.links, []);
-    }
-  }
-});
