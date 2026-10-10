@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import { AdminModalShell } from './AdminModalShell';
 import { Bot, Edit2, KeyRound, Save, X } from 'lucide-react';
+import { ASSISTANT_CHAT_MODES, ASSISTANT_CHAT_MODE_LABELS, type AssistantChatMode } from '@/lib/assistant/chat-mode';
 
-type Config = { model: string; dailyLimit: number; keyConfigured: boolean };
+type Config = { model: string; dailyLimit: number; keyConfigured: boolean; chatMode: AssistantChatMode };
 
 export function AssistantAISettings({ hidden = false }: { hidden?: boolean }) {
-  const [config, setConfig] = useState<Config>({ model: 'gpt-6-luna', dailyLimit: 10, keyConfigured: false });
+  const [config, setConfig] = useState<Config>({ model: 'gpt-6-luna', dailyLimit: 10, keyConfigured: false, chatMode: 'EMIGUILD_ONLY' });
   const [draft, setDraft] = useState(config);
   const [apiKey, setApiKey] = useState('');
   const [clearApiKey, setClearApiKey] = useState(false);
@@ -36,7 +37,7 @@ export function AssistantAISettings({ hidden = false }: { hidden?: boolean }) {
     try {
       const response = await fetch('/api/admin/assistant-config', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: draft.model, dailyLimit: draft.dailyLimit, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}), clearApiKey }),
+        body: JSON.stringify({ model: draft.model, dailyLimit: draft.dailyLimit, chatMode: draft.chatMode, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}), clearApiKey }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Could not save AI settings.');
@@ -53,9 +54,10 @@ export function AssistantAISettings({ hidden = false }: { hidden?: boolean }) {
       <span className="admin-setting-icon"><Bot size={20} /></span>
       <div className="admin-setting-copy">
         <strong>Emiily AI Configuration</strong>
-        <span>API credentials, model, and signed-in daily allowance.</span>
+        <span>API credentials, model, chat mode, and signed-in daily allowance.</span>
         <div className="admin-setting-pills">
           <span>{loading ? 'Loading…' : config.model}</span><span>{config.dailyLimit}/day</span>
+          <span>{ASSISTANT_CHAT_MODE_LABELS[config.chatMode]}</span>
           <span className={config.keyConfigured ? 'is-success' : 'is-warning'}>{config.keyConfigured ? 'Key saved' : 'Key required'}</span>
         </div>
         {notice && <span className="admin-setting-notice" role="status">{notice}</span>}
@@ -67,10 +69,17 @@ export function AssistantAISettings({ hidden = false }: { hidden?: boolean }) {
     {editing && <AdminModalShell labelledBy="assistant-ai-title" onClose={() => { if (!saving) setEditing(false); }} lightweight>
       <form onSubmit={save}>
         <div className="admin-settings-modal-head">
-          <div><span className="admin-setting-icon"><KeyRound size={19} /></span><div><h2 id="assistant-ai-title">Emiily AI Configuration</h2><p>Public EmiGuild help only; guided buttons use a separate allowance.</p></div></div>
+          <div><span className="admin-setting-icon"><KeyRound size={19} /></span><div><h2 id="assistant-ai-title">Emiily AI Configuration</h2><p>Choose chat topics; guided buttons use a separate allowance.</p></div></div>
           <button className="btn btn-ghost btn-sm" type="button" aria-label="Close" disabled={saving} onClick={() => setEditing(false)}><X size={18} /></button>
         </div>
         <div className="admin-settings-form-grid">
+          <div className="form-group admin-settings-form-wide">
+            <label className="form-label" htmlFor="assistant-ai-chat-mode">Chat mode</label>
+            <select id="assistant-ai-chat-mode" className="form-input" value={draft.chatMode} disabled={saving} onChange={(e) => setDraft((current) => ({ ...current, chatMode: e.target.value as AssistantChatMode }))} aria-describedby="assistant-ai-chat-mode-help">
+              {ASSISTANT_CHAT_MODES.map((mode) => <option key={mode} value={mode}>{ASSISTANT_CHAT_MODE_LABELS[mode]}</option>)}
+            </select>
+            <small id="assistant-ai-chat-mode-help">{draft.chatMode === 'EMIGUILD_ONLY' ? 'EmiGuild information and customer website help only.' : draft.chatMode === 'GAMING_COMPANION' ? 'EmiGuild help, general gaming questions, and casual conversation.' : 'EmiGuild help plus coding, study help, writing, and everyday questions.'} Modes do not grant access to private records or live web information. Changes apply to new requests.</small>
+          </div>
           <div className="form-group admin-settings-form-wide">
             <label className="form-label" htmlFor="assistant-ai-key">OpenAI API key</label>
             <input id="assistant-ai-key" className="form-input" type="password" autoComplete="new-password" spellCheck={false} maxLength={512} value={apiKey} disabled={saving || clearApiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={config.keyConfigured ? 'Key saved — leave blank to keep it' : 'sk-…'} />

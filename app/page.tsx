@@ -239,8 +239,10 @@ export default async function HomePage() {
                 Premium Gaming Experience
               </div>
 
-              <HomeVaultButton />
 
+              <div className={vaultButtonStyles.mobileBell}>
+                <HomeVaultButton />
+              </div>
               {specialOpeningNotice && (
                 <div className={`hero-opening-pill ${specialOpeningNotice.state}`}>
                   <Clock size={14} />

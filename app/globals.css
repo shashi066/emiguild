@@ -3545,7 +3545,14 @@ input.form-input[type="time"]:focus {
    RESPONSIVE
    ============================================================ */
 @media (min-width: 1280px) {
+  .navbar-inner { gap: 12px; }
+  .navbar-logo { flex-shrink: 0; }
   .navbar-nav-desktop { display: flex; }
+  .navbar-nav-desktop .navbar-link { padding: 8px 9px; white-space: nowrap; }
+  .navbar-nav-desktop .navbar-link svg { flex-shrink: 0; }
+  .navbar-actions { gap: 8px; }
+  .navbar-actions .btn { white-space: nowrap; }
+  .navbar-vault-bell { display: inline-flex; flex-shrink: 0; margin-inline: 8px; }
   .navbar-nav-tablet { display: none; }
   .hero { padding-block: var(--space-xl); }
 }
