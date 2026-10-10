@@ -56,7 +56,15 @@ export async function saveAssistantConfig(input: z.infer<typeof assistantConfigU
   const encrypted = input.apiKey ? encryptAssistantKey(input.apiKey) : undefined;
   await runSerializableTransaction(async (tx) => {
     const row = await tx.setting.findUnique({ where: { key: ASSISTANT_CONFIG_KEY }, select: { value: true } });
-    const previousConfig = decodeConfig(row?.value);
+    let previousConfig;
+    try {
+      previousConfig = decodeConfig(row?.value);
+    } catch (error) {
+      // Never silently discard a saved key on ordinary edits. An explicit
+      // replacement or removal can repair an unreadable configuration.
+      if (encrypted === undefined && !input.clearApiKey) throw error;
+      previousConfig = decodeConfig();
+    }
     const previous = encrypted === undefined && !input.clearApiKey ? previousConfig.encryptedApiKey : null;
     const value = JSON.stringify({ model: input.model, dailyLimit: input.dailyLimit, chatMode: input.chatMode ?? previousConfig.chatMode, encryptedApiKey: encrypted ?? previous });
     await tx.setting.upsert({ where: { key: ASSISTANT_CONFIG_KEY }, create: { key: ASSISTANT_CONFIG_KEY, value, label: 'Encrypted assistant AI configuration' }, update: { value } });

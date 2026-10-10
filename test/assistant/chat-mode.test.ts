@@ -53,6 +53,46 @@ test('server mode selects topic instructions while keeping venue, privacy and in
   assert.match(general, /no web browsing or live external information/);
 });
 
+test('broader modes accept code and slash commands as literal text while keeping navigation validated', () => {
+  for (const mode of ['GAMING_COMPANION', 'GENERAL_ASSISTANT'] as const) {
+    for (const answer of ['Use <button>Save</button> in React.', 'Run /help to see commands.', 'Edit /src/game.ts.', '<script>alert(1)</script>']) {
+      assert.equal(parsePublicAnswer(JSON.stringify({ scope: 'general', answer, linkIds: [] }), mode).content, answer);
+    }
+    for (const answer of ['Visit https://evil.test', 'Visit www.evil.test', '[Click](/admin)']) {
+      assert.throws(() => parsePublicAnswer(JSON.stringify({ scope: 'general', answer, linkIds: [] }), mode));
+    }
+    assert.throws(() => parsePublicAnswer(JSON.stringify({ scope: 'general', answer: 'Open admin', linkIds: ['admin'] }), mode));
+  }
+  assert.throws(() => parsePublicAnswer(JSON.stringify({ scope: 'public', answer: '<button>Save</button>', linkIds: [] })));
+});
+
+test('explicit key replacement or removal repairs corrupt settings; ordinary edits preserve failures', async (t) => {
+  const prior = process.env.AUTH_SECRET;
+  process.env.AUTH_SECRET = 'test-config-repair-secret';
+  t.after(() => { if (prior === undefined) delete process.env.AUTH_SECRET; else process.env.AUTH_SECRET = prior; });
+  let value = '';
+  let writes = 0;
+  stub(t, prisma.setting, 'findUnique', async () => ({ value }));
+  stub(t, prisma.setting, 'upsert', async (args: any) => { writes++; value = args.update.value; return { value }; });
+  stub(t, prisma, '$transaction', async (work: any) => work(prisma));
+  for (const corrupt of ['not valid JSON', JSON.stringify({ model: 'old', dailyLimit: -1, encryptedApiKey: 'old-key' })]) {
+    value = corrupt;
+    const before = writes;
+    await assert.rejects(saveAssistantConfig({ model: 'test', dailyLimit: 10 }));
+    assert.equal(writes, before);
+    assert.equal(value, corrupt);
+    await saveAssistantConfig({ model: 'test', dailyLimit: 10, apiKey: 'sk-repair-test-key', chatMode: 'GENERAL_ASSISTANT' });
+    const repaired = await getAssistantRuntimeConfig();
+    assert.equal(repaired.apiKey, 'sk-repair-test-key');
+    assert.equal(repaired.chatMode, 'GENERAL_ASSISTANT');
+    value = corrupt;
+    await saveAssistantConfig({ model: 'test', dailyLimit: 10, clearApiKey: true });
+    const cleared = await getAssistantRuntimeConfig();
+    assert.equal(cleared.apiKey, null);
+    assert.equal(cleared.chatMode, 'EMIGUILD_ONLY');
+  }
+});
+
 test('broader answers survive parsing; private records and invalid links remain blocked in every mode', () => {
   const output = (scope: string, answer: string, linkIds: string[] = []) => JSON.stringify({ scope, answer, linkIds });
   assert.match(parsePublicAnswer(output('general', 'A tip')).content, /related to EmiGuild/);
