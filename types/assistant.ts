@@ -51,11 +51,13 @@ export type AssistantCard = {
   href?: string;
 };
 
+export type AssistantErrorCategory = 'provider_failure' | 'timeout' | 'incomplete_output' | 'invalid_response';
+
 export type AssistantStreamEvent =
   | { type: 'answer'; answer: AssistantAnswer }
   | { type: 'usage'; usage: AssistantAllowance }
   | { type: 'status'; message: string }
-  | { type: 'error'; message: string; code?: string }
+  | { type: 'error'; message: string; code?: AssistantErrorCategory }
   | { type: 'done'; usage?: { inputTokens: number; outputTokens: number } };
 
 export type SignedAssistantAction =

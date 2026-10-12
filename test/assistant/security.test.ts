@@ -24,7 +24,7 @@ test('AI receives only approved knowledge and bounded chat, with no tools or pri
   const request = publicHelpRequest('Where is EmiGuild?', [{ role: 'user', content: 'Hi' }], { venue: 'EmiGuild' }, 'test-model');
   assert.equal('tools' in request, false);
   assert.equal(request.store, false);
-  assert.equal(request.max_output_tokens, 600);
+  assert.equal(request.max_output_tokens, 2000);
   assert.deepEqual(JSON.parse(request.input[0].content), { history: [{ role: 'user', content: 'Hi' }], request: 'Where is EmiGuild?' });
   assert.ok(request.instructions.includes('EmiGuild'));
 });

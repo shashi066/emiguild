@@ -11,6 +11,8 @@ import type { AssistantAllowance, AssistantCard, AssistantLink, AssistantMessage
 import { PUBLIC_HELP_LINKS } from '@/lib/assistant/public-help';
 import { changeSelection, dateLabel, timeLabel, priceLabel, guidedStateSchema, HOME_OPTIONS } from '@/lib/assistant/flow-state';
 import { AssistantEventParser } from '@/lib/assistant/stream';
+import { clearChatMemory, readChatMemory, writeChatMemory } from '@/lib/assistant/chat-memory';
+import { CHAT_DISPLAY_LIMIT, CHAT_HISTORY_LIMIT } from '@/lib/assistant/chat-limits';
 
 const HOME: GuidedView = { state: { task: 'HOME' }, title: 'What would you like to do?', options: HOME_OPTIONS };
 const PENDING = 'emi-assistant-pending';
@@ -181,14 +183,22 @@ export function EmiAssistant() {
   }, []);
 
   const account = useRef<string | null | undefined>(undefined);
+  const memoryAccountChanged = useRef(false);
   useEffect(() => {
     if (sessionStatus === 'loading') return;
     const id = session?.user?.id ?? null;
+    if (account.current !== id) memoryAccountChanged.current = true;
     if (account.current !== undefined && account.current !== id) {
+      clearChatMemory();
       abort.current?.abort(); abort.current = null; sequence.current++; history.current = []; transcript.current = []; setView(HOME); setError(''); setBusy(false);
       setMessages([]); setAllowance(null); setUsageError(''); setChatBusy(false); setRetry(null); setRetryText(''); setInput(''); setNotice('');
       actionLock.current = false; setMutating(false);
     }
+    if (account.current === undefined && id) {
+      const saved = readChatMemory(id);
+      if (saved) { transcript.current = saved.transcript; setMessages(saved.messages); }
+    }
+    if (!id) clearChatMemory();
     account.current = id;
     if (!id) return;
     const params = new URLSearchParams(window.location.search);
@@ -204,8 +214,17 @@ export function EmiAssistant() {
     } catch { setError('Your saved selections expired. Please start again.'); }
   }, [session?.user?.id, sessionStatus, navigate]);
 
+  useEffect(() => {
+    // Account hydration schedules new messages; do not save the previous render.
+    if (memoryAccountChanged.current) { memoryAccountChanged.current = false; return; }
+    if (sessionStatus === 'authenticated' && session?.user?.id && account.current === session.user.id && messages.length) {
+      writeChatMemory(session.user.id, messages, transcript.current);
+    }
+  }, [messages, sessionStatus, session?.user?.id]);
+
   const startOver = () => {
     if (actionLock.current) return;
+    clearChatMemory();
     abort.current?.abort(); abort.current = null; sequence.current++; history.current = []; transcript.current = [];
     setMessages([]); setChatBusy(false); setUsageRevision((value) => value + 1);
     setView(HOME); setError(''); setNotice(''); setBusy(false); setRetry(null); setRetryText(''); setInput('');
@@ -261,12 +280,12 @@ export function EmiAssistant() {
     const id = ++sequence.current;
     const controller = new AbortController(); abort.current = controller;
     setBusy(true); setChatBusy(true); setError(''); setRetry(null); setRetryText(''); setNotice(''); setInput('');
-    setMessages((current) => [...current, { role: 'user' as const, content: text }].slice(-24));
+    setMessages((current) => [...current, { role: 'user' as const, content: text }].slice(-CHAT_DISPLAY_LIMIT));
     let answered = false;
     let receivedUsage = false;
     try {
       const response = await fetch('/api/assistant/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ message: text, history: transcript.current.slice(-12).map(({ role, content }) => ({ role, content })) }) });
+        body: JSON.stringify({ message: text, history: transcript.current.slice(-CHAT_HISTORY_LIMIT).map(({ role, content }) => ({ role, content })) }) });
       if (sequence.current !== id) return;
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => ({}));
@@ -290,8 +309,8 @@ export function EmiAssistant() {
           if (event.type === 'answer') {
             const links = event.answer.links.filter((link) => Object.values(PUBLIC_HELP_LINKS).some((allowed) => allowed.href === link.href && allowed.label === link.label));
             const message: AssistantMessage = { role: 'assistant', content: event.answer.content, links };
-            setMessages((current) => [...current, message].slice(-24));
-            transcript.current = [...transcript.current, { role: 'user' as const, content: text }, message].slice(-12);
+            transcript.current = [...transcript.current, { role: 'user' as const, content: text }, message].slice(-CHAT_HISTORY_LIMIT);
+            setMessages((current) => [...current, message].slice(-CHAT_DISPLAY_LIMIT));
             answered = true;
           }
           if (event.type === 'error') throw new Error(event.message);
@@ -302,7 +321,7 @@ export function EmiAssistant() {
     } catch (failure) {
       if (!controller.signal.aborted && sequence.current === id) {
         const content = failure instanceof Error ? failure.message : 'AI chat is unavailable right now. You can still use the buttons.';
-        setMessages((current) => [...current, { role: 'assistant' as const, content }].slice(-24));
+        setMessages((current) => [...current, { role: 'assistant' as const, content }].slice(-CHAT_DISPLAY_LIMIT));
         setRetryText(text);
       }
     } finally {
@@ -345,7 +364,7 @@ export function EmiAssistant() {
           {!session?.user?.id ? <><p>Sign in to use AI chat. You can still use the buttons above.</p><button className="btn btn-primary" disabled={disabled || sessionStatus === 'loading'} onClick={login}>Sign in for AI chat</button></> : <>
             <p role="status">{allowance ? `${allowance.remaining} of ${allowance.limit} AI requests remaining today.` : 'Checking your AI allowance…'}</p>
             {allowance?.remaining === 0 && <p>Resets at midnight IST ({new Date(allowance.resetsAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })}). The buttons still work.</p>}
-            <details className="emi-ai-details"><summary>More info</summary><p>Don’t share passwords or private account details. Each sent request counts, including unsupported questions, failed answers and retries. Guided buttons don’t use this allowance. The allowance resets at midnight IST.</p></details>
+            <details className="emi-ai-details"><summary>More info</summary><p>Don’t share passwords or private account details. Each sent request counts, including unsupported questions, failed answers and retries. Guided buttons don’t use this allowance. The allowance resets at midnight IST.</p><p>Chat is restored after reloads in this tab when tab storage is available. AI context includes the latest 12 successful messages. Sign-out, account changes and Start over clear the chat.</p></details>
             {usageError && <p role="alert">{usageError} <button type="button" onClick={() => { usageSnapshot.current = null; setUsageRevision((value) => value + 1); }}>Refresh allowance</button></p>}
           </>}
         </div>}

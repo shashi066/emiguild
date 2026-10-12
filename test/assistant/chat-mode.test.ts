@@ -48,7 +48,7 @@ test('server mode selects topic instructions while keeping venue, privacy and in
     assert.match(request.instructions, /cannot read or change anyone's account/);
     assert.match(request.instructions, /Never invent/);
     assert.equal('tools' in request, false);
-    assert.equal(request.max_output_tokens, 600);
+    assert.equal(request.max_output_tokens, 2000);
   }
   assert.match(general, /no web browsing or live external information/);
 });
