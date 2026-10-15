@@ -96,7 +96,7 @@ test('assistant HTTP flows against a disposable database', { skip: !base }, asyn
   });
   await t.test('customer and admin pages render with the assistant and AI settings controls', async () => {
     const home = await fetch(`${base}/`);
-    assert.equal(home.status, 200); assert.match(await home.text(), /Ask Emiily/);
+    assert.equal(home.status, 200); assert.match(await home.text(), /Chat &amp; help/);
     const adminPage = await fetch(`${base}/admin/settings`, { headers: { Cookie: adminCookie } });
     assert.equal(adminPage.status, 200);
     // The settings page fetches its data in the browser; its client component must compile.

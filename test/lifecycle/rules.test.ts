@@ -23,7 +23,7 @@ test('comeback wins when both campaigns are eligible and copy promises only oppo
   const result = evaluate();
   assert.equal(result.selected, 'COMEBACK');
   assert.equal(result.digest.candidate?.sourceRefs.length, 3);
-  assert.equal(result.comeback.candidate?.subject, 'Your next EmiGuild move is ready');
+  assert.equal(result.comeback.candidate?.subject, 'Ready for another round?');
   assert.match(result.comeback.candidate!.text, /Discover an artifact/);
   assert.match(result.comeback.candidate!.text, /end of day/);
   assert.doesNotMatch(result.comeback.candidate!.text, /\d{1,2}:\d{2}|IST/);
@@ -33,8 +33,8 @@ test('comeback wins when both campaigns are eligible and copy promises only oppo
 test('email deadlines use dates and describe midnight cutoffs as the preceding end of day', () => {
   assert.equal(formatEndOfDay('2026-10-01T18:30:00.000Z'), '1 Oct 2026 (end of day)');
   const result = evaluate();
-  assert.equal(result.digest.candidate?.subject, 'Your Vault has something for you');
-  assert.match(result.digest.candidate!.text, /^Don’t leave these behind\./);
+  assert.equal(result.digest.candidate?.subject, 'Take a look inside your EmiGuild Vault');
+  assert.match(result.digest.candidate!.text, /^What’s ready for your next visit/);
   assert.doesNotMatch(result.digest.candidate!.text, /\d{1,2}:\d{2}|IST/);
 });
 test('any single activity suppresses comeback but still permits a digest', () => {
@@ -43,6 +43,40 @@ test('any single activity suppresses comeback but still permits a digest', () =>
     assert.ok(result.comeback.suppressionReasons.includes('ACTIVITY_FOUND'));
     assert.equal(result.selected, 'DIGEST');
   }
+});
+
+test('shared deadlines appear once and different deadlines stay with their cards', () => {
+  const candidate = evaluate().comeback.candidate!;
+  assert.equal(candidate.presentation!.deadlineNotes.length, 1);
+  assert.match(candidate.presentation!.deadlineNotes[0], /Daily Spin \+ Daily Forge/);
+  assert.equal(candidate.presentation!.cards.filter((card) => card.deadline).length, 1);
+  const state = evaluate().state;
+  const at = state.games[0].deadline!.at;
+  const shared = evaluate({ state: { ...state, games: state.games.map((game) => ({ ...game, deadline: { at, label: 'Reset' } })) } }).comeback.candidate!;
+  assert.equal(shared.presentation!.cards.some((card) => card.deadline), false);
+  assert.match(shared.presentation!.deadlineNotes[0], /^Today’s opportunities/);
+  assert.equal(shared.text.match(/Available until|available until/g)?.length, 1);
+});
+
+test('digest limits cards to four while preserving expiry priority and real descriptions', () => {
+  const state = evaluate().state;
+  const items = [...state.items, { ...item('spin', 8), id: 'spin' }, { ...item('progress', 12), id: 'progress' }, { ...item('reward', 0), id: 'expired' }];
+  const candidate = evaluate({ state: { ...state, items } }).digest.candidate!;
+  assert.deepEqual(candidate.presentation!.cards.map((card) => card.title), orderVaultItems(items, now).slice(0, 4).map((row) => row.title));
+  assert.equal(candidate.presentation!.moreNote, 'Explore more in your Vault.');
+  assert.equal(candidate.sourceRefs.length, 5);
+  assert.equal(candidate.presentation!.cards[0].description, items.find((row) => row.kind === 'token')!.description);
+  assert.equal(evaluate().digest.candidate!.presentation!.moreNote, undefined);
+});
+
+test('unavailable, used and expired games never appear in comeback content', () => {
+  const state = evaluate().state;
+  for (const status of ['disabled', 'completed', 'error'] as const) {
+    const candidate = evaluate({ state: { ...state, games: state.games.map((game) => game.id === 'spin' ? { ...game, status } : game) } }).comeback.candidate!;
+    assert.equal(candidate.text.includes('Daily Spin'), false);
+  }
+  const candidate = evaluate({ state: { ...state, games: state.games.map((game) => game.id === 'spin' ? { ...game, deadline: { at: now.toISOString(), label: 'Reset' } } : game) } }).comeback.candidate!;
+  assert.equal(candidate.text.includes('Daily Spin'), false);
 });
 test('comeback needs a mature account, enabled games and reliable history', () => {
   assert.ok(evaluate({ createdAt: new Date(now.getTime() - 3 * DAY + 1).toISOString() }).comeback.suppressionReasons.includes('ACCOUNT_TOO_NEW'));
