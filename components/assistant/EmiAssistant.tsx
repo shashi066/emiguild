@@ -6,6 +6,7 @@ import emiilyPortrait from '@/public/images/emiily-avatar.png';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { MessageCircle, X, ArrowLeft, RotateCcw, Send } from 'lucide-react';
 import type { AssistantAllowance, AssistantCard, AssistantLink, AssistantMessage, BookingQuote, GuidedState, GuidedView } from '@/types/assistant';
 import { PUBLIC_HELP_LINKS } from '@/lib/assistant/public-help';
@@ -103,7 +104,9 @@ export function EmiAssistant() {
   const panel = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
+  const chatToggle = useRef<HTMLButtonElement>(null);
   const chatInput = useRef<HTMLInputElement>(null);
+  const chatInfo = useRef<HTMLDivElement>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
   const hidden = ['/login', '/register', '/forgot-password'].includes(pathname);
 
@@ -125,6 +128,44 @@ export function EmiAssistant() {
     return () => document.removeEventListener('keydown', keydown);
   }, [open, hidden, close]);
   useEffect(() => { if (open) heading.current?.focus(); }, [view, open]);
+  useEffect(() => {
+    if (!open || hidden || !panel.current || !window.visualViewport) return;
+    const sheet = panel.current;
+    const viewport = window.visualViewport;
+    const mobile = window.matchMedia('(max-width: 600px), (max-width: 1000px) and (pointer: coarse)');
+    let frame = 0;
+    const reset = () => {
+      sheet.style.removeProperty('--emi-visible-height');
+      sheet.style.removeProperty('--emi-keyboard-offset');
+      sheet.removeAttribute('data-compact');
+    };
+    const update = () => {
+      frame = 0;
+      const focused = document.activeElement;
+      const editing = focused instanceof HTMLElement && sheet.contains(focused) && focused.matches('input,select,textarea');
+      // Keep manual pinch zoom independent of the keyboard accommodation.
+      if (!mobile.matches || !editing || Math.abs(viewport.scale - 1) > 0.01) { reset(); return; }
+      sheet.style.setProperty('--emi-visible-height', `${viewport.height}px`);
+      sheet.style.setProperty('--emi-keyboard-offset', `${Math.max(0, document.documentElement.clientHeight - viewport.height - viewport.offsetTop)}px`);
+      sheet.toggleAttribute('data-compact', viewport.height < 400);
+    };
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(update); };
+    update();
+    viewport.addEventListener('resize', schedule);
+    viewport.addEventListener('scroll', schedule);
+    window.addEventListener('resize', schedule);
+    document.addEventListener('focusin', schedule);
+    document.addEventListener('focusout', schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener('resize', schedule);
+      viewport.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      document.removeEventListener('focusin', schedule);
+      document.removeEventListener('focusout', schedule);
+      reset();
+    };
+  }, [open, hidden]);
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => { if (open && messages.length) chatEnd.current?.scrollIntoView({ block: 'nearest' }); }, [messages, open]);
   useEffect(() => {
@@ -331,12 +372,20 @@ export function EmiAssistant() {
       }
     }
   };
+  const toggleChat = () => {
+    const next = !typing;
+    // Mount and focus during the tap so mobile browsers can open the keyboard.
+    flushSync(() => setTyping(next));
+    if (!next) chatToggle.current?.focus({ preventScroll: true });
+    else if (chatInput.current && !chatInput.current.disabled) chatInput.current.focus({ preventScroll: true });
+    else chatInfo.current?.focus();
+  };
   if (hidden) return null;
   const disabled = busy || mutating;
   return <div className={`emi-assistant ${open ? 'is-open' : ''}`}>
     {open && <button className="emi-backdrop" tabIndex={-1} aria-label="Close Emiily assistant" onClick={close} />}
     {open && <div ref={panel} className="emi-panel" role="dialog" aria-modal="true" aria-label="Emiily, the EmiGuild assistant">
-      <header className="emi-header"><div className="emi-avatar"><Image src={emiilyPortrait} alt="Emiily" width={36} height={36} sizes="36px" loading="lazy" /></div><div><div className="emi-name-row"><strong>Emiily</strong><span className="emi-beta-badge">Beta</span></div><span>Choose an option. Typing is optional.</span></div><button className="emi-icon-button" aria-label="Close Emiily assistant" onClick={close}><X size={19} /></button></header>
+      <header className="emi-header"><div className="emi-avatar"><Image src={emiilyPortrait} alt="Emiily" width={36} height={36} sizes="36px" loading="lazy" /></div><div><div className="emi-name-row"><strong>Emiily</strong><span className="emi-beta-badge">Beta</span></div><span>Choose a quick action or chat with Emiily.</span></div><button className="emi-icon-button" aria-label="Close Emiily assistant" onClick={close}><X size={19} /></button></header>
       <nav className="emi-flow-nav" aria-label="Assistant navigation">
         <button disabled={disabled || !history.current.length} onClick={() => { const previous = history.current.pop(); if (previous) void navigate(previous, false); }}><ArrowLeft size={14} />Back</button>
         <button disabled={mutating} onClick={startOver}><RotateCcw size={14} />Start over</button>
@@ -359,7 +408,7 @@ export function EmiAssistant() {
           {chatBusy && <div className="emi-message assistant" role="status" aria-label="Emiily is typing"><span className="emi-sr-only">Emiily is typing…</span><div className="emi-typing" aria-hidden="true"><span /><span /><span /></div></div>}
           <div ref={chatEnd} />
         </div>
-        {typing && <div className="emi-ai-info">
+        {typing && <div ref={chatInfo} className="emi-ai-info" tabIndex={-1}>
           <p><strong>Ask Emiily a question.</strong></p>
           {!session?.user?.id ? <><p>Sign in to use AI chat. You can still use the buttons above.</p><button className="btn btn-primary" disabled={disabled || sessionStatus === 'loading'} onClick={login}>Sign in for AI chat</button></> : <>
             <p role="status">{allowance ? `${allowance.remaining} of ${allowance.limit} AI requests remaining today.` : 'Checking your AI allowance…'}</p>
@@ -369,10 +418,10 @@ export function EmiAssistant() {
           </>}
         </div>}
       </div>
-      <button className="emi-type-toggle" disabled={mutating} onClick={() => { setTyping((v) => !v); requestAnimationFrame(() => chatInput.current?.focus()); }}>{typing ? 'Hide AI typing' : 'Ask Emiily a question'}</button>
-      {typing && session?.user?.id && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="How do I change my password?" disabled={disabled || allowance?.remaining === 0} />{chatBusy ? <button type="button" aria-label="Stop response" onClick={() => { usageSnapshot.current = null; abort.current?.abort(); abort.current = null; sequence.current++; setBusy(false); setChatBusy(false); setNotice('Request stopped. Requests already sent still count.'); setUsageRevision((value) => value + 1); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || disabled || allowance?.remaining === 0}><Send size={17} /></button>}</form>}
+      <button ref={chatToggle} type="button" className="emi-type-toggle" aria-expanded={typing} disabled={mutating} onClick={toggleChat}>{typing ? <X size={18} aria-hidden="true" /> : <MessageCircle size={18} aria-hidden="true" />}{typing ? 'Hide chat' : 'Chat with Emiily'}</button>
+      {typing && session?.user?.id && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="Build tic-tac-toe in HTML" disabled={disabled || allowance?.remaining === 0} />{chatBusy ? <button type="button" aria-label="Stop response" onClick={() => { usageSnapshot.current = null; abort.current?.abort(); abort.current = null; sequence.current++; setBusy(false); setChatBusy(false); setNotice('Request stopped. Requests already sent still count.'); setUsageRevision((value) => value + 1); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || disabled || allowance?.remaining === 0}><Send size={17} /></button>}</form>}
       <div className="emi-direct-links"><Link href="/book">Book</Link><Link href="/#live-station-availability">Availability</Link><Link href="/my-bookings">My bookings</Link><Link href="/games">Games</Link><Link href="/daily-spin">Daily Spin</Link></div>
     </div>}
-    <button ref={launcher} className="emi-launcher" tabIndex={open ? -1 : 0} aria-label={open ? 'Close Emiily assistant' : 'Open Emiily assistant'} aria-expanded={open} onClick={() => open ? close() : setOpen(true)}>{open ? <X size={23} /> : <MessageCircle size={24} />}{!open && <span>Ask Emiily</span>}</button>
+    <button ref={launcher} className="emi-launcher" tabIndex={open ? -1 : 0} aria-label={open ? 'Close Emiily assistant' : 'Open Emiily chat and help'} aria-expanded={open} onClick={() => open ? close() : setOpen(true)}>{open ? <X size={23} /> : <MessageCircle size={24} />}{!open && <span>Chat &amp; help</span>}</button>
   </div>;
 }

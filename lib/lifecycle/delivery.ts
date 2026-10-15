@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { DAY, digestPeriod, MessageCandidate } from './rules';
 import { getMessagingSettings } from './settings';
 import { loadEmailEvaluation } from './evaluation';
-import { emailConfiguration, gmailLifecycleTransport, lifecycleUnsubscribeSecret, MailTransport, renderLifecycleEmail, signUnsubscribe } from './email';
+import { createAdminTestCandidate, emailConfiguration, gmailLifecycleTransport, lifecycleUnsubscribeSecret, MailTransport, renderLifecycleEmail, signUnsubscribe } from './email';
 
 const LEASE_MS = 5 * 60_000;
 const DELIVERY_RETENTION_MS = 8 * DAY;
@@ -92,7 +92,7 @@ export async function sendAdminTest(userId: string, options: DeliveryOptions = {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, email: true } });
   if (user?.role !== 'ADMIN') return { status: 'FORBIDDEN' };
   const now = options.now ?? new Date();
-  const candidate: MessageCandidate = { campaign: 'DIGEST', subject: '[TEST] Your Vault has something for you', text: 'Your test email is ready.\n\nNo player account details or weekly email limits were used.', href: '/vault', sourceRefs: [], validUntil: new Date(now.getTime() + DAY).toISOString() };
+  const candidate = createAdminTestCandidate(now);
   const row = await createSend(userId, user.email, candidate, 'TEST:' + randomUUID(), now, true);
   if (!row) return { status: 'LIMIT_REACHED' };
   return { status: await deliver(row, candidate, options), recipient: user.email };
