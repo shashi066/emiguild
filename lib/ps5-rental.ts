@@ -50,3 +50,32 @@ export const createPs5RentalSchema = z.object({
   deliveryNotes: z.string().trim().max(500).optional(),
   acceptedTerms: z.literal(true),
 });
+
+export const rentalDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}, 'Enter a valid date');
+
+export function rentalEndDate(start: string, days: number) {
+  const date = new Date(`${start}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+export function discountedRentalTotal(rate: number, controllerRate: number, days: number, controllers: number, discount: number) {
+  return Math.round(calculatePs5RentalTotal(rate, controllerRate, days, controllers) * (1 - discount / 100));
+}
+
+export const adminRentalFields = createPs5RentalSchema.omit({ acceptedTerms: true, selectedGameIds: true }).extend({
+  selectedGames: z.array(z.string().trim().min(1).max(200)).min(1).max(5).refine((names) => new Set(names).size === names.length, 'Games must be unique'),
+  pricePerDay: z.number().int().min(0).max(100000),
+  controllerPrice: z.number().int().min(0).max(100000),
+  discount: z.number().int().refine((value) => value === 0 || (value >= 10 && value <= 100), 'Discount must be zero or 10–100%'),
+  startDate: rentalDateSchema.nullable(),
+  adminComment: z.string().max(500).optional(),
+});
+export const adminRentalCreateSchema = adminRentalFields.extend({ userId: z.string().min(1).nullable(), startDate: rentalDateSchema });
+export const adminRentalUpdateSchema = adminRentalFields.partial().extend({
+  expectedUpdatedAt: z.string().datetime(),
+  status: z.enum(['CONFIRMED', 'DELIVERED', 'RETURNED', 'CANCELLED']).optional(),
+}).strict();

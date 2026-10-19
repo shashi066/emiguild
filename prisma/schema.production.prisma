@@ -727,12 +727,14 @@ model WatchPartyShopOrder {
 
 model Ps5Rental {
   id                String   @id @default(cuid())
-  userId            String
+  userId            String?
   rentalDays        Int
   extraControllers  Int      @default(0)
   pricePerDay       Int
   controllerPrice   Int      @default(0)
   totalPrice        Int
+  discount          Int      @default(0)
+  source            String   @default("ONLINE")
   activeUserId      String?  @unique
   selectedGames     String   // JSON array of game names
   customerName      String
@@ -748,7 +750,7 @@ model Ps5Rental {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([userId, createdAt])

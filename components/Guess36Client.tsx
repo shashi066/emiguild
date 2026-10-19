@@ -43,6 +43,11 @@ const MODE_PROMPTS: Record<PickMode, { title: string; description: string }> = {
   RANGE: { title: 'Pick Your Zone', description: 'Cover 12 numbers.' },
 };
 
+const COMING_SOON_COPY = '36 spots per round. Choose one number from 1–36. Each number can belong to only one player. First come, first served.';
+const COMING_SOON_STEPS: readonly InfoGuideStep[] = [
+  { title: 'Game changes coming soon', description: COMING_SOON_COPY, visual: { kind: 'icon', icon: Target, label: '36 spots, 36 unique numbers' } },
+  { title: 'Existing rewards remain available', description: 'Previous results and reward tickets remain available. Already-entered rounds will still settle.', visual: { kind: 'icon', icon: Gift, label: 'Your rewards' } },
+];
 const GUIDE_STEPS: readonly InfoGuideStep[] = [
   { title: 'Choose your pick type', description: '', visual: { kind: 'icon', icon: Target, label: 'Choose a pick type' } },
   { title: 'See your numbers', description: '', visual: { kind: 'icon', icon: Grid3X3, label: 'Covered number tiles' } },
@@ -281,8 +286,8 @@ export function Guess36Client({ initialState, initialError }: Guess36ClientProps
         <div>
           <span>EMI Guild</span>
           <h1 className="font-orbitron"><Target size={22} aria-hidden="true" /> Guess 36</h1>
-          <strong>One pick. Every day.</strong>
-          <p>Pick today. See the result at midnight.</p>
+          <strong>{state.enabled ? 'One pick. Every day.' : 'Your number. Your moment.'}</strong>
+          {state.enabled && <p>Pick today. See the result at midnight.</p>}
         </div>
         <div className="guess-36-header-actions">
           <EmicRewardsButton />
@@ -290,21 +295,37 @@ export function Guess36Client({ initialState, initialError }: Guess36ClientProps
         </div>
       </header>
 
-      <YesterdayNumber result={state.previous} />
+      {state.enabled && <YesterdayNumber result={state.previous} />}
 
-      <section className="guess-36-game" aria-labelledby="today-game-title">
+      <section className={`guess-36-game ${!state.enabled && !state.today.entry ? 'guess-36-launch-game' : ''}`} aria-label={!state.enabled && !state.today.entry ? 'Guess 36 coming soon' : undefined} aria-labelledby={!state.enabled && !state.today.entry ? undefined : 'today-game-title'}>
         <header>
           <div>
             <span>Today&apos;s Game / {formatDate(state.today.date)}</span>
-            <h2 id="today-game-title">What&apos;s Your Move?</h2>
+            <h2 id="today-game-title">{state.enabled ? 'What’s Your Move?' : 'Game changes coming soon'}</h2>
             {state.today.status === 'OPEN' && !entryCutoffReached && <small>Picks close at 11:55 PM</small>}
           </div>
-          <span className="guess-36-live-status">{todayClosed ? 'Picks Locked' : 'Game Live'}</span>
+          <span className="guess-36-live-status">{!state.enabled ? 'Coming Soon' : todayClosed ? 'Picks Locked' : 'Game Live'}</span>
         </header>
 
         {error && !confirming && <div className="guess-36-error" role="alert">{error}</div>}
 
-        {!state.authenticated ? (
+        {!state.enabled && !state.today.entry ? (
+          <div className="guess-36-coming-soon">
+            <span className="guess-36-launch-label"><span /> THE NEXT CHAPTER</span>
+            <div className="guess-36-coming-art" aria-hidden="true">
+              <span className="guess-36-art-grid" />
+              <span className="guess-36-ticket ticket-left"><small>YOUR NUMBER</small><strong>07</strong><i>ONE PLAYER. ONE PICK.</i></span>
+              <span className="guess-36-ticket ticket-right"><small>YOUR NUMBER</small><strong>21</strong><i>ONE PLAYER. ONE PICK.</i></span>
+              <span className="guess-36-ticket ticket-main"><small>GUESS</small><strong>36</strong><i>MAKE IT YOURS</i></span>
+            </div>
+            <h2>A new way<br />to <em>claim your number.</em></h2>
+            <p className="guess-36-launch-copy">36 spots per round. One unique number. A pick that&apos;s only yours.</p>
+            <div className="guess-36-launch-rules"><span>Unique picks</span><span>First come, first served</span></div>
+            <div className="guess-36-launch-footer"><span className="guess-36-launch-status"><span /> COMING SOON</span><span>Worth the wait.</span></div>
+            <p className="guess-36-launch-note">Your existing picks, results and rewards stay safe.</p>
+            {!state.authenticated && <Link href="/login?callbackUrl=/guess-36" className="guess-36-rewards-link">View your rewards <span aria-hidden="true">&#8599;</span></Link>}
+          </div>
+        ) : !state.authenticated ? (
           <div className="guess-36-state-card compact">
             <LockKeyhole size={30} aria-hidden="true" />
             <h3>Login to make today&apos;s pick</h3>
@@ -361,6 +382,8 @@ export function Guess36Client({ initialState, initialError }: Guess36ClientProps
 
       <PreviousResult state={state} />
 
+      {!state.enabled && <YesterdayNumber result={state.previous} />}
+
       <section className="guess-36-history" aria-labelledby="guess-36-history-title">
         <h2 id="guess-36-history-title"><History size={18} aria-hidden="true" /> Recent Numbers</h2>
         {state.history.length > 0 ? <ol className="guess-36-history-list" tabIndex={0} aria-labelledby="guess-36-history-title">
@@ -382,7 +405,7 @@ export function Guess36Client({ initialState, initialError }: Guess36ClientProps
         </div>
       )}
 
-      {guideOpen && <InfoGuideModal eyebrow="Guess 36 Guide" title="How Guess 36 Works" subtitle="Choose. Confirm. Check your result." titleId="guess36-guide-title" steps={guideStepsForModes(state.enabledModes)} onClose={() => setGuideOpen(false)} closeLabel="Close Guess 36 guide" lightweight />}
+      {guideOpen && <InfoGuideModal eyebrow="Guess 36 Guide" title="How Guess 36 Works" subtitle={state.enabled ? 'Choose. Confirm. Check your result.' : 'A new format is on its way.'} titleId="guess36-guide-title" steps={state.enabled ? guideStepsForModes(state.enabledModes) : COMING_SOON_STEPS} onClose={() => setGuideOpen(false)} closeLabel="Close Guess 36 guide" lightweight />}
 
       {confirming && selection && (
         <AdminModalShell onClose={() => !submitting && setConfirming(false)} labelledBy="guess-36-confirm-title" describedBy="guess-36-confirm-copy" lightweight>
@@ -469,6 +492,33 @@ export function Guess36Client({ initialState, initialError }: Guess36ClientProps
         .guess-36-number-grid button:disabled:not(.selected) { opacity: .55; cursor: default; }
         .guess-36-number-grid button svg { position: absolute; top: 3px; right: 3px; color: #07151b; }
         .guess-36-state-card, .guess-36-locked { display: grid; justify-items: center; gap: 7px; padding: 22px 16px; text-align: center; color: #67e8f9; }
+        .guess-36-launch-game { border-color: #39314e !important; border-radius: 20px !important; background: #10101b !important; }
+        .guess-36-launch-game > header { display: none; }
+        .guess-36-coming-soon { position: relative; isolation: isolate; overflow: hidden; text-align: center; padding: 28px 22px 22px; background: radial-gradient(ellipse at 50% 28%,rgba(124,58,237,.18),transparent 57%); }
+        .guess-36-launch-label { display: inline-flex; align-items: center; gap: 8px; color: #b6a6d8; font-size: 9px; letter-spacing: .22em; font-weight: 700; }
+        .guess-36-launch-label > span { width: 16px; height: 1px; background: #b6a6d8; }
+        .guess-36-coming-art { position: relative; height: 200px; width: min(100%, 320px); margin: 12px auto 8px; }
+        .guess-36-art-grid { position: absolute; inset: 0 -20px; opacity: .3; background-image: linear-gradient(#77639426 1px,transparent 1px),linear-gradient(90deg,#77639426 1px,transparent 1px); background-size: 28px 28px; mask-image: radial-gradient(ellipse,#000,transparent 70%); }
+        .guess-36-ticket { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 112px; height: 142px; top: 30px; left: calc(50% - 56px); border: 1px solid #54416c; border-radius: 15px; background: linear-gradient(145deg,#252032,#171420); box-shadow: 0 14px 30px #0005; }
+        .guess-36-ticket small { color: #ad9aba; font-size: 8px; font-weight: 700; letter-spacing: .18em; }
+        .guess-36-ticket strong { color: #b9a8c9; font-size: 56px; font-weight: 800; line-height: 1.3; letter-spacing: -.07em; padding-right: 4px; }
+        .guess-36-ticket i { width: 100%; padding-top: 10px; border-top: 1px dashed #66547955; color: #ad9aba; font-size: 6px; font-weight: 700; font-style: normal; letter-spacing: .12em; }
+        .ticket-left { transform: translate(-76px,9px) rotate(-17deg); animation: guess36-left 1s ease-out both; }
+        .ticket-right { transform: translate(76px,9px) rotate(17deg); animation: guess36-right 1s ease-out both; }
+        .ticket-main { top: 18px; height: 156px; width: 122px; left: calc(50% - 61px); background: linear-gradient(145deg,#c3a4f3,#8560ca); border-color: #d6c1ff; transform: rotate(-4deg); box-shadow: 0 12px 42px #9058e52b; animation: guess36-reveal .85s ease-out both; }
+        .ticket-main small,.ticket-main i { color: #35204f; }.ticket-main strong { color: #251535; font-size: 68px; }.ticket-main i { border-color: #49326544; }
+        .guess-36-coming-soon h2 { margin: 0; color: #f4effb; font-size: clamp(25px,5vw,33px); line-height: 1.16; letter-spacing: -.045em; font-weight: 750; }
+        .guess-36-coming-soon h2 em { font-style: normal; color: #c3a4f3; }
+        .guess-36-launch-copy { margin: 14px auto 16px; max-width: 260px; color: #b6adc4; font-size: 12px; line-height: 1.7; }
+        .guess-36-launch-rules { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }.guess-36-launch-rules span { border: 1px solid #393042; border-radius: 6px; padding: 6px 9px; color: #c2b7d0; font-size: 9px; background: #ffffff03; }
+        .guess-36-launch-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 26px; padding-top: 18px; border-top: 1px solid #ffffff0d; text-align: left; }
+        .guess-36-launch-status { display: flex; align-items: center; gap: 7px; font-size: 9px; letter-spacing: .15em; font-weight: 800; color: #d3bdf3; }.guess-36-launch-status > span { width: 5px; height: 5px; background: #c3a4f3; border-radius: 50%; animation: guess36-status 1.6s ease-in-out 3; }
+        .guess-36-launch-footer > span:last-child { color: #8e819e; font-size: 10px; }.guess-36-launch-note { color: #91869f; font-size: 10px; line-height: 1.6; margin: 17px 0 0; }.guess-36-rewards-link { display: inline-block; color: #c3a4f3; font-size: 11px; margin-top: 12px; text-decoration: none; }
+        .guess-36-rewards-link:focus-visible { outline: 2px solid #c3a4f3; outline-offset: 5px; border-radius: 3px; }
+        @keyframes guess36-left { from { opacity: 0; transform: translate(-10px,20px) rotate(0); } to { opacity: 1; transform: translate(-76px,9px) rotate(-17deg); } }
+        @keyframes guess36-right { from { opacity: 0; transform: translate(10px,20px) rotate(0); } to { opacity: 1; transform: translate(76px,9px) rotate(17deg); } }
+        @keyframes guess36-reveal { from { opacity: 0; transform: translateY(20px) rotate(3deg) scale(.92); } to { opacity: 1; transform: rotate(-4deg); } }
+        @keyframes guess36-status { 50% { opacity: .35; } }
         .guess-36-state-card.compact { min-height: 180px; align-content: center; }
         .guess-36-state-card h1, .guess-36-state-card h3 { margin: 0; color: var(--color-text-primary); font-size: 1.05rem; }
         .guess-36-state-card p { max-width: 300px; margin: 0 0 5px; color: var(--color-text-secondary); font-size: .82rem; }
@@ -555,6 +605,7 @@ export function Guess36Client({ initialState, initialError }: Guess36ClientProps
           .guess-36-selection-bar { grid-template-columns:minmax(0,1fr) minmax(142px,158px); }
         }
         @media (prefers-reduced-motion: reduce) {
+          .guess-36-ticket, .guess-36-launch-status > span { animation: none; }
           .guess-36-number-grid button { transition: none; }
           .guess-36-button-spinner { animation: none; }
         }
