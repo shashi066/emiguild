@@ -9,6 +9,9 @@ import { AdminRevenueRange } from '@/components/admin/AdminRevenueRange';
 import { StationAvailabilityBoard } from '@/components/StationAvailabilityBoard';
 import { DashboardStatsSection } from '@/components/admin/DashboardStatsSection';
 import { DashboardHeaderActions } from '@/components/admin/DashboardHeaderActions';
+import { getDashboardOccupancy } from '@/lib/admin-occupancy';
+import { OccupancySummary } from '@/components/admin/OccupancySummary';
+import { getAdminRevenue } from '@/lib/admin-revenue';
 
 
 async function getDashboardData() {
@@ -17,9 +20,9 @@ async function getDashboardData() {
 
   const [
     totalBookings, todayBookings, pendingBookings,
-    confirmedBookings, cancelledBookings, completedBookings,
+    confirmedBookings, cancelledBookings, completedBookings, checkedInBookings,
     totalUsers, activeStations, recentBookings,
-    totalRevenue, todayRevenue, monthRevenue, monthBookingCount,
+    totalRevenue, todayRevenue, monthRevenue,
   ] = await Promise.all([
     prisma.booking.count(),
     prisma.booking.count({ where: { date: today } }),
@@ -27,6 +30,7 @@ async function getDashboardData() {
     prisma.booking.count({ where: { status: 'CONFIRMED' } }),
     prisma.booking.count({ where: { status: 'CANCELLED' } }),
     prisma.booking.count({ where: { status: 'COMPLETED' } }),
+    prisma.booking.count({ where: { status: 'CHECKED_IN' } }),
     prisma.user.count({ where: { role: 'USER' } }),
     prisma.station.count({ where: { isActive: true } }),
     prisma.booking.findMany({
@@ -37,37 +41,20 @@ async function getDashboardData() {
         station: { select: { name: true } },
       },
     }),
-    prisma.booking.aggregate({
-      where: { status: { not: 'CANCELLED' } },
-      _sum: { totalPrice: true },
-    }),
-    prisma.booking.aggregate({
-      where: { date: today, status: { not: 'CANCELLED' } },
-      _sum: { totalPrice: true },
-    }),
-    prisma.booking.aggregate({
-      where: {
-        date: { gte: monthStart, lte: today },
-        status: { not: 'CANCELLED' },
-      },
-      _sum: { totalPrice: true },
-    }),
-    prisma.booking.count({
-      where: {
-        date: { gte: monthStart, lte: today },
-        status: { not: 'CANCELLED' },
-      },
-    }),
+    getAdminRevenue(),
+    getAdminRevenue({ from: today, to: today }),
+    getAdminRevenue({ from: monthStart, to: today }),
   ]);
 
   return {
     totalBookings, todayBookings, pendingBookings,
-    confirmedBookings, cancelledBookings, completedBookings,
+    confirmedBookings, cancelledBookings, completedBookings, checkedInBookings,
     totalUsers, activeStations, recentBookings,
-    totalRevenue: totalRevenue._sum.totalPrice ?? 0,
-    todayRevenue: todayRevenue._sum.totalPrice ?? 0,
-    monthRevenue: monthRevenue._sum.totalPrice ?? 0,
-    monthBookingCount,
+    totalRevenue: totalRevenue.revenue,
+    todayRevenue: todayRevenue.revenue,
+    monthRevenue: monthRevenue.revenue,
+    monthBookingCount: monthRevenue.bookingCount,
+    monthRentalCount: monthRevenue.rentalCount,
     monthStart,
     today,
   };
@@ -82,7 +69,7 @@ const STATUS_CONFIG = {
 };
 
 export default async function AdminDashboard() {
-  const data = await getDashboardData();
+  const [data, occupancy] = await Promise.all([getDashboardData(), getDashboardOccupancy()]);
 
   return (
     <div>
@@ -110,9 +97,11 @@ export default async function AdminDashboard() {
         initialTo={data.today}
         initialRevenue={data.monthRevenue}
         initialBookingCount={data.monthBookingCount}
+        initialRentalCount={data.monthRentalCount}
       />
 
       <DashboardStatsSection data={data} />
+      <OccupancySummary items={occupancy} />
 
 
       {/* Recent bookings */}

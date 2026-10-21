@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { getAdminRevenue } from '@/lib/admin-revenue';
+import { getTodayString } from '@/lib/utils';
 
 export async function GET() {
   const session = await auth();
@@ -8,8 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const _now = new Date();
-  const today = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+  const today = getTodayString();
 
   const [
     totalBookings, todayBookings, pendingBookings,
@@ -20,10 +21,7 @@ export async function GET() {
     prisma.booking.count({ where: { status: 'PENDING' } }),
     prisma.user.count({ where: { role: 'USER' } }),
     prisma.station.count({ where: { isActive: true } }),
-    prisma.booking.aggregate({
-      where: { status: { not: 'CANCELLED' } },
-      _sum: { totalPrice: true },
-    }),
+    getAdminRevenue(),
   ]);
 
   return NextResponse.json({
@@ -32,6 +30,9 @@ export async function GET() {
     pendingBookings,
     totalUsers,
     activeStations,
-    totalRevenue: revenue._sum.totalPrice ?? 0,
+    totalRevenue: revenue.revenue,
+    bookingRevenue: revenue.bookingRevenue,
+    rentalRevenue: revenue.rentalRevenue,
+    rentalCount: revenue.rentalCount,
   });
 }

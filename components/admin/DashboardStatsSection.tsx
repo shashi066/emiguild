@@ -9,6 +9,7 @@ type DashboardData = {
   todayBookings: number;
   pendingBookings: number;
   confirmedBookings: number;
+  checkedInBookings: number;
   completedBookings: number;
   cancelledBookings: number;
   totalUsers: number;
@@ -113,21 +114,28 @@ export function DashboardStatsSection({ data }: { data: DashboardData }) {
 
       <div className="admin-dashboard-summary">
         {/* Booking breakdown card */}
-        <div className="card" style={{ padding: 'var(--space-lg)' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-lg)' }}>
+        <section className="card" aria-label="Booking breakdown" style={{ padding: 'var(--space-lg)' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-sm)' }}>
             <TrendingUp size={18} style={{ display: 'inline', marginRight: 8, color: 'var(--color-accent-primary)' }} />
             Booking Breakdown
           </h3>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginBottom: 'var(--space-lg)' }}>
+            {data.totalBookings} total booking{data.totalBookings === 1 ? '' : 's'} across all dates
+          </p>
           {[
             { label: 'Pending', value: data.pendingBookings, color: '#f59e0b', pct: data.totalBookings ? Math.round((data.pendingBookings / data.totalBookings) * 100) : 0 },
             { label: 'Confirmed', value: data.confirmedBookings, color: '#10b981', pct: data.totalBookings ? Math.round((data.confirmedBookings / data.totalBookings) * 100) : 0 },
+            { label: 'Checked In', value: data.checkedInBookings, color: '#00d4ff', pct: data.totalBookings ? Math.round((data.checkedInBookings / data.totalBookings) * 100) : 0 },
             { label: 'Completed', value: data.completedBookings, color: '#818cf8', pct: data.totalBookings ? Math.round((data.completedBookings / data.totalBookings) * 100) : 0 },
             { label: 'Cancelled', value: data.cancelledBookings, color: '#ef4444', pct: data.totalBookings ? Math.round((data.cancelledBookings / data.totalBookings) * 100) : 0 },
           ].map((row) => (
             <div key={row.label} style={{ marginBottom: 'var(--space-md)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 6 }}>
                 <span style={{ color: 'var(--color-text-secondary)' }}>{row.label}</span>
-                <span style={{ fontWeight: 700 }}>{row.value} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({row.pct}%)</span></span>
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
+                  <strong>{row.value}</strong>
+                  <span style={{ color: 'var(--color-text-muted)' }}>({row.pct}%)</span>
+                </span>
               </div>
               <div style={{ height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3 }}>
                 <div style={{
@@ -138,7 +146,7 @@ export function DashboardStatsSection({ data }: { data: DashboardData }) {
               </div>
             </div>
           ))}
-        </div>
+        </section>
 
         {/* Revenue Overview card */}
         <div className="card" style={{ padding: 'var(--space-lg)' }}>
@@ -148,6 +156,7 @@ export function DashboardStatsSection({ data }: { data: DashboardData }) {
               Revenue Overview
             </h3>
           </div>
+
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
             {[

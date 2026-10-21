@@ -9,6 +9,7 @@ type Props = {
   initialTo: string;
   initialRevenue: number;
   initialBookingCount: number;
+  initialRentalCount: number;
 };
 
 export function AdminRevenueRange({
@@ -16,11 +17,13 @@ export function AdminRevenueRange({
   initialTo,
   initialRevenue,
   initialBookingCount,
+  initialRentalCount,
 }: Props) {
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [revenue, setRevenue] = useState(initialRevenue);
   const [bookingCount, setBookingCount] = useState(initialBookingCount);
+  const [rentalCount, setRentalCount] = useState(initialRentalCount);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hideRevenue, setHideRevenue] = useState(true);
@@ -58,6 +61,7 @@ export function AdminRevenueRange({
         if (!res.ok) throw new Error(data.error || 'Could not load revenue.');
         setRevenue(data.revenue ?? 0);
         setBookingCount(data.bookingCount ?? 0);
+        setRentalCount(data.rentalCount ?? 0);
       } catch (err: any) {
         if (err.name !== 'AbortError') setError(err.message || 'Could not load revenue.');
       } finally {
@@ -79,7 +83,6 @@ export function AdminRevenueRange({
         </span>
         <div>
           <div className="admin-revenue-range-title">Revenue period</div>
-          <div className="admin-revenue-range-copy">Choose the booking dates included in the revenue total.</div>
         </div>
       </div>
 
@@ -114,7 +117,7 @@ export function AdminRevenueRange({
           {loading ? '...' : (hideRevenue ? '••••' : formatCurrency(revenue))}
         </div>
         <div className={error ? 'admin-revenue-range-error' : 'admin-revenue-range-count'}>
-          {error || `${bookingCount} booking${bookingCount === 1 ? '' : 's'} counted`}
+          {error || `${bookingCount} booking${bookingCount === 1 ? '' : 's'} + ${rentalCount} PS5 rental${rentalCount === 1 ? '' : 's'} counted`}
         </div>
       </div>
     </section>
