@@ -19,7 +19,7 @@ function Deadline({ game }: { game: GameProgress }) {
   return game.deadline ? <p className={styles.helper}>{game.deadline.label} · <VaultTime value={game.deadline.at} /></p> : null;
 }
 function Badge({ game }: { game: GameProgress }) {
-  const label = game.status === 'error' ? 'Unavailable' : game.status === 'disabled' ? 'Paused' : game.facts?.usedToday ? 'Used today' : game.status === 'empty' ? 'Not started' : game.status;
+  const label = game.status === 'error' ? 'Unavailable' : game.status === 'disabled' ? game.id === 'guess36' ? 'Coming soon' : 'Paused' : game.facts?.usedToday ? 'Used today' : game.status === 'empty' ? 'Not started' : game.status;
   return <span className={styles.badge} data-available={game.status === 'available' && !game.facts?.usedToday}>{label}{game.facts?.usedToday && game.status !== 'disabled' && <Check size={14} aria-hidden="true" />}</span>;
 }
 function CardHeader({ game, title }: { game: GameProgress; title?: string }) {
@@ -32,11 +32,14 @@ function Details({ game }: { game: GameProgress }) {
 function GuessPicks({ game }: { game: GameProgress }) {
   if (!game.facts?.guessPicks) return null;
   const picks = game.facts.guessPicks;
-  return <dl className={styles.picks}>
-    <div><dt>Your pick today</dt><dd>{picks.today ?? 'Not picked yet'}</dd></div>
-    <div><dt>Your pick yesterday</dt><dd>{picks.yesterday ?? 'Did not enter'}</dd></div>
-    <div><dt>Yesterday’s winning number</dt><dd>{picks.result ?? 'Result pending'}</dd></div>
-  </dl>;
+  const comingSoon = game.status === 'disabled';
+  const rows = [
+    { label: comingSoon ? 'Existing pick' : 'Your pick today', value: picks.today, empty: 'Not picked yet' },
+    { label: comingSoon ? 'Previous pick' : 'Your pick yesterday', value: picks.yesterday, empty: 'Did not enter' },
+    { label: comingSoon ? 'Previous winning number' : 'Yesterday’s winning number', value: picks.result, empty: 'Result pending' },
+  ].filter((row) => !comingSoon || row.value !== null);
+  if (!rows.length) return null;
+  return <dl className={styles.picks}>{rows.map((row) => <div key={row.label}><dt>{row.label}</dt><dd>{row.value ?? row.empty}</dd></div>)}</dl>;
 }
 function Progress({ current, total, label }: { current: number; total: number; label: string }) {
   return <progress className={styles.progress} value={Math.min(current, total)} max={total} aria-label={label} />;

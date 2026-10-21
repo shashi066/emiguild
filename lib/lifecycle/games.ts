@@ -3,6 +3,7 @@ import { detectCompleteSet, getForgeAvailability } from '@/lib/armory';
 import { getSpinState } from '@/lib/daily-spin';
 import { getGuess36Current } from '@/lib/guess-36';
 import { guess36SelectionLabel } from '@/lib/guess-36-rules';
+import { GUESS_36_COMING_SOON_COPY, GUESS_36_COMING_SOON_TITLE } from '@/lib/guess-36-announcement';
 import { getTowerProgressSnapshot } from '@/lib/tower';
 import { GameId, GameProgress, VaultItem } from './rules';
 
@@ -20,22 +21,25 @@ function game(id: GameId, data: Partial<GameProgress>): GameProgress {
 export async function guess36Progress(userId: string, now: Date): Promise<GameResult> {
   const state = await getGuess36Current({ id: userId, role: 'USER' }, now, { readOnly: true });
   const { today, previous } = state;
-  const details = [];
+  const details = state.enabled ? [] : [
+    GUESS_36_COMING_SOON_COPY,
+    'Existing picks will still settle. Your results and rewards remain available.',
+  ];
   if (today.entry) details.push(`Today’s pick: ${guess36SelectionLabel(today.entry.selection)}. Awaiting the draw.`);
   if (previous.status === 'DRAWN') {
     details.push(`Previous result (${previous.date}): ${previous.winningNumber}. ${previous.outcome === 'WIN' ? 'Your pick won.' : previous.outcome === 'LOSS' ? 'Your pick did not match.' : 'You did not enter.'}`);
     if (previous.reward) details.push(`Earned: ${previous.reward.name}.`);
-  } else details.push(`The result for ${previous.date} is being finalized.`);
+  } else if (state.enabled || previous.myPick) details.push(`The result for ${previous.date} is being finalized.`);
   return { items: [], game: game('guess36', {
     status: !state.enabled ? 'disabled' : today.entry ? 'active' : today.status === 'OPEN' ? 'available' : 'completed',
-    summary: !state.enabled ? 'Guess 36 is paused' : today.entry ? 'Today’s pick confirmed' : today.status === 'OPEN' ? 'Choose today’s pick' : 'Today’s entries are closed',
+    summary: !state.enabled ? GUESS_36_COMING_SOON_TITLE : today.entry ? 'Today’s pick confirmed' : today.status === 'OPEN' ? 'Choose today’s pick' : 'Today’s entries are closed',
     details,
     facts: { guessPicks: { today: today.entry ? guess36SelectionLabel(today.entry.selection) : null,
       yesterday: previous.myPick ? guess36SelectionLabel(previous.myPick) : null,
       result: previous.winningNumber } },
-    deadline: Date.parse(today.entryClosesAt) > now.getTime() && today.status === 'OPEN'
+    deadline: !state.enabled ? undefined : Date.parse(today.entryClosesAt) > now.getTime() && today.status === 'OPEN'
       ? { at: today.entryClosesAt, label: 'Entries close' } : { at: today.nextRoundAt, label: 'Next round' },
-    action: 'Open Guess 36',
+    action: state.enabled ? 'Open Guess 36' : 'View updates & rewards',
   }) };
 }
 

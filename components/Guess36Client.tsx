@@ -21,6 +21,7 @@ import EmicRewardsButton from '@/components/EmicRewardsButton';
 import { RewardTicketCard } from '@/components/RewardTicketCard';
 import { EmicoinAmount } from '@/components/watch-party/EmicoinAmount';
 import { getGuess36RewardTicketDisplay } from '@/lib/reward-ticket';
+import { GUESS_36_COMING_SOON_COPY as COMING_SOON_COPY } from '@/lib/guess-36-announcement';
 import {
   GUESS_36_NUMBERS, guess36CoveredNumbers,
   guess36SelectionLabel, guess36SelectionMatches, guess36Tier,
@@ -43,7 +44,6 @@ const MODE_PROMPTS: Record<PickMode, { title: string; description: string }> = {
   RANGE: { title: 'Pick Your Zone', description: 'Cover 12 numbers.' },
 };
 
-const COMING_SOON_COPY = '36 spots per round. Choose one number from 1–36. Each number can belong to only one player. First come, first served.';
 const COMING_SOON_STEPS: readonly InfoGuideStep[] = [
   { title: 'Game changes coming soon', description: COMING_SOON_COPY, visual: { kind: 'icon', icon: Target, label: '36 spots, 36 unique numbers' } },
   { title: 'Existing rewards remain available', description: 'Previous results and reward tickets remain available. Already-entered rounds will still settle.', visual: { kind: 'icon', icon: Gift, label: 'Your rewards' } },
@@ -297,7 +297,7 @@ export function Guess36Client({ initialState, initialError }: Guess36ClientProps
 
       {state.enabled && <YesterdayNumber result={state.previous} />}
 
-      <section className={`guess-36-game ${!state.enabled && !state.today.entry ? 'guess-36-launch-game' : ''}`} aria-label={!state.enabled && !state.today.entry ? 'Guess 36 coming soon' : undefined} aria-labelledby={!state.enabled && !state.today.entry ? undefined : 'today-game-title'}>
+      <section className={!state.enabled && !state.today.entry ? 'guess-36-game guess-36-launch-game' : 'guess-36-game'} aria-label={!state.enabled && !state.today.entry ? 'Guess 36 coming soon' : undefined} aria-labelledby={!state.enabled && !state.today.entry ? undefined : 'today-game-title'}>
         <header>
           <div>
             <span>Today&apos;s Game / {formatDate(state.today.date)}</span>
