@@ -182,7 +182,7 @@ function effectiveRoundStatus(
 
 async function readEnabled(db: DbClient = prisma) {
   const setting = await db.setting.findUnique({ where: { key: GUESS_36_ENABLED_KEY } });
-  return setting?.value !== 'false';
+  return setting?.value === 'true';
 }
 
 async function readModes(db: DbClient = prisma) {
@@ -197,7 +197,7 @@ export async function ensureGuess36Config() {
     where: { key: { in: [GUESS_36_ENABLED_KEY, GUESS_36_REWARDS_KEY, GUESS_36_MODES_KEY] } }, select: { key: true },
   });
   for (const setting of [
-    { key: GUESS_36_ENABLED_KEY, value: 'true', label: 'Guess 36 Enabled' },
+    { key: GUESS_36_ENABLED_KEY, value: 'false', label: 'Guess 36 Enabled' },
     { key: GUESS_36_REWARDS_KEY, value: JSON.stringify(DEFAULT_GUESS_36_REWARDS), label: 'Guess 36 Rewards' },
     { key: GUESS_36_MODES_KEY, value: JSON.stringify(DEFAULT_GUESS_36_MODES), label: 'Guess 36 Pick Types' },
   ]) {

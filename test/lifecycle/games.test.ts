@@ -8,6 +8,8 @@ import { getVaultSummary } from '../../lib/lifecycle/summary';
 import { gameLoaders, loadGameSections, artifactProgress, guess36Progress, spinProgress, towerProgress, guildDropProgress } from '../../lib/lifecycle/games';
 import { getTowerProgressSnapshot } from '../../lib/tower';
 import { getEffectiveSpinDate } from '../../lib/daily-spin';
+import { GUESS_36_COMING_SOON_COPY, GUESS_36_COMING_SOON_TITLE } from '../../lib/guess-36-announcement';
+import { selectVaultAction } from '../../lib/lifecycle/vault-presentation';
 
 const now = new Date('2026-10-01T10:00:00Z');
 const later = new Date(now.getTime() + 3600000);
@@ -51,13 +53,40 @@ test('game progress uses owned, published, current account state without writes'
       const pending = await guess36Progress(user.id, now);
       assert.ok(pending.game.details.some((line) => line.includes('13-24')));
       assert.ok(!pending.game.details.some((line) => line.includes('17') || line.includes('36')));
+      await setting('guess_36_enabled', 'false');
+      const noEntries = (await guess36Progress(`${prefix}-no-entries`, now)).game;
+      assert.equal(noEntries.deadline, undefined);
+      assert.deepEqual(noEntries.facts?.guessPicks, { today: null, yesterday: null, result: null });
+      assert.ok(!noEntries.details.some((line) => line.includes('being finalized')));
+      await setting('guess_36_enabled', 'true');
       await prisma.guess36Round.update({ where: { id: previous.id }, data: { publishedAt: now } });
       const published = await guess36Progress(user.id, now);
       assert.ok(published.game.details.some((line) => line.includes('Your pick won')));
       assert.ok(published.game.details.some((line) => line.startsWith('Earned:')));
       await setting('guess_36_enabled', 'false');
-      assert.equal((await guess36Progress(user.id, now)).game.status, 'disabled');
+      const paused = (await guess36Progress(user.id, now)).game;
+      assert.equal(paused.status, 'disabled');
+      assert.equal(paused.summary, GUESS_36_COMING_SOON_TITLE);
+      assert.ok(paused.details.includes(GUESS_36_COMING_SOON_COPY));
+      assert.equal(paused.deadline, undefined);
+      assert.equal(paused.action, 'View updates & rewards');
+      assert.equal(selectVaultAction([paused], now), null);
+      assert.equal(paused.facts?.guessPicks?.today, '13-24');
+      assert.equal(paused.facts?.guessPicks?.result, 17);
+      assert.ok(paused.details.some((line) => line.startsWith('Earned:')));
+      const ticket = await prisma.armoryTicket.create({ data: {
+        userId: user.id, code: `${prefix}-guess-reward`, source: 'GUESS_36', claimDate: '2026-09-30',
+        expiresAt: later, rewardSnapshot: JSON.stringify({ reward: { type: 'GAMING_TIME', name: '30 minutes gaming', value: 30 } }),
+      } });
+      try {
+        const vault = await getVaultState(user.id, now);
+        assert.ok(vault.items.some((item) => item.id === `ticket:${ticket.id}` && item.href === '/guess-36' && item.action === 'View reward'));
+      } finally { await prisma.armoryTicket.delete({ where: { id: ticket.id } }); }
+      const pausedOther = (await guess36Progress(other.id, now)).game;
+      assert.equal(pausedOther.facts?.guessPicks?.yesterday, null);
+      assert.equal(pausedOther.deadline, undefined);
       await setting('guess_36_enabled', 'true');
+      assert.equal((await guess36Progress(user.id, now)).game.deadline?.label, 'Entries close');
     });
     await t.test('Spin displays one opportunity then used, daily reward, and actual streak', async () => {
       const loot = await prisma.lootItem.create({ data: { id: `${prefix}-loot`, name: 'Progress reward', rarity: 'COMMON', weight: 1 } });

@@ -5,8 +5,8 @@ import { Guess36Client } from '@/components/Guess36Client';
 import { getGuess36Current } from '@/lib/guess-36';
 
 export const metadata = {
-  title: 'Guess 36 | EMI Guild',
-  description: 'Play Guess 36 at EMI Guild. Make one prediction every day and check the result at midnight.',
+  title: 'Guess 36 — Changes Coming Soon | EMI Guild',
+  description: 'Guess 36 is changing. Coming soon: 36 spots per round, one unique number per player, first come, first served.',
 };
 
 export const dynamic = 'force-dynamic';

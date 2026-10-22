@@ -1,5 +1,6 @@
 'use client';
 
+import { RentalForm } from '@/components/admin/RentalForm';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Gamepad2, RefreshCw, CheckCircle, AlertCircle,
@@ -22,6 +23,8 @@ const ACTIONS = {
 };
 
 export default function AdminPs5RentalsPage() {
+  const [editRental, setEditRental] = useState<Rental | null | undefined>(undefined);
+  const [defaults, setDefaults] = useState({ pricePerDay: 1200, controllerPrice: 500 });
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('ALL');
@@ -30,7 +33,7 @@ export default function AdminPs5RentalsPage() {
   const loadSequence = useRef(0);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [commentModal, setCommentModal] = useState<{ id: string; comment: string } | null>(null);
+  const [commentModal, setCommentModal] = useState<{ id: string; comment: string; updatedAt: string } | null>(null);
 
   const showToast = (type: 'success' | 'error', msg: string) => {
     setToast({ type, msg });
@@ -46,6 +49,7 @@ export default function AdminPs5RentalsPage() {
       if (sequence !== loadSequence.current) return;
       if (!res.ok) throw new Error(data.error ?? 'Could not load rentals.');
       setRentals(data.rentals ?? []);
+      if (data.defaults) setDefaults(data.defaults);
       setHasMore(!!data.hasMore);
     } catch {
       if (sequence === loadSequence.current) {
@@ -63,7 +67,7 @@ export default function AdminPs5RentalsPage() {
     setUpdatingId(id);
     try {
       const res = await fetch(`/api/admin/ps5-rentals/${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...patch, expectedUpdatedAt: (patch.adminComment !== undefined && commentModal?.id === id ? commentModal.updatedAt : undefined) ?? rentals.find((rental) => rental.id === id)?.updatedAt }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Update failed.');
@@ -107,6 +111,8 @@ export default function AdminPs5RentalsPage() {
         </button>
       </div>
 
+      <button className="btn btn-primary" style={{ marginBottom: 16 }} onClick={() => setEditRental(null)}>New Walk-in Rental</button>
+      {editRental !== undefined && <RentalForm rental={editRental} defaults={defaults} onClose={() => setEditRental(undefined)} onSaved={() => { setEditRental(undefined); void load(); showToast('success', 'Rental saved.'); }} />}
       {/* Toast */}
       {toast && (
         <div
@@ -154,7 +160,7 @@ export default function AdminPs5RentalsPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <User size={14} style={{ color: 'var(--color-text-muted)' }} />
                       <span style={{ fontWeight: 700 }}>{rental.customerName}</span>
-                      <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>({rental.user.email})</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>({rental.user?.email ?? 'Guest'})</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -165,7 +171,7 @@ export default function AdminPs5RentalsPage() {
                       </span>
                     </div>
                   </div>
-                  <RentalStatus status={rental.status} />
+                  <span className="badge">{rental.source === 'WALK_IN' ? 'Walk-in' : 'Online'}</span><RentalStatus status={rental.status} />
                 </div>
 
                 {/* Details grid */}
@@ -177,7 +183,7 @@ export default function AdminPs5RentalsPage() {
                 }}>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: 2 }}>Duration</div>
-                    <div style={{ fontWeight: 600 }}>{rental.rentalDays} day{rental.rentalDays > 1 ? 's' : ''}</div>
+                    <div style={{ fontWeight: 600 }}>{rental.rentalDays} day{rental.rentalDays > 1 ? 's' : ''}</div><small>{rental.startDate ?? 'Unscheduled'}{rental.endDate ? ` → ${rental.endDate}` : ''}</small>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: 2 }}>Controllers</div>
@@ -187,6 +193,7 @@ export default function AdminPs5RentalsPage() {
                     <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: 2 }}>Total Price</div>
                     <div style={{ fontWeight: 700, fontFamily: 'Orbitron, sans-serif', color: 'var(--color-accent-primary)' }}>
                       {fmt(rental.totalPrice)}
+                      {rental.discount > 0 && <small style={{ display: 'block' }}>{rental.discount}% discount applied</small>}
                     </div>
                   </div>
                 </div>
@@ -227,6 +234,7 @@ export default function AdminPs5RentalsPage() {
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditRental(rental)}>Edit Rental</button>
                   {actions.map((newStatus) => {
                     const { label, icon: Icon } = ACTIONS[newStatus as keyof typeof ACTIONS];
                     return (
@@ -246,7 +254,7 @@ export default function AdminPs5RentalsPage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
-                    onClick={() => setCommentModal({ id: rental.id, comment: rental.adminComment ?? '' })}
+                    onClick={() => setCommentModal({ id: rental.id, comment: rental.adminComment ?? '', updatedAt: rental.updatedAt })}
                     id={`comment-${rental.id}`}
                   >
                     <MessageSquare size={14} />

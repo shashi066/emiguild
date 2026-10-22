@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
-  LayoutDashboard, BookOpen, Monitor, Users,
+  LayoutDashboard, BookOpen, Monitor, Users, CalendarDays,
   Gamepad2, ChevronRight, ChevronDown, UserPlus, Settings, Award, Gift, RotateCw, Trophy, Shield, Activity, Tv, Menu, X, Castle, CupSoda, Target, ShoppingBag, Search, Mail,
 } from 'lucide-react';
 
 const NAV_GROUPS = [
   { label: 'Overview', items: [
     { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+    { href: '/admin/occupancy', label: 'Occupancy', icon: CalendarDays },
     { href: '/admin/analytics', label: 'Analytics', icon: Activity },
   ] },
   { label: 'Daily Operations', items: [
