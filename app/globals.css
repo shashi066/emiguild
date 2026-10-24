@@ -469,41 +469,16 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .watch-party-btn {
-  isolation: isolate;
-  box-shadow: inset 0 0 18px rgba(0, 120, 255, 0.12), 0 8px 22px rgba(0,0,0,0.34);
+  box-shadow: inset 0 1px 0 rgba(211, 229, 255, .06);
 }
-
-.watch-party-btn::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: calc(var(--radius-md) + 2px);
-  background: conic-gradient(from 0deg, transparent 0deg, #00d4ff 70deg, #2b7cff 120deg, transparent 190deg, #00e5ff 260deg, transparent 360deg);
-  animation: watch-party-spin 3s linear infinite;
-  z-index: -2;
-}
-
-.watch-party-btn::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border-radius: calc(var(--radius-md) - 2px);
-  background: #02040a;
-  z-index: -1;
-}
-
-.watch-party-btn svg,
-.watch-party-btn span {
-  position: relative;
-  z-index: 1;
-}
-
-.watch-party-btn svg {
-  color: #55d7ff;
+.watch-party-btn svg { color: #a8c7ed; }
+.watch-party-btn:focus-visible { outline: 2px solid #c5dcfa; outline-offset: 4px; }
+@media (hover: hover) {
+  .watch-party-btn:hover { background: #0b1220 !important; border-color: #a8c7ed !important; }
 }
 
 .emic-rewards-btn {
-  box-shadow: inset 3px 0 0 rgba(250, 204, 21, 0.75), inset 0 0 14px rgba(245, 158, 11, 0.08);
+  box-shadow: inset 0 0 14px rgba(232, 121, 249, 0.08);
 }
 
 .emic-rewards-btn::before {
@@ -513,18 +488,12 @@ h1, h2, h3, h4, h5, h6 {
   right: 8px;
   width: 10px;
   height: 10px;
-  border-top: 1px solid rgba(250, 204, 21, 0.72);
-  border-right: 1px solid rgba(250, 204, 21, 0.72);
+  border-top: 1px solid rgba(232, 121, 249, 0.72);
+  border-right: 1px solid rgba(232, 121, 249, 0.72);
   border-radius: 0 3px 0 0;
 }
 
-.emic-rewards-btn svg {
-  color: #facc15;
-}
-
-@keyframes watch-party-spin {
-  to { transform: rotate(360deg); }
-}
+.emic-rewards-btn svg { color: #e879f9; }
 
 /* ── PS5 Rental Hero Button — Steel Red ── */
 .hero-ps5-rental-btn {
@@ -4468,3 +4437,6 @@ select.form-input option {
   .ps5-rental-actions .btn { flex: 1; padding-inline: var(--space-sm); }
   .ps5-rental-flow-card { padding: var(--space-lg); }
 }
+
+/* Homepage entry only: hide shared chrome before client hydration. */
+body:has([data-home-entry-allowed=true]):has([data-home-content][data-pending=true]) [data-site-chrome] { visibility: hidden; pointer-events: none; }

@@ -7,6 +7,7 @@ import ScrollToSection from '@/components/ScrollToSection';
 type ButtonVariant =
   | 'primary'
   | 'ghost'
+  | 'rewards'
   | 'gold'
   | 'green'
   | 'purple'
@@ -36,6 +37,11 @@ interface HeroButtonProps {
 
 const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
   primary: {},
+  rewards: {
+    background: 'rgba(232, 121, 249, 0.1)',
+    border: '1px solid rgba(232, 121, 249, 0.4)',
+    color: '#f5d0fe',
+  },
   ghost: {},
   gold: {
     background: 'rgba(255,215,0,0.1)',
@@ -93,9 +99,9 @@ const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
     color: '#f8fafc',
   },
   watch: {
-    background: 'rgba(34, 211, 238, 0.12)',
-    border: '1px solid rgba(34, 211, 238, 0.48)',
-    color: '#d8fbff',
+    background: '#02040a',
+    border: '1px solid #647e9c',
+    color: '#e0edff',
   },
 };
 

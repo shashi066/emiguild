@@ -1,0 +1,29 @@
+.loader {
+  min-height: calc(100svh - 72px);
+  min-height: calc(100dvh - 72px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  gap: 20px;
+  background: var(--color-bg-base);
+  color: var(--color-accent-secondary);
+}
+.forge { width: min(100%, 300px); height: auto; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.structure { fill: var(--color-bg-surface, #101c2a); stroke: #294451; }
+.stage { opacity: .12; animation: illuminate 2s ease-in-out both; }
+.frame { animation-delay: 0s; }
+.energy { animation-delay: 2s; }
+.artifact { animation-delay: 4s; fill: var(--color-bg-surface, #101c2a); }
+.left { animation: assembleLeft 2s 4s ease-out both; }
+.right { animation: assembleRight 2s 4s ease-out both; }
+.finish { animation-delay: 6s; }
+.caption { margin: 0; color: var(--color-text-secondary); font-size: .95rem; line-height: 1.5; text-align: center; }
+@keyframes illuminate { from { opacity: .12; } to { opacity: 1; } }
+@keyframes assembleLeft { from { transform: translate(-10px, -6px); } to { transform: translate(0, 0); } }
+@keyframes assembleRight { from { transform: translate(10px, -6px); } to { transform: translate(0, 0); } }
+.complete .stage, .complete .left, .complete .right { animation: none; opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .stage, .left, .right { animation: none; opacity: 1; transform: none; }
+}

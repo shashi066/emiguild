@@ -123,16 +123,20 @@ export async function towerProgress(userId: string, now: Date): Promise<GameResu
 }
 
 export async function guildDropProgress(userId: string, now: Date): Promise<GameResult> {
-  const [current, latest] = await Promise.all([
+  const [current, latest, live] = await Promise.all([
     prisma.drawEntry.findMany({ where: { userId, draw: { status: { in: ['ACTIVE', 'CLOSED'] }, winnerPickedAt: null } }, include: { draw: true }, orderBy: { createdAt: 'desc' } }),
     prisma.drawEntry.findFirst({ where: { userId, draw: { status: 'CLOSED', winnerId: { not: null }, winnerPickedAt: { lte: now } } }, include: { draw: true }, orderBy: { draw: { winnerPickedAt: 'desc' } } }),
+    prisma.luckyDraw.findMany({ where: { status: 'ACTIVE', winnerPickedAt: null, entries: { none: { userId } },
+      AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gt: now } }] }] },
+      select: { id: true, title: true, endsAt: true }, orderBy: { createdAt: 'desc' } }),
   ]);
-  const details = current.map(({ draw }) => `${draw.title}: ${draw.endsAt && draw.endsAt <= now ? 'awaiting result' : 'entry confirmed'}.`);
+  const details = live.map(draw => `${draw.title}: live now, entry available.`);
+  details.push(...current.map(({ draw }) => `${draw.title}: ${draw.endsAt && draw.endsAt <= now ? 'awaiting result' : 'entry confirmed'}.`));
   if (latest) details.push(`Latest result — ${latest.draw.title}: ${latest.draw.winnerId === userId ? `you won ${latest.draw.prize}` : 'another player won'}.`);
-  const next = current.map(({ draw }) => draw.endsAt).filter((date): date is Date => !!date && date > now).sort((a, b) => a.getTime() - b.getTime())[0];
-  return { items: [], game: game('guild-drop', { status: current.length ? 'active' : latest ? 'completed' : 'empty',
-    facts: { events: current.map(({ draw }) => ({ id: draw.id, title: draw.title, participation: draw.endsAt && draw.endsAt <= now ? 'Awaiting result' : 'Entry confirmed', ...(draw.endsAt ? { at: draw.endsAt.toISOString() } : {}) })) },
-    summary: current.length ? `${current.length} current entr${current.length === 1 ? 'y' : 'ies'}` : 'No current entries', details, action: 'View Guild Drops',
+  const next = [...current.map(({ draw }) => draw.endsAt), ...live.map(draw => draw.endsAt)].filter((date): date is Date => !!date && date > now).sort((a, b) => a.getTime() - b.getTime())[0];
+  return { items: [], game: game('guild-drop', { status: live.length ? 'available' : current.length ? 'active' : latest ? 'completed' : 'empty',
+    facts: { liveDrops: live.map(draw => ({ id: draw.id, title: draw.title, ...(draw.endsAt ? { endsAt: draw.endsAt.toISOString() } : {}) })), events: current.map(({ draw }) => ({ id: draw.id, title: draw.title, participation: draw.endsAt && draw.endsAt <= now ? 'Awaiting result' : 'Entry confirmed', ...(draw.endsAt ? { at: draw.endsAt.toISOString() } : {}) })) },
+    summary: live.length ? `${live.length} live Guild Drop${live.length === 1 ? '' : 's'} to explore` : current.length ? `${current.length} current entr${current.length === 1 ? 'y' : 'ies'}` : 'No current entries', details, action: 'View Guild Drops',
     ...(next ? { deadline: { at: next.toISOString(), label: 'Next draw closes' } } : {}),
   }) };
 }

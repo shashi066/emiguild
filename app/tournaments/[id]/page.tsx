@@ -1,5 +1,7 @@
 'use client';
 
+import { TournamentLoadError, useTournamentLoading } from '@/components/TournamentLoadingBoundary';
+
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -37,6 +39,8 @@ export default function TournamentOverviewPage() {
   const { data: session } = useSession();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  useTournamentLoading(loading);
   const [registering, setRegistering] = useState(false);
   const [regError, setRegError] = useState<string | null>(null);
 
@@ -44,10 +48,17 @@ export default function TournamentOverviewPage() {
 
   async function fetchTournament() {
     setLoading(true);
-    const res = await fetch(`/api/tournaments/${id}`);
-    const data = await res.json();
-    setTournament(data.tournament);
-    setLoading(false);
+    setLoadError(false);
+    try {
+      const res = await fetch(`/api/tournaments/${id}`);
+      if (!res.ok) throw new Error('Tournament request failed');
+      const data = await res.json();
+      setTournament(data.tournament);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleRegister() {
@@ -78,6 +89,8 @@ export default function TournamentOverviewPage() {
   }
 
   if (loading) return <Loading />;
+
+  if (loadError) return <TournamentLoadError retry={fetchTournament} />;
 
   if (!tournament) return (
     <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--color-text-muted)' }}>

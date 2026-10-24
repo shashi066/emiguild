@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TowerLoadingBoundary } from '@/components/TowerLoadingBoundary';
 import { ArrowLeft } from 'lucide-react';
 
 export default function TowerLayout({ children }: { children: React.ReactNode }) {
@@ -9,7 +10,7 @@ export default function TowerLayout({ children }: { children: React.ReactNode })
           <Link href="/" className="btn btn-ghost btn-sm"><ArrowLeft size={16} /> Back to Home</Link>
         </div>
       </div>
-      {children}
+      <TowerLoadingBoundary>{children}</TowerLoadingBoundary>
     </div>
   );
 }

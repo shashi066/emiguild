@@ -1,7 +1,7 @@
 'use client';
 
 import '../tournament.css';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Trophy, LayoutGrid, Users, GitBranch } from 'lucide-react';
@@ -32,11 +32,20 @@ export default function TournamentLayout({ children }: { children: React.ReactNo
   const pathname = usePathname();
   const [tournament, setTournament] = useState<Tournament | null>(null);
 
-  useEffect(() => {
-    fetch(`/api/tournaments/${id}`)
-      .then((r) => r.json())
-      .then((d) => setTournament(d.tournament));
+  const [headerError, setHeaderError] = useState(false);
+  const loadHeader = useCallback(async () => {
+    setHeaderError(false);
+    try {
+      const response = await fetch(`/api/tournaments/${id}`);
+      if (!response.ok) throw new Error('Tournament request failed');
+      const data = await response.json();
+      setTournament(data.tournament);
+    } catch {
+      setHeaderError(true);
+    }
   }, [id]);
+
+  useEffect(() => { setTournament(null); void loadHeader(); }, [loadHeader]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -57,6 +66,8 @@ export default function TournamentLayout({ children }: { children: React.ReactNo
               ← Tournaments
             </Link>
           </div>
+
+          {headerError && <div role="alert" className="alert alert-error">Tournament details could not load. <button type="button" className="btn btn-secondary btn-sm" onClick={loadHeader}>Retry</button></div>}
 
           {tournament && (
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', paddingBottom: '0' }}>

@@ -1,0 +1,35 @@
+.boundary { position: relative; }
+.content[data-pending=true] { display: none; }
+.loader { min-height: 100svh; min-height: 100dvh; padding: 32px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #000; color: var(--color-text-primary); }
+.artwork { position: relative; width: clamp(200px, 65vw, 240px); max-width: 100%; aspect-ratio: 1; flex-shrink: 0; }
+.wordmark { position: absolute; inset: 0; display: grid; align-content: center; text-align: center; font-family: Orbitron, sans-serif; font-weight: 800; font-size: 2rem; color: #a4edff; line-height: 1.3; transition: opacity 250ms ease-out; }
+.logo { position: relative; display: block; width: 100%; height: 100%; object-fit: contain; opacity: 1; }
+.ring { position: absolute; inset: -8px; width: calc(100% + 16px); height: calc(100% + 16px); fill: none; stroke-width: .65; transform: rotate(-90deg); }
+.track { stroke: #173440; }
+.fill { stroke: var(--color-accent-secondary); stroke-linecap: round; transition: stroke-dashoffset 200ms linear; }
+.percentage { min-height: 1.5em; width: 5ch; text-align: center; line-height: 1.5; margin-top: 14px; font-variant-numeric: tabular-nums; font-size: 1.2rem; color: #cff8ff; }
+.status { margin: 0; font-size: .95rem; line-height: 1.5; text-align: center; color: var(--color-text-secondary); }
+.departing { pointer-events: none; animation: depart 350ms ease-out forwards; }
+@keyframes depart { from { opacity: 1; } to { opacity: 0; } }
+@media(min-width:768px) { .artwork { width: 280px; } }
+@media(prefers-reduced-motion:reduce) { .fill { transition: none; } .departing { animation: none; opacity: 0; } }
+
+.logoReady { opacity: 1; animation: logoReveal 800ms cubic-bezier(.2,.65,.3,1) both; }
+@keyframes logoReveal {
+  from { opacity: .2; transform: translateY(6px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media(prefers-reduced-motion:reduce) { .logoReady { animation: none; transform: none; } }
+
+.wordmarkHidden { opacity: 0; }
+.counter { display: inline-block; animation: counterAppear 160ms ease-out both; }
+.loader[data-ready=true] .fill { transition-duration: 100ms; }
+@keyframes counterAppear { from { opacity: 0; } to { opacity: 1; } }
+@media(prefers-reduced-motion:reduce) { .wordmark { transition: none; } .counter { animation: none; } }
+
+.logoFailed { visibility: hidden; }
+
+/* Cover all site chrome from first streamed paint, before hydration. */
+.boundary > [data-home-loader] { position: fixed; inset: 0; z-index: 2147483000; overflow-y: auto; background: #000; }
+
+.pending { min-height: 120px; display: grid; place-items: center; padding: 24px 16px; color: var(--color-text-secondary); font-size: .9rem; }

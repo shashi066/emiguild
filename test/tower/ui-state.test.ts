@@ -252,7 +252,7 @@ test('shows floor risk counts without exposing active red positions', () => {
   assert.equal(tower.includes("const TOWER_RED_CARDS_KEY = 'tower_red_cards_per_floor'"), true);
   assert.equal(tower.includes('...(terminal ? { reveal: publicReveal(redCards) } : {})'), true);
   assert.equal(tower.includes('redPositions: slots.map'), true);
-  assert.equal(publicSettings.includes("'tower_red_cards_per_floor'"), true);
+  assert.equal(publicSettings.includes("'tower_red_cards_per_floor'"), false);
   assert.equal(adminSettings.includes("'tower_red_cards_per_floor'"), true);
 });
 
@@ -263,19 +263,19 @@ test('uses immediate start and restore scrolling with motion-aware Climb scrolli
   assert.equal(getTowerScrollBehavior('climb', true), 'auto');
 });
 
-test('hides Tower behind the shared spinner until initial layout and scrolling settle', () => {
+test('hides Tower behind the shared tower loader until entry and initial layout settle', () => {
   const source = readFileSync(new URL('../../components/TowerClient.tsx', import.meta.url), 'utf8');
   const loadingSource = readFileSync(new URL('../../app/tower/loading.tsx', import.meta.url), 'utf8');
   const layoutSource = readFileSync(new URL('../../app/tower/layout.tsx', import.meta.url), 'utf8');
-  const settleStart = source.indexOf('if (!initialSettlingRef.current) return;');
+  const settleStart = source.indexOf('if (!initialSettlingRef.current || !routeLoadingComplete) return;');
   const settleEnd = source.indexOf('\n\n  useEffect(() => {\n    if (initialSettlingRef.current) return;', settleStart);
   const settleSource = source.slice(settleStart, settleEnd);
 
   assert.equal(layoutSource.includes('Back to Home'), true);
   assert.equal(loadingSource.includes('Back to Home'), false);
   assert.equal(source.includes('Back to Home'), false);
-  assert.equal(loadingSource.includes('className="spinner"'), true);
-  assert.equal(loadingSource.includes('Loading Tower...'), true);
+  assert.equal(loadingSource.includes('TowerRouteLoader'), true);
+  assert.equal(loadingSource.includes('className="spinner"'), false);
   assert.equal(loadingSource.includes('fetch('), false);
   assert.equal(source.includes('const [settling, setSettling] = useState(true);'), true);
   assert.equal(source.includes('const initialSettlingRef = useRef(true);'), true);
@@ -284,8 +284,8 @@ test('hides Tower behind the shared spinner until initial layout and scrolling s
   assert.equal(source.includes('inert={settling}'), true);
   assert.equal(source.includes("style={settling ? { visibility: 'hidden' } : undefined}"), true);
   assert.equal(source.includes('className="tower-settling-loader"'), true);
-  assert.equal(source.includes('className="spinner"'), true);
-  assert.equal(source.includes('<span>Loading Tower...</span>'), true);
+  assert.equal(source.includes('<TowerLoader />'), true);
+  assert.equal(source.includes('<TowerRouteLoader />'), true);
   assert.equal(settleSource.match(/window\.requestAnimationFrame/g)?.length, 2);
   assert.equal(settleSource.includes("scrollTowerFloor(currentFloorRef.current, 'auto');"), true);
   assert.equal(settleSource.includes('setSettling(false);'), true);
@@ -469,7 +469,7 @@ test('keeps Tower duration server-configured and exposes only public timing valu
   assert.equal(tower.includes('runExpiresAt: getTowerRunExpiry(now, token.expiresAt, config.runDurationSeconds)'), true);
   assert.equal(tower.includes('climbDurationSeconds: Math.max(0, Math.ceil('), true);
   assert.equal(tower.includes('runDurationSeconds: config.runDurationSeconds'), true);
-  assert.equal(settingsRoute.includes("'tower_run_duration_seconds'"), true);
+  assert.equal(settingsRoute.includes("'tower_run_duration_seconds'"), false);
 });
 
 test('shows a one-time lightweight confirmation after a successful Tower claim', () => {

@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import type { DailyRewardKind } from '@/lib/daily-reward-client';
+import { VaultRouteLoader } from '@/components/VaultLoadingBoundary';
 import { TowerReviewButton } from '@/components/TowerReviewButton';
 import { ArrowRight, Castle, Check, Flame, Gift, Hammer, RotateCw, Target, User, Shield, Footprints, HardHat, Hand, ChevronRight } from 'lucide-react';
 import { AccountState, GameProgress, orderVaultItems, formatVaultTime } from '@/lib/lifecycle/rules';
@@ -44,11 +46,11 @@ function GuessPicks({ game }: { game: GameProgress }) {
 function Progress({ current, total, label }: { current: number; total: number; label: string }) {
   return <progress className={styles.progress} value={Math.min(current, total)} max={total} aria-label={label} />;
 }
-function DailyGameCard({ game, now }: { game: GameProgress; now: Date }) {
+function DailyGameCard({ game, now, onDailyAction, dailyActionBusy }: { game: GameProgress; now: Date; onDailyAction: (kind: DailyRewardKind) => void; dailyActionBusy: boolean }) {
   const spin = game.id === 'spin';
-  const available = game.facts?.dailyAvailable && game.status !== 'disabled' && (!game.deadline || Date.parse(game.deadline.at) > now.getTime());
+  const available = game.facts?.dailyAvailable && !['disabled', 'error'].includes(game.status) && (!game.deadline || Date.parse(game.deadline.at) > now.getTime());
   const slotIcons = [HardHat, Shield, Hand, Footprints];
-  return <article className={styles.card}>
+  return <article className={styles.card} data-game={game.id}>
     <CardHeader game={game} title={spin ? 'Daily Spin' : 'Daily Forge'} />
     {game.status === 'error' ? <p>Progress temporarily unavailable. Refresh to try again.</p> : spin ? <>
       <p className={styles.strong}><Flame size={20} />Streak: {game.progress?.current ?? 0} of {game.progress?.total ?? 10} days</p>
@@ -66,14 +68,14 @@ function DailyGameCard({ game, now }: { game: GameProgress; now: Date }) {
       <p className={styles.secondary}>{game.facts?.canClaim ? 'Your completed set is ready to exchange.' : 'Equip four matching pieces to unlock a set reward.'}</p>
     </>}
     <Deadline game={game} />
-    <Action href={game.href} primary={!!available}>{available ? spin ? 'Take your daily spin' : 'Forge today’s artifact' : spin ? 'View spin rewards' : 'Visit Armory'}</Action>
+    {available ? <button type="button" className={styles.primaryButton} disabled={dailyActionBusy} onClick={() => onDailyAction(spin ? 'spin' : 'forge')}>{spin ? 'Take your daily spin' : 'Forge today’s artifact'}<ArrowRight size={18} aria-hidden="true" /></button> : <Action href={game.href}>{spin ? 'View spin rewards' : 'Visit Armory'}</Action>}
   </article>;
 }
 function OverviewCard({ game, now, refresh }: { game: GameProgress; now: Date; refresh?: () => void }) {
   const tower = game.id === 'tower';
   const valid = !game.deadline || Date.parse(game.deadline.at) > now.getTime();
   const tokens = (game.facts?.tokenExpiries ?? []).filter((at) => Date.parse(at) > now.getTime()).length;
-  return <article className={styles.card}><CardHeader game={game} />
+  return <article className={styles.card} data-game={game.id}><CardHeader game={game} />
     <p className={styles.strong}>{tower && game.status !== 'disabled' && game.status !== 'error' && !game.progress ? tokens ? 'Ready for your next climb' : 'Earn a Tower Token to start your next climb' : game.summary}</p>
     {game.progress && <><p className={styles.secondary}>{game.progress.label} {game.progress.current} of {game.progress.total}</p><Progress {...game.progress} /></>}
     {game.id === 'guess36' && <GuessPicks game={game} />}
@@ -84,29 +86,29 @@ function OverviewCard({ game, now, refresh }: { game: GameProgress; now: Date; r
     <Action href={game.href}>{tower && valid && game.status !== 'disabled' && game.status !== 'error' ? game.facts?.canClaim ? 'Claim secured reward' : game.progress ? 'Continue Tower' : tokens ? 'Start Tower' : 'Explore Tower' : game.action}</Action>
   </article>;
 }
-export function VaultDashboard({ state, loading, error, refresh, now }: { now: Date; state: AccountState | null; loading: boolean; error: string; refresh: () => void }) {
+export function VaultDashboard({ state, loading, error, refresh, now, onDailyAction, dailyActionBusy }: { onDailyAction: (kind: DailyRewardKind) => void; dailyActionBusy: boolean; now: Date; state: AccountState | null; loading: boolean; error: string; refresh: () => void }) {
   const games = state?.games ?? [];
   const byId = (id: GameProgress['id']) => games.find((game) => game.id === id);
   const spin = byId('spin'), artifacts = byId('artifacts'), tower = byId('tower');
   const action = selectVaultAction(games, now), unlock = selectNextUnlock(games);
   const rewards = state ? orderVaultItems(state.items, now).filter((item) => item.kind === 'reward') : [];
   const stats = [
-    { label: 'Tower Tokens', value: tower?.facts?.tokenExpiries?.filter((at) => Date.parse(at) > now.getTime()).length, Icon: Castle, failed: tower?.status === 'error' },
-    { label: 'Day Streak', value: spin?.progress?.current, Icon: Flame, failed: spin?.status === 'error' },
-    { label: 'Artifacts', value: artifacts?.facts?.ownedArtifacts, Icon: Hammer, failed: artifacts?.status === 'error' },
+    { game: 'tower', label: 'Tower Tokens', value: tower?.facts?.tokenExpiries?.filter((at) => Date.parse(at) > now.getTime()).length, Icon: Castle, failed: tower?.status === 'error' },
+    { game: 'spin', label: 'Day Streak', value: spin?.progress?.current, Icon: Flame, failed: spin?.status === 'error' },
+    { game: 'artifacts', label: 'Artifacts', value: artifacts?.facts?.ownedArtifacts, Icon: Hammer, failed: artifacts?.status === 'error' },
   ];
   return <div className={styles.shell}>
-    <header className={styles.header}><div><h1>Your Vault</h1><p>Everything you’ve earned at EmiGuild.</p></div><Link className={styles.profile} href="/profile" aria-label="Your profile"><User size={22} /></Link></header>
+    <header className={styles.header}><div><h1 id="vault-heading" tabIndex={-1}>Your Vault</h1><p>Everything you’ve earned at EmiGuild.</p></div><Link className={styles.profile} href="/profile" aria-label="Your profile"><User size={22} /></Link></header>
     <div className={styles.refresh}><button onClick={refresh} disabled={loading} aria-label="Refresh Vault"><RotateCw size={15} />{loading ? 'Refreshing…' : 'Refresh'}</button></div>
     {error && <div className={styles.card} role="alert"><p>{error}</p><button className="btn btn-secondary" onClick={refresh}>Try again</button></div>}
-    {loading && !state && <div role="status" aria-label="Loading Vault" className={styles.skeleton}><div /><div /><div /></div>}
+    {loading && !state && <VaultRouteLoader compact />}
     {state && <>
-      <section className={styles.stats} aria-label="Your account totals">{stats.map(({ label, value, Icon, failed }) => <div key={label}><Icon aria-hidden="true" /><strong>{failed ? '—' : value ?? 0}</strong><span>{label}{failed && <small>Unavailable</small>}</span></div>)}</section>
+      <section className={styles.stats} aria-label="Your account totals">{stats.map(({ game, label, value, Icon, failed }) => <div key={label} data-game={game}><Icon aria-hidden="true" /><strong>{failed ? '—' : value ?? 0}</strong><span>{label}{failed && <small>Unavailable</small>}</span></div>)}</section>
       {state.rewardsUnavailable && <p role="alert" className={styles.secondary}>Rewards are temporarily unavailable. Refresh to try again.</p>}
       {rewards.length > 0 && <section className={styles.rewardGrid} aria-label="Available rewards">{rewards.map((reward) => <article className={styles.reward} key={reward.id}><Gift size={30} /><div><p className={styles.eyebrow}>Reward unlocked</p><h2>{reward.description}</h2><p>{reward.title}</p><p className={styles.helper}>Available until <VaultTime value={reward.validUntil} /></p><Action href={reward.href} primary>{reward.action}</Action></div></article>)}</section>}
-      {unlock && <Link href={unlock.game.href} className={styles.unlock}><Gift size={40} aria-hidden="true" /><div><p className={styles.eyebrow}>Next unlock</p><h2>{unlock.game.id === 'artifacts' ? unlock.needsEquipment ? `Equip your four ${unlock.title} pieces` : `You’re ${unlock.missingOwned} artifact${unlock.missingOwned === 1 ? '' : 's'} away from ${unlock.title}` : `${unlock.total - unlock.current} more consecutive spins to your milestone`}</h2><p>Reward: {unlock.reward}</p></div><ChevronRight aria-hidden="true" /></Link>}
-      {action && <section><h2 className={styles.sectionTitle}>Today’s action</h2><article className={styles.hero}><CardHeader game={action.game} /><p>{action.game.summary}</p>{action.game.id === 'guess36' && <><GuessPicks game={action.game} /><Details game={action.game} /></>}<Deadline game={action.game} /><Action href={action.game.href} primary>{action.label}</Action></article></section>}
-      <section><h2 className={styles.sectionTitle}>Today</h2><div className={styles.grid}>{spin && <DailyGameCard game={spin} now={now} />}{artifacts && <DailyGameCard game={artifacts} now={now} />}{byId('guess36') && action?.game.id !== 'guess36' && <OverviewCard game={byId('guess36')!} now={now} />}</div></section>
+      {unlock && <Link href={unlock.game.href} className={styles.unlock} data-game={unlock.game.id}><Gift size={40} aria-hidden="true" /><div><p className={styles.eyebrow}>Next unlock</p><h2>{unlock.game.id === 'artifacts' ? unlock.needsEquipment ? `Equip your four ${unlock.title} pieces` : `You’re ${unlock.missingOwned} artifact${unlock.missingOwned === 1 ? '' : 's'} away from ${unlock.title}` : `${unlock.total - unlock.current} more consecutive spins to your milestone`}</h2><p>Reward: {unlock.reward}</p></div><ChevronRight aria-hidden="true" /></Link>}
+      {action && <section><h2 className={styles.sectionTitle}>Today’s action</h2><article className={styles.hero} data-game={action.game.id}><CardHeader game={action.game} /><p>{action.game.summary}</p>{action.game.id === 'guess36' && <><GuessPicks game={action.game} /><Details game={action.game} /></>}<Deadline game={action.game} />{(action.game.id === 'spin' || action.game.id === 'artifacts') && action.game.facts?.dailyAvailable && action.label !== 'Exchange completed set' ? <button type="button" className={styles.primaryButton} disabled={dailyActionBusy} onClick={() => onDailyAction(action.game.id === 'spin' ? 'spin' : 'forge')}>{action.label}<ArrowRight size={18} aria-hidden="true" /></button> : <Action href={action.game.href} primary>{action.label}</Action>}</article></section>}
+      <section><h2 className={styles.sectionTitle}>Today</h2><div className={styles.grid}>{spin && <DailyGameCard game={spin} now={now} onDailyAction={onDailyAction} dailyActionBusy={dailyActionBusy} />}{artifacts && <DailyGameCard game={artifacts} now={now} onDailyAction={onDailyAction} dailyActionBusy={dailyActionBusy} />}{byId('guess36') && action?.game.id !== 'guess36' && <OverviewCard game={byId('guess36')!} now={now} />}</div></section>
       <section><h2 className={styles.sectionTitle}>Your progress</h2>{tower && <OverviewCard game={tower} now={now} refresh={refresh} />}</section>
       <section aria-label="Guild Drop" className={styles.dropSection}>{byId('guild-drop') && <OverviewCard game={byId('guild-drop')!} now={now} />}</section>
     </>}

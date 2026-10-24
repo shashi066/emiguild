@@ -3,7 +3,12 @@
 import { LuckyFusion } from './LuckyFusion';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { ForgeReveal } from './rewards/ForgeReveal';
+import { SLOT_META, rarityTheme, slotLabel, artifactImagePath, ArtifactSigil } from './rewards/armory-visuals';
+import { executeDailyReward, waitForRewardReveal } from '@/lib/daily-reward-client';
 import { useSession } from 'next-auth/react';
+import { ArmoryRouteLoader } from './ArmoryLoadingBoundary';
+import authStyles from './armory-auth.module.css';
 import { InfoGuideModal } from '@/components/InfoGuideModal';
 import InfoGuideButton from '@/components/InfoGuideButton';
 import { RewardTicketCard } from '@/components/RewardTicketCard';
@@ -18,6 +23,7 @@ import {
 } from '@/lib/armory-clock';
 import {
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   ChevronRight,
   Circle,
@@ -53,20 +59,6 @@ type ArmoryLoadResult = {
   ok: boolean;
   applied: boolean;
   error?: string;
-};
-
-const SLOT_META: Record<string, any> = {
-  HEADGEAR: { label: 'Headgear', Icon: Crown },
-  ARMOR: { label: 'Armor', Icon: Shield },
-  GLOVES: { label: 'Gloves', Icon: Hand },
-  BOOTS: { label: 'Boots', Icon: Footprints },
-};
-
-const RARITY_THEME: Record<string, { color: string; soft: string; glow: string; label: string }> = {
-  BRONZE: { color: '#b66a2d', soft: 'rgba(182,106,45,0.18)', glow: 'rgba(182,106,45,0.34)', label: 'Bronze' },
-  SILVER: { color: '#8ee8ff', soft: 'rgba(142,232,255,0.13)', glow: 'rgba(142,232,255,0.26)', label: 'Silver' },
-  GOLD: { color: '#ffe04f', soft: 'rgba(255,224,79,0.16)', glow: 'rgba(255,224,79,0.32)', label: 'Gold' },
-  PLATINUM: { color: '#b884ff', soft: 'rgba(184,132,255,0.18)', glow: 'rgba(184,132,255,0.32)', label: 'Platinum' },
 };
 
 const RARITY_UPGRADE: Record<string, string> = {
@@ -110,24 +102,6 @@ function ticketMeta(snapshot: any) {
     return { label: 'Bronze Pass', value: '10 hr', Icon: Shield, accent: '#ffaa3d' };
   }
   return { label: 'Armory Reward', value: 'Reward', Icon: Ticket, accent: '#ffd66e' };
-}
-
-function slotLabel(slot: string) {
-  return SLOT_META[slot]?.label ?? slot.charAt(0) + slot.slice(1).toLowerCase();
-}
-
-function rarityTheme(rarity?: string) {
-  return RARITY_THEME[rarity ?? ''] ?? { color: '#8fa0bd', soft: 'rgba(143,160,189,0.12)', glow: 'rgba(143,160,189,0.22)', label: rarity ?? 'Artifact' };
-}
-
-function slugify(value?: string) {
-  return (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-}
-
-function artifactImagePath(artifact: any) {
-  const setSlug = slugify(artifact?.set?.id || artifact?.set?.name);
-  const slotSlug = slugify(artifact?.slotType);
-  return setSlug && slotSlug ? `/images/artifacts/${setSlug}/${slotSlug}.webp` : '';
 }
 
 function getEquippedSlot(loadout: any, artifactId?: string) {
@@ -179,22 +153,8 @@ function updateInventory(inventory: any[], artifact: any, delta: number) {
   return inventory.map((row) => row === existing ? { ...row, quantity: nextQuantity } : row);
 }
 
-function ArtifactSigil({ artifact, size = 'md' }: { artifact: any; size?: 'sm' | 'md' | 'lg' }) {
-  const set = artifact?.set ?? artifact;
-  const theme = rarityTheme(set?.rarity);
-  const Icon = SLOT_META[artifact?.slotType]?.Icon ?? Gem;
-  const letters = artifact?.name?.split(' ').map((part: string) => part[0]).join('').slice(0, 2) || set?.shortLabel?.slice(0, 2) || 'A';
-
-  return (
-    <div className={`artifact-sigil artifact-sigil-${size}`} style={{ borderColor: `${theme.color}80`, color: theme.color, background: `radial-gradient(circle, ${theme.glow} 0 18%, rgba(255,255,255,0.06) 19% 35%, transparent 36%), ${theme.soft}` }}>
-      <Icon size={size === 'lg' ? 30 : size === 'sm' ? 16 : 22} strokeWidth={1.7} />
-      <span>{letters}</span>
-    </div>
-  );
-}
-
 export function ArmoryClient({ initialState, initialError = '' }: { initialState?: any; initialError?: string }) {
-  const { status, data: session } = useSession();
+  const { data: session, status } = useSession();
   const [state, setState] = useState<any>(initialState ?? null);
   const [loading, setLoading] = useState(!initialState && !initialError);
   const [saving, setSaving] = useState(false);
@@ -203,6 +163,9 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   const [notice, setNotice] = useState('');
   const [forgeResult, setForgeResult] = useState<any>(null);
   const [forgeCharging, setForgeCharging] = useState(false);
+  const forgeAnimationRef = useRef<AbortController | null>(null);
+  const actionInFlightRef = useRef(false);
+  useEffect(() => () => { forgeAnimationRef.current?.abort(); }, []);
   const [actionOverlay, setActionOverlay] = useState<ArmoryActionOverlayType | null>(null);
   const [claimConfirmation, setClaimConfirmation] = useState<any>(null);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -427,7 +390,11 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   }, [hasBlockingArmoryOverlay]);
 
   const act = async (url: string, body?: any, overlayType?: ArmoryActionOverlayType) => {
+    if (actionInFlightRef.current) return false;
+    actionInFlightRef.current = true;
     const isForge = url.endsWith('/forge');
+    const forgeAnimation = new AbortController();
+    if (isForge) forgeAnimationRef.current = forgeAnimation;
     const forgeStartedAt = performance.now();
     const actionStartedAt = performance.now();
     stateMutationRevisionRef.current += 1;
@@ -442,13 +409,18 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
     setError('');
     setNotice('');
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      const data = await readJson(res);
-      if (!res.ok) throw new Error(data.error || 'Artifacts action failed.');
+      const data = isForge
+        ? await executeDailyReward('forge', session?.user?.id ?? '')
+        : await (async () => {
+          const res = await fetch(url, {
+            method: 'POST', headers: body ? { 'Content-Type': 'application/json' } : undefined,
+            body: body ? JSON.stringify(body) : undefined,
+          });
+          const response = await readJson(res);
+          if (!res.ok) throw new Error(response.error || 'Artifacts action failed.');
+          return response;
+        })();
+      if (isForge && forgeAnimation.signal.aborted) return false;
       stateMutationRevisionRef.current += 1;
       if (data.state) {
         calibrateForgeClock(data.state);
@@ -515,8 +487,8 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
         });
       }
       if (data.selected && isForge) {
-        const remainingAnimationMs = Math.max(0, FORGE_ANIMATION_MS - (performance.now() - forgeStartedAt));
-        if (remainingAnimationMs > 0) await wait(remainingAnimationMs);
+        const remainingAnimationMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : Math.max(0, FORGE_ANIMATION_MS - (performance.now() - forgeStartedAt));
+        if (remainingAnimationMs > 0) await waitForRewardReveal(remainingAnimationMs, forgeAnimation.signal);
         setForgeResult(data.selected);
       }
       if (data.crafted) {
@@ -532,9 +504,10 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
       }
       return true;
     } catch (err: any) {
-      setError(err.message || 'Artifacts action failed.');
+      if (!forgeAnimation.signal.aborted) setError(err.message || 'Artifacts action failed.');
       return false;
     } finally {
+      actionInFlightRef.current = false;
       activeStateMutationsRef.current = Math.max(0, activeStateMutationsRef.current - 1);
       if (overlayType) {
         const remainingAnimationMs = Math.max(0, EQUIP_ANIMATION_MS - (performance.now() - actionStartedAt));
@@ -582,22 +555,22 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
   };
 
   if (loading || status === 'loading') {
-    return <div className="loading-state"><div className="spinner" />Loading Artifacts...</div>;
+    return <ArmoryRouteLoader />;
   }
 
   if (status !== 'authenticated') {
     return (
-      <main className="armory-rpg">
-        <div className="armory-shell auth-shell">
-          <Link href="/" className="armory-back"><ArrowLeft size={16} /> Back to Home</Link>
-          <section className="armory-panel auth-panel">
-            <Package size={46} color="#c7b7ff" />
-            <h1 className="font-orbitron">EmiGuild Armory</h1>
-            <p>Login to forge artifacts, build sets, and unlock reward tickets.</p>
-            <Link href="/login?callbackUrl=/armory" className="armory-primary">Login to Enter</Link>
+      <main className={authStyles.page}>
+        <div className={authStyles.shell}>
+          <Link href="/" className={authStyles.back}><ArrowLeft size={16} aria-hidden="true" /> Back to Home</Link>
+          <section className={authStyles.panel} aria-labelledby="armory-login-title">
+            <span className={authStyles.icon}><Package size={40} aria-hidden="true" /></span>
+            <p className={authStyles.eyebrow}>Artifacts</p>
+            <h1 id="armory-login-title">EmiGuild Armory</h1>
+            <p className={authStyles.description}>Log in to forge artifacts, build sets, and unlock reward tickets.</p>
+            <Link href="/login?callbackUrl=/armory" className={authStyles.primary}>Log in to enter <ArrowRight size={18} aria-hidden="true" /></Link>
           </section>
         </div>
-        <ArmoryStyles />
       </main>
     );
   }
@@ -627,7 +600,7 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
             />
           )}
         />
-        {error && <div className="armory-error">{error}</div>}
+        {error && <div className="armory-error" role="alert">{error}{!state && <button type="button" className="armory-secondary" onClick={() => void load({ force: true })}>Try again</button>}</div>}
         {resetError && <div className="armory-error">{resetError}</div>}
         {notice && <div className="armory-notice"><Gem size={16} />{notice}</div>}
 
@@ -944,72 +917,6 @@ function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge, onGu
   );
 }
 
-function ForgeReveal({ artifact, saving, onEquip, onKeep }: { artifact: any; saving: boolean; onEquip: () => void; onKeep: () => void }) {
-  const theme = rarityTheme(artifact?.set?.rarity);
-  const [revealReady, setRevealReady] = useState(false);
-
-  useEffect(() => {
-    if (!artifact) {
-      setRevealReady(false);
-      return;
-    }
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) {
-      setRevealReady(true);
-      return;
-    }
-    const id = window.setTimeout(() => setRevealReady(true), 120);
-    return () => window.clearTimeout(id);
-  }, [artifact?.id]);
-
-  return (
-    <div className={revealReady ? 'forge-reveal-layer reveal-ready' : 'forge-reveal-layer'} role="dialog" aria-modal="true" aria-label="Artifact acquired" style={{ ['--reveal-color' as any]: theme.color, ['--reveal-soft' as any]: theme.soft }}>
-      <section className="forge-reveal-scene">
-        <div className="forge-charge">
-          <span className="forge-spinner"><Sparkles size={30} /></span>
-          <span>Forging</span>
-        </div>
-        {artifact && <div className="reveal-rarity"><span>{theme.label} Artifact</span></div>}
-        {revealReady && artifact && (
-          <div className="reveal-art-wrap">
-            <div className="reveal-lines" />
-            <ArtifactArtwork artifact={artifact} />
-          </div>
-        )}
-        {revealReady && artifact && (
-          <>
-            <div className="reveal-copy">
-              <h2 className="font-orbitron">{artifact.name}</h2>
-              <p>{artifact.set?.name} Set</p>
-              <small>{slotLabel(artifact.slotType)}</small>
-              <strong>Added to your inventory</strong>
-            </div>
-            <div className="reveal-actions">
-              <button className="armory-primary" type="button" disabled={saving} onClick={onEquip}>Equip Now</button>
-              <button className="armory-secondary" type="button" disabled={saving} onClick={onKeep}>Keep in Inventory</button>
-            </div>
-          </>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function ArtifactArtwork({ artifact }: { artifact: any }) {
-  const [imageFailed, setImageFailed] = useState(false);
-  const path = artifactImagePath(artifact);
-
-  return (
-    <div className="reveal-art">
-      {path && !imageFailed ? (
-        <img src={path} alt="" width="320" height="320" loading="eager" decoding="async" onError={() => setImageFailed(true)} />
-      ) : (
-        <ArtifactSigil artifact={artifact} size="lg" />
-      )}
-    </div>
-  );
-}
-
 function LoadoutGrid({ loadout, saving, onUnequip }: { loadout: any; saving: boolean; onUnequip: (slot: string) => void }) {
   return (
     <section className="armory-panel loadout-panel">
@@ -1244,14 +1151,6 @@ function ArmoryStyles() {
       .forge-guide-control { position: absolute; top: 12px; right: 12px; z-index: 2; display: flex; align-items: center; gap: 8px; }
       .armory-rpg .admin-modal-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
       .armory-rpg > .admin-modal-overlay > .admin-modal-dialog { padding: var(--space-lg); border-color: rgba(231,206,137,0.18); border-radius: 8px; background: #0c1220; transition: none; }
-      .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }
-      .forge-reveal-scene { width: min(440px, 100%); min-height: min(640px, calc(100vh - 36px)); display: grid; grid-template-rows: auto 1fr auto auto; align-items: center; justify-items: center; gap: 14px; margin: auto; text-align: center; color: var(--color-text-primary); }
-      .forge-reveal-layer:not(.reveal-ready) .forge-reveal-scene { grid-template-rows: 1fr; }
-      .forge-charge { align-self: center; min-height: 150px; display: inline-grid; justify-items: center; align-content: center; gap: 14px; color: #dff8ff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.88rem; animation: revealFade 120ms ease both; }
-      .forge-spinner { width: 88px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; color: #61e8ff; }
-      .forge-spinner::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); border-top-color: #61e8ff; animation: forgeSpin 850ms linear infinite; }
-      .forge-spinner svg { position: relative; z-index: 1; }
-      .reveal-ready .forge-charge { display: none; }
       .armory-action-layer { position: fixed; inset: 0; z-index: 1001; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 18px; text-align: center; background: rgba(2,5,12,0.84); animation: revealFade 120ms ease; }
       .armory-action-layer strong { color: #f8fbff; font-family: var(--font-orbitron); font-size: clamp(1.25rem, 5vw, 1.8rem); line-height: 1.1; }
       .armory-action-layer span { color: var(--color-text-secondary); font-size: 0.86rem; }
@@ -1277,21 +1176,6 @@ function ArmoryStyles() {
       .claim-gem-reward { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; color: #d8c4ff !important; }
       .claim-confirm-warning { padding: 10px; border-left: 3px solid #ffb86c; background: rgba(255,184,108,0.07); color: #f0d4b5; }
       .claim-confirm-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      .reveal-rarity { min-height: 38px; display: none; align-items: center; border-top: 1px solid var(--reveal-color); border-bottom: 1px solid var(--reveal-color); padding: 0 18px; color: var(--reveal-color); font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.76rem; animation: revealFade 180ms ease both; }
-      .reveal-ready .reveal-rarity { display: inline-flex; }
-      .reveal-art-wrap { width: min(300px, 78vw); aspect-ratio: 1; display: grid; place-items: center; position: relative; animation: revealPop 280ms ease both; }
-      .reveal-art-wrap::before, .reveal-art-wrap::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
-      .reveal-art-wrap::before { inset: 12%; border: 1px solid var(--reveal-color); opacity: 0.28; }
-      .reveal-art-wrap::after { inset: 5%; border: 1px solid rgba(255,255,255,0.18); }
-      .reveal-lines { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.18) 50%, transparent 50.5%), linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.12) 50%, transparent 50.5%); opacity: 0.65; }
-      .reveal-art { position: relative; z-index: 1; width: 82%; aspect-ratio: 1; display: grid; place-items: center; }
-      .reveal-art img { width: 100%; height: 100%; object-fit: contain; }
-      .reveal-art .artifact-sigil-lg { width: min(176px, 62vw); }
-      .reveal-copy { display: grid; gap: 3px; animation: revealFade 180ms ease 430ms both; }
-      .reveal-copy h2 { font-size: clamp(1.8rem, 8vw, 2.65rem); line-height: 1.02; }
-      .reveal-copy p, .reveal-copy small { color: var(--color-text-secondary); }
-      .reveal-copy strong { margin-top: 8px; color: #dff8ff; font-size: 0.82rem; }
-      .reveal-actions { width: min(390px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; animation: revealFade 180ms ease 520ms both; }
       .armory-error { border: 1px solid rgba(255,92,92,0.32); background: rgba(255,92,92,0.1); border-radius: 8px; padding: var(--space-md); color: #ffb4b4; }
       .armory-notice { display: flex; align-items: center; gap: 8px; border: 1px solid rgba(184,132,255,0.28); background: rgba(184,132,255,0.09); border-radius: 8px; padding: 12px var(--space-md); color: #e6d8ff; font-weight: 800; }
       .armory-main-grid { display: grid; gap: var(--space-md); }
@@ -1338,17 +1222,9 @@ function ArmoryStyles() {
       .equipped-pill { color: #61e8ff; background: rgba(97,232,255,0.08); }
       .craft-pill { color: #e9dcff; background: rgba(184,132,255,0.12); border-color: rgba(184,132,255,0.28); }
       .craft-pill.locked { color: var(--color-text-muted); background: rgba(255,255,255,0.035); }
-      .artifact-sigil { border: 1px solid; border-radius: 50%; display: grid; place-items: center; position: relative; flex: 0 0 auto; }
-      .artifact-sigil span { position: absolute; bottom: 11%; font-family: var(--font-orbitron); font-size: 0.72rem; font-weight: 900; }
-      .artifact-sigil-sm { width: 44px; aspect-ratio: 1; }
-      .artifact-sigil-md { width: 66px; aspect-ratio: 1; }
-      .artifact-sigil-lg { width: 112px; aspect-ratio: 1; }
       .ticket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
       .auth-shell { min-height: 72vh; align-content: center; }
       .auth-panel { max-width: 560px; margin: 0 auto; padding: var(--space-lg); text-align: center; justify-items: center; }
-      @keyframes revealFade { from { opacity: 0; } to { opacity: 1; } }
-      @keyframes revealPop { from { opacity: 0; transform: scale(0.92); } 45% { opacity: 1; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
-      @keyframes forgeSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       @keyframes forgePulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.72; } }
       @media (max-width: 980px) { .artifact-grid, .reward-preview-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
       @media (max-width: 720px) { .armory-rpg { padding-left: 10px; padding-right: 10px; } .armory-topbar { align-items: flex-start; } .topbar-stats { flex-wrap: wrap; justify-content: flex-end; } .forge-panel { grid-template-columns: 1fr; } .forge-action { min-width: 0; } .artifact-grid, .reward-preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .reveal-actions { grid-template-columns: 1fr; } .forge-reveal-scene { min-height: calc(100vh - 36px); } }

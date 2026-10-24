@@ -1,0 +1,63 @@
+.loader {
+  min-height: calc(100svh - 72px);
+  min-height: calc(100dvh - 72px);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: var(--color-bg-base);
+  color: var(--color-accent-secondary);
+}
+.compact { min-height: 360px; }
+.safe { display: block; width: min(100%, 320px); height: auto; flex-shrink: 0; stroke: #345467; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.frame { fill: #101c2a; }
+.trim { fill: none; stroke: #203c50; }
+.panel { fill: none; stroke: #304658; }
+.seam { fill: none; stroke: #406278; }
+.rivet { fill: #7595a6; stroke: none; }
+.lights { fill: none; stroke: var(--color-accent-secondary); stroke-width: 3; opacity: .15; animation: power 2s ease-out forwards; }
+.lock { transform-origin: 160px 150px; animation: unlock 1.4s 2s ease-in-out forwards; }
+.lockRing { fill: none; stroke: var(--color-accent-secondary); }
+.bolt { stroke: #a6d5e0; stroke-width: 5; }
+.leftBolts { animation: retractLeft .6s 3.4s ease-in-out forwards; }
+.rightBolts { animation: retractRight .6s 3.4s ease-in-out forwards; }
+.leftDoor { animation: openLeft 2s 4s cubic-bezier(.65,0,.35,1) forwards; }
+.rightDoor { animation: openRight 2s 4s cubic-bezier(.65,0,.35,1) forwards; }
+.loot { opacity: 0; animation: reveal 2s 6s ease-out forwards; }
+.icons { fill: none; stroke: var(--color-accent-secondary); }
+.inventoryLines { fill: none; stroke: #163342; }
+.caption { text-align: center; }
+.title { font-family: Orbitron, sans-serif; font-size: 1rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+.status { position: relative; margin-top: 12px; width: 260px; max-width: 100%; height: 24px; color: var(--color-text-secondary); font-size: .85rem; }
+.stage, .waiting { position: absolute; inset: 0; opacity: 0; }
+.stage { animation: statusStage 2s linear; }
+.waiting { animation: showWaiting 1ms 8s forwards; }
+@keyframes power { to { opacity: 1; } }
+@keyframes unlock { to { transform: rotate(90deg); } }
+@keyframes retractLeft { to { transform: translateX(-12px); } }
+@keyframes retractRight { to { transform: translateX(12px); } }
+@keyframes openLeft { to { transform: translateX(-116px); } }
+@keyframes openRight { to { transform: translateX(116px); } }
+@keyframes reveal { to { opacity: 1; } }
+@keyframes statusStage { 0%, 99.99% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes showWaiting { to { opacity: 1; } }
+.complete .lights, .complete .loot, .complete .waiting { animation: none; opacity: 1; }
+.complete .lock { animation: none; transform: rotate(90deg); }
+.complete .leftBolts { animation: none; transform: translateX(-12px); }
+.complete .rightBolts { animation: none; transform: translateX(12px); }
+.complete .leftDoor { animation: none; transform: translateX(-116px); }
+.complete .rightDoor { animation: none; transform: translateX(116px); }
+.complete .stage { animation: none; opacity: 0; }
+@media (max-width: 600px) { .safe { width: min(100%, 240px); } }
+@media (max-height: 540px) { .loader { gap: 12px; padding-block: 12px; } .safe { width: min(100%, 180px); } }
+@media (prefers-reduced-motion: reduce) {
+  .loader * { animation: none; }
+  .lights, .loot, .waiting { opacity: 1; }
+  .leftDoor { transform: translateX(-116px); }
+  .rightDoor { transform: translateX(116px); }
+  .stage { opacity: 0; }
+}
+
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

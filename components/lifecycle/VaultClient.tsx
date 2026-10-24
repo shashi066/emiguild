@@ -1,12 +1,19 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { createVaultReader } from '@/lib/vault-client';
 import { AccountState } from '@/lib/lifecycle/rules';
 import { VaultDashboard } from './VaultDashboard';
+import { useVaultDailyAction } from '@/components/rewards/useVaultDailyAction';
+import { VaultDailyActionModal } from '@/components/rewards/VaultDailyActionModal';
 
 export function VaultClient() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (sessionStatus === 'unauthenticated') router.replace('/login?callbackUrl=/vault');
+  }, [sessionStatus, router]);
   const reader = useMemo(() => session?.user?.id ? createVaultReader<AccountState>('/api/vault') : null, [session?.user?.id]);
   const [state, setState] = useState<AccountState | null>(null);
   const [error, setError] = useState('');
@@ -23,7 +30,7 @@ export function VaultClient() {
       const body = await reader(force);
       if (id === requestId.current.value) setState(body);
     } catch (cause) {
-      if (id === requestId.current.value) { setState(null); setError(cause instanceof Error ? cause.message : 'Please try again.'); }
+      if (id === requestId.current.value) { setError(cause instanceof Error ? cause.message : 'Please try again.'); }
     } finally { if (id === requestId.current.value) setLoading(false); }
   }, [reader]);
   useEffect(() => {
@@ -54,5 +61,6 @@ export function VaultClient() {
     const timer = window.setTimeout(refresh, Math.min(2_147_483_647, Math.max(1000, next - Date.now() + 100)));
     return () => window.clearTimeout(timer);
   }, [state, refresh, now]);
-  return <VaultDashboard now={new Date(now)} state={state} loading={loading} error={error} refresh={() => void refresh(true)} />;
+  const daily = useVaultDailyAction(session?.user?.id, () => { void refresh(true); });
+  return <><div inert={!!daily.action}><VaultDashboard now={new Date(now)} state={state} loading={sessionStatus !== 'authenticated' || loading || (!state && !error)} error={error} refresh={() => void refresh(true)} onDailyAction={daily.start} dailyActionBusy={!!daily.action} /></div>{daily.action && <VaultDailyActionModal action={daily.action} close={daily.close} retry={() => daily.start(daily.action!.kind, true)} />}</>;
 }

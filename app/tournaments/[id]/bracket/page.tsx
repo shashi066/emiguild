@@ -1,5 +1,7 @@
 'use client';
 
+import { TournamentRouteLoader, TournamentLoadError, useTournamentLoading } from '@/components/TournamentLoadingBoundary';
+
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Trophy, X, Zap } from 'lucide-react';
@@ -46,33 +48,44 @@ export default function BracketPage() {
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  useTournamentLoading(loading);
   const [champion, setChampion] = useState<Player | null>(null);
   const [showChampion, setShowChampion] = useState(false);
 
-  useEffect(() => { fetchTournament(); }, [id]);
-
   const fetchTournament = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/tournaments/${id}`);
-    const data = await res.json();
-    const t: Tournament = data.tournament;
-    setTournament(t);
-    setLoading(false);
+    setLoadError(false);
+    try {
+      const res = await fetch(`/api/tournaments/${id}`);
+      if (!res.ok) throw new Error('Tournament request failed');
+      const data = await res.json();
+      const t: Tournament = data.tournament;
+      setTournament(t);
 
-    // Detect champion
-    if (t && t.status === 'FINISHED' && t.matches.length > 0) {
-      const totalRounds = Math.max(...t.matches.map((m) => m.round));
-      const finalMatch = t.matches.find((m) => m.round === totalRounds);
-      if (finalMatch?.winner) {
-        setChampion(finalMatch.winner);
-        setShowChampion(true);
+      // Detect champion
+      if (t && t.status === 'FINISHED' && t.matches.length > 0) {
+        const totalRounds = Math.max(...t.matches.map((m) => m.round));
+        const finalMatch = t.matches.find((m) => m.round === totalRounds);
+        if (finalMatch?.winner) {
+          setChampion(finalMatch.winner);
+          setShowChampion(true);
+        }
       }
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
   }, [id]);
 
+  useEffect(() => { void fetchTournament(); }, [fetchTournament]);
+
   if (loading) return (
-    <div style={{ textAlign: 'center', padding: '4rem' }}><div className="tourn-spinner" /></div>
+    <TournamentRouteLoader />
   );
+
+  if (loadError) return <TournamentLoadError retry={fetchTournament} />;
 
   if (!tournament) return (
     <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--color-text-muted)' }}>Tournament not found</div>

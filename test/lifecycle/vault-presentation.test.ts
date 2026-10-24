@@ -45,3 +45,25 @@ test('owned complete sets distinguish needing equipment from needing another art
   assert.equal(goal?.needsEquipment, true);
   assert.equal(goal?.missingOwned, 0);
 });
+
+test('live Guild Drop is first preference, including before secured rewards and daily actions', () => {
+  const drop = game('guild-drop', { facts: { liveDrops: [{ id: 'live', title: 'Live drop', endsAt: '2026-10-01T16:00:00Z' }] } });
+  assert.equal(selectVaultAction([game('tower', { facts: { canClaim: true } }), game('spin'), drop], now)?.game.id, 'guild-drop');
+  assert.equal(selectVaultAction([drop], now)?.label, 'Enter a live Guild Drop');
+});
+test('expired, paused, failed or result-only drops never take primary priority', () => {
+  for (const drop of [game('guild-drop', { facts: { liveDrops: [{ id: 'old', title: 'Expired', endsAt: now.toISOString() }] } }), game('guild-drop', { status: 'active', facts: { events: [{ id: 'entry', title: 'Pending result', participation: 'Awaiting result' }] } }), ...(['disabled', 'error'] as const).map(status => game('guild-drop', { status, facts: { liveDrops: [{ id: 'live', title: 'Live' }] } }))]) {
+    assert.equal(selectVaultAction([drop, game('spin')], now)?.game.id, 'spin');
+  }
+});
+test('an unentered live drop without an end time still takes priority', () => {
+  const drop = game('guild-drop', { deadline: undefined, facts: { liveDrops: [{ id: 'live', title: 'Open draw' }] } });
+  assert.equal(selectVaultAction([game('guess36'), drop], now)?.game.id, 'guild-drop');
+});
+test('one expired drop cannot hide another live drop behind a stale card deadline', () => {
+  const drop = game('guild-drop', { deadline: { at: now.toISOString(), label: 'Old deadline' }, facts: { liveDrops: [
+    { id: 'old', title: 'Expired', endsAt: now.toISOString() },
+    { id: 'new', title: 'Still live', endsAt: '2026-10-01T15:00:00Z' },
+  ] } });
+  assert.equal(selectVaultAction([drop], now)?.game.deadline?.at, '2026-10-01T15:00:00Z');
+});

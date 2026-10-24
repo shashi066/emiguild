@@ -154,6 +154,28 @@ test('game progress uses owned, published, current account state without writes'
       assert.ok(state.game.details.some((line) => line.includes('you won')));
       assert.ok(!state.game.details.some((line) => line.includes('draft')));
     });
+    await t.test('only live drops the user has not entered take first Vault priority', async () => {
+      const eligibleId = `${prefix}-unentered-live`;
+      for (const [suffix, data] of [
+        ['unentered-live', { status: 'ACTIVE', startsAt: now, endsAt: later }],
+        ['future', { status: 'ACTIVE', startsAt: later, endsAt: null }],
+        ['expired', { status: 'ACTIVE', endsAt: now }],
+        ['closed-no-entry', { status: 'CLOSED', endsAt: later }],
+        ['draft-no-entry', { status: 'DRAFT', endsAt: later }],
+      ] as const) {
+        await prisma.luckyDraw.create({ data: { id: `${prefix}-${suffix}`, title: suffix, prize: 'Gaming time', ...data } });
+      }
+      const before = (await guildDropProgress(user.id, now)).game;
+      assert.deepEqual(before.facts?.liveDrops?.map(drop => drop.id), [eligibleId]);
+      assert.equal(selectVaultAction([before], now)?.game.id, 'guild-drop');
+      await prisma.drawEntry.create({ data: { userId: user.id, drawId: eligibleId } });
+      const after = (await guildDropProgress(user.id, now)).game;
+      assert.deepEqual(after.facts?.liveDrops, []);
+      assert.equal(selectVaultAction([after], now), null);
+      assert.ok(after.facts?.events?.some(event => event.id === eligibleId), 'joined drop remains in entry history');
+      const otherPlayer = (await guildDropProgress(other.id, now)).game;
+      assert.ok(otherPlayer.facts?.liveDrops?.some(drop => drop.id === eligibleId));
+    });
     await t.test('Vault reads leave account, game records, and settings untouched', async () => {
       const before = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
       const settings = await prisma.setting.findMany({ orderBy: { key: 'asc' } });

@@ -1,6 +1,13 @@
 import { GameProgress } from './rules';
 
 export function selectVaultAction(games: GameProgress[], now: Date) {
+  const liveDrop = games.find(game => game.id === 'guild-drop' && !['disabled', 'error'].includes(game.status)
+    && game.facts?.liveDrops?.some(drop => !drop.endsAt || Date.parse(drop.endsAt) > now.getTime()));
+  if (liveDrop) {
+    const nextEnd = liveDrop.facts!.liveDrops!.filter(drop => drop.endsAt && Date.parse(drop.endsAt) > now.getTime())
+      .map(drop => drop.endsAt!).sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+    return { game: { ...liveDrop, deadline: nextEnd ? { at: nextEnd, label: 'Next live drop closes' } : undefined }, label: 'Enter a live Guild Drop' };
+  }
   const eligible = games.filter((game) => !['disabled', 'error', 'empty'].includes(game.status)
     && (!game.deadline || Date.parse(game.deadline.at) > now.getTime()));
   const claim = eligible.find((game) => game.id === 'tower' && game.facts?.canClaim)

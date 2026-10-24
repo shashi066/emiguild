@@ -1,5 +1,7 @@
 'use client';
 
+import { TournamentRouteLoader, TournamentLoadError, useTournamentLoading } from '@/components/TournamentLoadingBoundary';
+
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -18,16 +20,25 @@ export default function PlayersPage() {
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  useTournamentLoading(loading);
   const [search, setSearch] = useState('');
 
   useEffect(() => { fetchPlayers(); }, [id]);
 
   async function fetchPlayers() {
     setLoading(true);
-    const res = await fetch(`/api/tournaments/${id}/players`);
-    const data = await res.json();
-    setPlayers(data.players || []);
-    setLoading(false);
+    setLoadError(false);
+    try {
+      const res = await fetch(`/api/tournaments/${id}/players`);
+      if (!res.ok) throw new Error('Tournament request failed');
+      const data = await res.json();
+      setPlayers(data.players || []);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const filtered = players.filter((p) =>
@@ -64,8 +75,8 @@ export default function PlayersPage() {
 
       {/* Player List */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '3rem' }}><div className="tourn-spinner" /></div>
-      ) : filtered.length === 0 ? (
+        <TournamentRouteLoader />
+      ) : loadError ? (<TournamentLoadError retry={fetchPlayers} />) : filtered.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
           {players.length === 0 ? 'No players registered yet.' : 'No players match your search.'}
         </div>

@@ -1,5 +1,7 @@
 'use client';
 
+import { TournamentRouteLoader, TournamentLoadError, useTournamentLoading } from '@/components/TournamentLoadingBoundary';
+
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Swords, Check, Shield } from 'lucide-react';
@@ -49,26 +51,37 @@ export default function MatchesPage() {
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  useTournamentLoading(loading);
   const [activeRound, setActiveRound] = useState<number | null>(null);
-
-  useEffect(() => { fetchTournament(); }, [id]);
 
   const fetchTournament = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/tournaments/${id}`);
-    const data = await res.json();
-    setTournament(data.tournament);
-    // Auto-select first incomplete round
-    if (data.tournament?.matches?.length > 0) {
-      const firstIncompleteRound = [...data.tournament.matches]
-        .filter((m: Match) => m.status !== 'COMPLETED' && !m.isBye)
-        .sort((a: Match, b: Match) => a.round - b.round)[0]?.round;
-      setActiveRound(firstIncompleteRound ?? data.tournament.matches[0]?.round);
+    setLoadError(false);
+    try {
+      const res = await fetch(`/api/tournaments/${id}`);
+      if (!res.ok) throw new Error('Tournament request failed');
+      const data = await res.json();
+      setTournament(data.tournament);
+      // Auto-select first incomplete round
+      if (data.tournament?.matches?.length > 0) {
+        const firstIncompleteRound = [...data.tournament.matches]
+          .filter((m: Match) => m.status !== 'COMPLETED' && !m.isBye)
+          .sort((a: Match, b: Match) => a.round - b.round)[0]?.round;
+        setActiveRound(firstIncompleteRound ?? data.tournament.matches[0]?.round);
+      }
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [id]);
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '4rem' }}><div className="tourn-spinner" /></div>;
+  useEffect(() => { void fetchTournament(); }, [fetchTournament]);
+
+  if (loading) return <TournamentRouteLoader />;
+
+  if (loadError) return <TournamentLoadError retry={fetchTournament} />;
 
   if (!tournament) return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--color-text-muted)' }}>Not found</div>;
 
