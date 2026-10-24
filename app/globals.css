@@ -548,7 +548,8 @@ h1, h2, h3, h4, h5, h6 {
 .emi-header>div:nth-child(2) { display: grid; flex: 1; }
 .emi-header strong { font-family: Orbitron,sans-serif; font-size: .92rem; }
 .emi-header span { color: var(--color-text-muted); font-size: .68rem; }
-.emi-avatar { width: 36px; height: 36px; flex: 0 0 36px; overflow: hidden; border: 1px solid rgba(255,255,255,.38); border-radius: 50%; background-color: #f7c9d7; box-shadow: 0 0 18px rgba(255,159,190,.3); }
+.emi-launcher-avatar { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; object-fit: cover; background: #080b14; }
+.emi-avatar { width: 36px; height: 36px; flex: 0 0 36px; overflow: hidden; border: 1px solid rgba(0,212,255,.38); border-radius: 50%; background-color: #080b14; }
 .emi-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .emi-avatar.large { width: 48px; height: 48px; margin: 0 auto 12px; }
 .emi-icon-button { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 9px; color: var(--color-text-secondary); background: transparent; cursor: pointer; }
@@ -563,7 +564,7 @@ h1, h2, h3, h4, h5, h6 {
 .emi-ai-details { margin-top: 5px; color: var(--color-text-muted); }
 .emi-ai-details summary { width: max-content; color: var(--color-accent-secondary); font-weight: 700; cursor: pointer; }
 .emi-ai-details[open] summary { margin-bottom: 4px; }
-.emi-name-row { display: flex; align-items: center; gap: 7px; }
+.emi-name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .emi-beta-badge { padding: 2px 6px; border: 1px solid rgba(0,212,255,.35); border-radius: 999px; background: rgba(0,212,255,.1); color: var(--color-accent-secondary) !important; font-size: .58rem !important; font-weight: 800; letter-spacing: .08em; line-height: 1.2; text-transform: uppercase; }
 .emi-messages { min-height: 0; }
 .emi-message.user { align-self: flex-end; align-items: flex-end; }

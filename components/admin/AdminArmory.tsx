@@ -500,6 +500,14 @@ export function AdminArmory({ initialConfig, initialError = '' }: { initialConfi
                 <option value="false">Disabled</option>
               </select>
             </label>
+            <label>
+              <span className="form-label">Lucky Fusion Enabled</span>
+              <select className="form-input" value={settingsDraft.armory_fusion_enabled ?? 'false'} onChange={(event) => setSettingsDraft((current: any) => ({ ...current, armory_fusion_enabled: event.target.value }))}>
+                <option value="false">Disabled</option>
+                <option value="true">Enabled</option>
+              </select>
+              <small>Separate from Daily Forge. Existing crafting and rewards remain available.</small>
+            </label>
           </ArmoryConfigModal>
         )}
 

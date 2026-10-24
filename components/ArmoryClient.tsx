@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LuckyFusion } from './LuckyFusion';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { InfoGuideModal } from '@/components/InfoGuideModal';
@@ -193,7 +194,7 @@ function ArtifactSigil({ artifact, size = 'md' }: { artifact: any; size?: 'sm' |
 }
 
 export function ArmoryClient({ initialState, initialError = '' }: { initialState?: any; initialError?: string }) {
-  const { status } = useSession();
+  const { status, data: session } = useSession();
   const [state, setState] = useState<any>(initialState ?? null);
   const [loading, setLoading] = useState(!initialState && !initialError);
   const [saving, setSaving] = useState(false);
@@ -612,6 +613,19 @@ export function ArmoryClient({ initialState, initialError = '' }: { initialState
           nextForgeTimer={nextForgeTimer}
           onForge={() => act('/api/armory/forge')}
           onGuide={() => setGuideOpen(true)}
+          fusion={state && (
+            <LuckyFusion
+              state={state}
+              userId={session?.user?.id ?? ''}
+              busy={saving}
+              onBusy={(value) => { stateMutationRevisionRef.current += 1; setSaving(value); }}
+              refresh={async () => {
+                await stateRequestRef.current?.catch(() => undefined);
+                stateMutationRevisionRef.current += 1;
+                await requestArmoryState();
+              }}
+            />
+          )}
         />
         {error && <div className="armory-error">{error}</div>}
         {resetError && <div className="armory-error">{resetError}</div>}
@@ -878,18 +892,19 @@ function ArmoryHeader({ inventoryTotal, guildGems }: { inventoryTotal: number; g
   );
 }
 
-function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge, onGuide }: {
+function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge, onGuide, fusion }: {
   state: any;
   saving: boolean;
   forging: boolean;
   nextForgeTimer: string;
   onForge: () => void;
   onGuide: () => void;
+  fusion?: ReactNode;
 }) {
   if (state?.forge?.reason === 'disabled') {
     return (
       <section className="armory-panel forge-disabled-card">
-        <div className="forge-guide-control"><InfoGuideButton onClick={onGuide} ariaLabel="Open How Artifacts Work guide" /></div>
+        <div className="forge-guide-control">{fusion}<InfoGuideButton onClick={onGuide} ariaLabel="Open How Artifacts Work guide" /></div>
         <Sparkles size={48} />
         <h2>Daily Forge Disabled</h2>
         <p>The Daily Forge feature is currently disabled by the administrator.</p>
@@ -907,7 +922,7 @@ function DailyForgePanel({ state, saving, forging, nextForgeTimer, onForge, onGu
 
   return (
     <section className={forging ? 'forge-panel forging' : 'forge-panel'}>
-      <div className="forge-guide-control"><InfoGuideButton onClick={onGuide} ariaLabel="Open How Artifacts Work guide" /></div>
+      <div className="forge-guide-control">{fusion}<InfoGuideButton onClick={onGuide} ariaLabel="Open How Artifacts Work guide" /></div>
       <div className="forge-ring"><Sparkles size={34} /></div>
       <div className="forge-copy">
         <span className="eyebrow">Daily Forge</span>
@@ -1226,7 +1241,7 @@ function ArmoryStyles() {
       .forge-action { display: grid; gap: 8px; justify-items: stretch; min-width: 180px; }
       .forge-locked { background: rgba(255,255,255,0.04); color: var(--color-text-secondary); border-color: rgba(255,255,255,0.14); }
       .forge-locked svg { color: var(--color-accent-warning); }
-      .forge-guide-control { position: absolute; top: 12px; right: 12px; z-index: 2; }
+      .forge-guide-control { position: absolute; top: 12px; right: 12px; z-index: 2; display: flex; align-items: center; gap: 8px; }
       .armory-rpg .admin-modal-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
       .armory-rpg > .admin-modal-overlay > .admin-modal-dialog { padding: var(--space-lg); border-color: rgba(231,206,137,0.18); border-radius: 8px; background: #0c1220; transition: none; }
       .forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }

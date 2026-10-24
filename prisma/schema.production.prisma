@@ -12,6 +12,7 @@ datasource db {
 }
 
 model User {
+  armoryFusionReceipts ArmoryFusionReceipt[]
   id                     String   @id @default(cuid())
   name                   String
   email                  String   @unique
@@ -817,4 +818,21 @@ model AssistantUsageDaily {
   @@id([date, actorKey])
   @@index([date])
   @@map("assistant_usage_daily")
+}
+
+
+model ArmoryFusionReceipt {
+  userId String
+  requestId String
+  payload String
+  outputArtifactId String
+  outputSnapshot String
+  oddsVersion String
+  inputTier String
+  outputTier String
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, requestId])
+  @@index([createdAt, inputTier, outputTier])
+  @@map("armory_fusion_receipts")
 }
