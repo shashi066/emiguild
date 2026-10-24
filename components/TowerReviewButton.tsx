@@ -157,7 +157,7 @@ export function TowerReviewButton({
         .tower-review.subtle::before { display: none; }
         .tower-review.subtle strong { font-size: .8rem; font-weight: 500; color: var(--color-text-secondary); }
         .tower-review.subtle p { font-size: .75rem; margin-top: 3px; }
-        .tower-review.subtle .tower-review-action { width: auto; min-height: 44px; padding: 8px 0; border: 0; background: transparent; color: #c4b5e4; font-size: .8rem; font-weight: 500; text-decoration: underline; text-underline-offset: 4px; }
+        .tower-review.subtle .tower-review-action { width: auto; min-height: 44px; padding: 8px 0; border: 0; background: transparent; color: var(--vault-accent, #c4b5e4); font-size: .8rem; font-weight: 500; text-decoration: underline; text-underline-offset: 4px; }
         .tower-review.subtle .tower-review-action:hover { color: var(--color-text-primary); }
         @media (prefers-reduced-motion: reduce) {
           .tower-review::before { animation: none; opacity: .55; transform: none; }

@@ -1,0 +1,7 @@
+.loader { min-height: 330px; padding: 24px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--color-text-secondary); font-size: .9rem; }
+.bracket { display: block; width: min(100%, 300px); height: auto; }
+.stage { fill: var(--color-bg-card); stroke: var(--color-accent-secondary); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .18; animation: illuminate 2s ease-out forwards; }
+.stage path { fill: none; }
+.complete .stage { animation: none; opacity: 1; }
+@keyframes illuminate { from { opacity: .18; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .stage { animation: none; opacity: 1; } }

@@ -1,0 +1,62 @@
+.loader {
+  min-height: 330px;
+  padding: 24px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  color: var(--color-text-muted, #94a3b8);
+  font-size: 0.9rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  gap: 8px;
+}
+
+.tile {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 8px;
+  background: var(--color-bg-card);
+}
+
+.highlight {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--color-accent-secondary);
+  border-radius: inherit;
+  background: rgba(0, 212, 255, 0.22);
+  opacity: 0;
+  animation-name: illuminate;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+.gift {
+  position: relative;
+  color: var(--color-text-primary);
+}
+
+@keyframes illuminate {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.complete .highlight {
+  animation: none;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .highlight {
+    animation: none;
+    opacity: 1;
+  }
+}

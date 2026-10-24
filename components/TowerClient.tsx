@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import InfoGuideModal from '@/components/InfoGuideModal';
 import InfoGuideButton from '@/components/InfoGuideButton';
+import TowerLoader from '@/components/TowerLoader';
+import { TowerRouteLoader, useTowerLoadingComplete } from '@/components/TowerLoadingBoundary';
 import { TowerReviewButton } from '@/components/TowerReviewButton';
 import type { TowerReviewState } from '@/lib/tower-review';
 import { RewardTicketCard } from '@/components/RewardTicketCard';
@@ -191,6 +193,7 @@ function attemptMessage(attempt: TowerAttemptState | null, result: PickResult | 
 }
 
 export function TowerClient({ initialState, initialError = '' }: TowerClientProps) {
+  const routeLoadingComplete = useTowerLoadingComplete();
   const [state, setState] = useState<TowerState>(initialState ?? {
     enabled: true,
     runDurationSeconds: DEFAULT_TOWER_RUN_DURATION_SECONDS,
@@ -374,22 +377,25 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   }, [activeAttemptId, clockAnchor, redCardRevealActive, refresh, timedStatus]);
 
   useEffect(() => {
-    if (!initialSettlingRef.current) return;
+    if (!initialSettlingRef.current || !routeLoadingComplete) return;
     let innerFrame = 0;
     const outerFrame = window.requestAnimationFrame(() => {
       innerFrame = window.requestAnimationFrame(() => {
-        if (activeAttemptStatus === 'IN_PROGRESS' && focusedLevel) {
-          scrollTowerFloor(currentFloorRef.current, 'auto');
-        }
-        initialSettlingRef.current = false;
-        setSettling(false);
+        const finishSettling = () => {
+          if (activeAttemptStatus === 'IN_PROGRESS' && focusedLevel) {
+            scrollTowerFloor(currentFloorRef.current, 'auto');
+          }
+          initialSettlingRef.current = false;
+          setSettling(false);
+        };
+        finishSettling();
       });
     });
     return () => {
       window.cancelAnimationFrame(outerFrame);
       if (innerFrame) window.cancelAnimationFrame(innerFrame);
     };
-  }, [activeAttemptId, activeAttemptStatus, focusedLevel]);
+  }, [activeAttemptId, activeAttemptStatus, focusedLevel, routeLoadingComplete]);
 
   useEffect(() => {
     if (initialSettlingRef.current) return;
@@ -562,9 +568,8 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
       {settling && (
         <div className="tower-settling-loader">
           <div className="tower-settling-shell">
-            <div className="loading-state tower-settling-state" role="status" aria-live="polite">
-              <span className="spinner" aria-hidden="true" />
-              <span>Loading Tower...</span>
+            <div className="loading-state tower-settling-state">
+              <TowerRouteLoader />
             </div>
           </div>
         </div>
@@ -594,9 +599,8 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         <p className="sr-only" aria-live="assertive">{timerAnnouncement}</p>
 
         {screen === 'loading' ? (
-          <div className="loading-state tower-inline-loading" role="status">
-            <span className="spinner" aria-hidden="true" />
-            <span>Loading Tower...</span>
+          <div className="loading-state tower-inline-loading">
+            <TowerLoader />
           </div>
         ) : screen === 'error' ? (
           <EmptyState icon={<ShieldAlert size={34} />} title="Tower could not load" text={error} action={<button className="tower-secondary-button" type="button" onClick={() => refresh().catch(() => undefined)} disabled={loading}><RefreshCw size={16} /> Retry</button>} />

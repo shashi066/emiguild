@@ -28,12 +28,13 @@ test('Guess 36 routes, schema, settings, and ticket source share the new namespa
   assert.doesNotMatch(migration, /lucky_hour|Lucky Hour/);
   assert.ok(migration.includes('guess_36_entries_roundId_userId_key'));
   assert.ok(migration.includes('guess_36_rewards'));
-  for (const path of ['app/api/settings/route.ts', 'app/api/admin/settings/route.ts']) {
+  for (const path of ['app/api/admin/settings/route.ts']) {
     const route = readFileSync(path, 'utf8');
     assert.ok(route.includes('guess_36_rewards'));
     assert.ok(route.includes('guess_36_enabled'));
     assert.ok(route.includes('guess_36_modes'));
   }
+  assert.doesNotMatch(readFileSync('app/api/settings/route.ts', 'utf8'), /guess_36_rewards|guess_36_enabled|guess_36_modes/);
   assert.equal(JSON.parse(readFileSync('vercel.json', 'utf8')).crons[0].path, '/api/cron/guess-36/draw');
   const cron = readFileSync('app/api/cron/guess-36/draw/route.ts', 'utf8');
   assert.equal(cron.includes('CRON_SECRET'), false);

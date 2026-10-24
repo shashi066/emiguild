@@ -1,0 +1,34 @@
+.loader { min-height: calc(100svh - 72px); min-height: calc(100dvh - 72px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 24px 16px; background: var(--color-bg-base); color: var(--color-accent-secondary); }
+.illustration { display: block; width: min(100%, 300px); height: auto; flex-shrink: 0; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.frame { fill: #0c1925; stroke: #294857; }
+.tile { animation: assemble 1s calc(var(--tile) * .18s) ease-out both; }
+.tile > rect:first-child { fill: #102633; stroke: #315668; }
+.tile text { font-family: var(--font-orbitron), sans-serif; font-size: 20px; font-weight: 600; fill: #b5deed; stroke: none; }
+.scan { fill: #67e8f9; stroke: #67e8f9; opacity: .08; animation: scanTile .7s calc(2s + var(--tile) * .24s) ease-in-out both; }
+.ticket { opacity: 0; animation: ticketArrive 2s 4s cubic-bezier(.2,.7,.3,1) both; }
+.ticket > path:first-child { fill: #0b202d; stroke: #67e8f9; }
+.perforation { stroke: #365c6d; stroke-dasharray: 3 5; }
+.ticket text { stroke: none; fill: #b7f0ff; font-family: var(--font-orbitron), sans-serif; }
+.ticketLabel { font-size: 10px; letter-spacing: 3px; }
+.brandNumber { font-size: 30px; font-weight: 700; }
+.ticketLines { stroke: #416b7e; }
+.lock { opacity: 0; animation: lockAppear .8s 6s ease-out both; }
+.lock rect { fill: #102e3b; }
+.shackle { animation: closeLock 1s 6s ease-out both; }
+.keyhole { stroke-width: 2; }
+.sealed { opacity: 0; stroke: #67e8f9; stroke-width: 2; animation: confirm 1s 7s ease-out both; }
+.caption { margin: 0; color: var(--color-text-secondary); font-size: .95rem; line-height: 1.5; text-align: center; }
+@keyframes assemble { from { opacity: .15; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scanTile { 0%, 100% { opacity: .08; } 50% { opacity: .32; } }
+@keyframes ticketArrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes lockAppear { from { opacity: 0; } to { opacity: 1; } }
+@keyframes closeLock { from { transform: translateY(-5px); } to { transform: translateY(0); } }
+@keyframes confirm { from { opacity: 0; } to { opacity: 1; } }
+.complete .tile, .complete .scan, .complete .ticket, .complete .lock, .complete .shackle, .complete .sealed { animation: none; transform: none; }
+.complete .tile, .complete .ticket, .complete .lock, .complete .sealed { opacity: 1; }
+.complete .scan { opacity: .08; }
+@media(prefers-reduced-motion:reduce) {
+  .tile, .scan, .ticket, .lock, .shackle, .sealed { animation: none; transform: none; }
+  .tile, .ticket, .lock, .sealed { opacity: 1; }
+  .scan { opacity: .08; }
+}

@@ -1,3 +1,5 @@
+import { FUSION_ODDS, FUSION_VERSION, type FusionTier } from './armory-fusion-rules';
+import { armoryTransaction } from './armory-transaction';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { caseInsensitiveContains } from '@/lib/prisma-search';
@@ -10,6 +12,7 @@ export type ArmorySlot = typeof ARMORY_SLOTS[number];
 
 export const ARMORY_SETTING_KEYS = [
   'armory_enabled',
+  'armory_fusion_enabled',
 ] as const;
 
 export const DEFAULT_ARMORY_SETS = [
@@ -525,6 +528,7 @@ export async function getArmoryState(userId: string) {
     }),
   ]);
 
+  const fusionSetting = await prisma.setting.findUnique({ where: { key: 'armory_fusion_enabled' } });
   const enabled = settings.armory_enabled !== 'false';
   const equipped = {
     HEADGEAR: loadout?.headgear ?? null,
@@ -536,6 +540,11 @@ export async function getArmoryState(userId: string) {
   const completeSet = completeSetId ? sets.find((set) => set.id === completeSetId) ?? null : null;
 
   return {
+    fusion: {
+      enabled: fusionSetting?.value === 'true', odds: FUSION_ODDS, version: FUSION_VERSION,
+      availableCopies: Object.fromEntries(inventory.map(row => [row.artifactId, Math.max(0, row.quantity - Object.values(equipped).filter(piece => piece?.id === row.artifactId).length)])),
+      availableTiers: (Object.keys(FUSION_ODDS) as FusionTier[]).filter(tier => Object.keys(FUSION_ODDS[tier]).every(outputTier => artifacts.some(a => a.active && a.set.active && a.set.rarity === outputTier))),
+    },
     today,
     serverNow: serverNow.toISOString(),
     guildGems: user?.guildGems ?? 0,
@@ -590,7 +599,7 @@ export async function forgeArtifact(userId: string) {
   const set = pickWeightedSet(config.sets);
   const selected = pickWeightedArtifact(set.artifacts);
 
-  await prisma.$transaction(async (tx) => {
+  await armoryTransaction(async (tx) => {
     const existing = await tx.armoryDailyClaim.findUnique({
       where: { userId_claimDate: { userId, claimDate: today } },
     });
@@ -620,7 +629,7 @@ export async function forgeArtifact(userId: string) {
 export async function grantAdminArmoryArtifact(userId: string, setId: string) {
   await ensureArmoryDefaults();
 
-  return prisma.$transaction(async (tx) => {
+  return armoryTransaction(async (tx) => {
     const [user, set] = await Promise.all([
       tx.user.findFirst({
         where: { id: userId, role: 'USER' },
@@ -779,7 +788,7 @@ export async function checkInBookingWithArtifact(bookingId: string) {
   const selected = pickWeightedArtifact(selectedSet.artifacts);
 
   try {
-    const updatedBooking = await prisma.$transaction(async (tx) => {
+    const updatedBooking = await armoryTransaction(async (tx) => {
       await tx.booking.updateMany({
         where: { id: bookingId, checkedInAt: null },
         data: { status: 'CHECKED_IN', checkedInAt },
@@ -838,20 +847,21 @@ export async function equipArtifact(userId: string, slotType: string, artifactId
   const slot = slotType as ArmorySlot;
   const field = SLOT_FIELD[slot];
 
+  return armoryTransaction(async tx => {
   if (!artifactIdValue) {
-    await prisma.armoryLoadout.updateMany({ where: { userId }, data: { [field]: null } });
+    await tx.armoryLoadout.updateMany({ where: { userId }, data: { [field]: null } });
     return { slotType: slot, artifactId: null };
   }
 
   const [inventory, loadout] = await Promise.all([
-    prisma.armoryInventory.findUnique({
+    tx.armoryInventory.findUnique({
       where: { userId_artifactId: { userId, artifactId: artifactIdValue } },
       select: {
         quantity: true,
         artifact: { select: { slotType: true } },
       },
     }),
-    prisma.armoryLoadout.findUnique({
+    tx.armoryLoadout.findUnique({
       where: { userId },
       select: {
         headgearArtifactId: true,
@@ -876,13 +886,14 @@ export async function equipArtifact(userId: string, slotType: string, artifactId
     throw new Error('NO_FREE_COPY');
   }
 
-  await prisma.armoryLoadout.upsert({
+  await tx.armoryLoadout.upsert({
     where: { userId },
     update: { [field]: artifactIdValue },
     create: { userId, [field]: artifactIdValue },
   });
 
   return { slotType: slot, artifactId: artifactIdValue ?? null };
+  });
 }
 
 export async function craftArmoryArtifact(userId: string, artifactIdValue: string) {
@@ -897,12 +908,13 @@ export async function craftArmoryArtifact(userId: string, artifactIdValue: strin
   const nextArtifact = artifacts.find((item) => item.slotType === artifact.slotType && item.set.rarity === nextRarity);
   if (!nextArtifact) throw new Error('NO_CRAFT_TARGET');
 
+  return armoryTransaction(async tx => {
   const [inventory, loadout] = await Promise.all([
-    prisma.armoryInventory.findUnique({
+    tx.armoryInventory.findUnique({
       where: { userId_artifactId: { userId, artifactId: artifact.id } },
       select: { quantity: true },
     }),
-    prisma.armoryLoadout.findUnique({
+    tx.armoryLoadout.findUnique({
       where: { userId },
       select: {
         headgearArtifactId: true,
@@ -924,7 +936,7 @@ export async function craftArmoryArtifact(userId: string, artifactIdValue: strin
   if (inventory.quantity - equippedCopies < 3) throw new Error('NO_FREE_CRAFT_COPIES');
 
   const requiredQuantity = 3 + equippedCopies;
-  await prisma.$transaction(async (tx) => {
+
     const consumed = await tx.armoryInventory.updateMany({
       where: { userId, artifactId: artifact.id, quantity: { gte: requiredQuantity } },
       data: { quantity: { decrement: 3 } },
@@ -935,14 +947,14 @@ export async function craftArmoryArtifact(userId: string, artifactIdValue: strin
       update: { quantity: { increment: 1 } },
       create: { userId, artifactId: nextArtifact.id, quantity: 1 },
     });
-  });
 
   return { crafted: nextArtifact, consumedArtifactId: artifactIdValue, consumedQuantity: 3 };
+  });
 }
 
 export async function claimArmorySet(userId: string) {
   const claimDate = getArmoryToday();
-  const ticket = await prisma.$transaction(async (tx) => {
+  const ticket = await armoryTransaction(async (tx) => {
     const loadout = await tx.armoryLoadout.findUnique({
       where: { userId },
       include: {
@@ -1056,7 +1068,7 @@ export async function updateArmoryAdminConfig(body: any) {
   const artifacts = Array.isArray(body.artifacts) ? body.artifacts : [];
   if (!validateSlotWeights(artifacts)) throw new Error('BAD_SLOT_TOTAL');
 
-  await prisma.$transaction(async (tx) => {
+  await armoryTransaction(async (tx) => {
     const settings = body.settings ?? {};
     for (const key of ARMORY_SETTING_KEYS) {
       if (settings[key] !== undefined) {

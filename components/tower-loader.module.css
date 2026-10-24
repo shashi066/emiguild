@@ -1,0 +1,72 @@
+.loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--color-text-muted, #94a3b8);
+  font-size: 0.9rem;
+}
+
+.tower {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.structure {
+  fill: none;
+  stroke: var(--color-accent-secondary);
+  stroke-opacity: 0.45;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.floorBase {
+  fill: var(--color-bg-card);
+  stroke: var(--color-accent-secondary);
+  stroke-opacity: 0.3;
+  stroke-width: 1.5;
+}
+
+.floor {
+  fill: var(--color-accent-secondary);
+  fill-opacity: 0.22;
+  stroke: var(--color-accent-secondary);
+  stroke-width: 1.5;
+  opacity: 0;
+  animation: illuminate 800ms ease-out forwards;
+}
+
+.number {
+  fill: var(--color-text-primary);
+  font-size: 9px;
+  font-family: sans-serif;
+  text-anchor: middle;
+}
+
+.route {
+  min-height: calc(100dvh - 124px);
+  display: grid;
+  place-items: center;
+  padding: 24px 10px 36px;
+  background: #080d16;
+}
+
+.complete .floor {
+  animation: none;
+  opacity: 1;
+}
+
+@keyframes illuminate {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floor {
+    animation: none;
+    opacity: 1;
+  }
+}

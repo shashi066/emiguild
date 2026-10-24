@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import emiilyPortrait from '@/public/images/emiily-avatar.png';
+import emiilyPortrait from '@/public/images/emiily-avatar-v2.png';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -385,7 +385,7 @@ export function EmiAssistant() {
   return <div className={`emi-assistant ${open ? 'is-open' : ''}`}>
     {open && <button className="emi-backdrop" tabIndex={-1} aria-label="Close Emiily assistant" onClick={close} />}
     {open && <div ref={panel} className="emi-panel" role="dialog" aria-modal="true" aria-label="Emiily, the EmiGuild assistant">
-      <header className="emi-header"><div className="emi-avatar"><Image src={emiilyPortrait} alt="Emiily" width={36} height={36} sizes="36px" loading="lazy" /></div><div><div className="emi-name-row"><strong>Emiily</strong><span className="emi-beta-badge">Beta</span></div><span>Choose a quick action or chat with Emiily.</span></div><button className="emi-icon-button" aria-label="Close Emiily assistant" onClick={close}><X size={19} /></button></header>
+      <header className="emi-header"><div className="emi-avatar"><Image src={emiilyPortrait} alt="Emiily" width={36} height={36} sizes="36px" loading="lazy" /></div><div><div className="emi-name-row"><strong>EMIILY · AI assistant</strong><span className="emi-beta-badge">Beta</span></div><span>Choose a quick action or chat with Emiily.</span></div><button className="emi-icon-button" aria-label="Close Emiily assistant" onClick={close}><X size={19} /></button></header>
       <nav className="emi-flow-nav" aria-label="Assistant navigation">
         <button disabled={disabled || !history.current.length} onClick={() => { const previous = history.current.pop(); if (previous) void navigate(previous, false); }}><ArrowLeft size={14} />Back</button>
         <button disabled={mutating} onClick={startOver}><RotateCcw size={14} />Start over</button>
@@ -422,6 +422,6 @@ export function EmiAssistant() {
       {typing && session?.user?.id && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="Build tic-tac-toe in HTML" disabled={disabled || allowance?.remaining === 0} />{chatBusy ? <button type="button" aria-label="Stop response" onClick={() => { usageSnapshot.current = null; abort.current?.abort(); abort.current = null; sequence.current++; setBusy(false); setChatBusy(false); setNotice('Request stopped. Requests already sent still count.'); setUsageRevision((value) => value + 1); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || disabled || allowance?.remaining === 0}><Send size={17} /></button>}</form>}
       <div className="emi-direct-links"><Link href="/book">Book</Link><Link href="/#live-station-availability">Availability</Link><Link href="/my-bookings">My bookings</Link><Link href="/games">Games</Link><Link href="/daily-spin">Daily Spin</Link></div>
     </div>}
-    <button ref={launcher} className="emi-launcher" tabIndex={open ? -1 : 0} aria-label={open ? 'Close Emiily assistant' : 'Open Emiily chat and help'} aria-expanded={open} onClick={() => open ? close() : setOpen(true)}>{open ? <X size={23} /> : <MessageCircle size={24} />}{!open && <span>Chat &amp; help</span>}</button>
+    <button ref={launcher} className="emi-launcher" tabIndex={open ? -1 : 0} aria-label={open ? 'Close Emiily assistant' : 'Open Emiily chat and help'} aria-expanded={open} onClick={() => open ? close() : setOpen(true)}>{open ? <X size={23} /> : <Image className="emi-launcher-avatar" src={emiilyPortrait} alt="" width={40} height={40} sizes="40px" />}{!open && <span>Chat &amp; help</span>}</button>
   </div>;
 }

@@ -1,3 +1,4 @@
+import { armoryTransaction } from './armory-transaction';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { caseInsensitiveContains } from '@/lib/prisma-search';
@@ -280,7 +281,7 @@ export async function expireArmoryTradeListings(options: ExpireOptions = {}) {
 
   if (expired.length === 0) return 0;
 
-  return prisma.$transaction(async (tx) => {
+  return armoryTransaction(async (tx) => {
     let returned = 0;
 
     for (const listing of expired) {
@@ -453,7 +454,7 @@ export async function createArmoryTradeListing(
   }
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    return await armoryTransaction(async (tx) => {
       const [existing, artifacts, inventory, loadout, seller] = await Promise.all([
         tx.armoryTradeListing.findUnique({
           where: { activeSellerKey: userId },
@@ -572,7 +573,7 @@ async function cancelOpenArmoryTradeListing(
 ) {
   await expireArmoryTradeListings({ listingId });
 
-  return prisma.$transaction(async (tx) => {
+  return armoryTransaction(async (tx) => {
     const listing = await tx.armoryTradeListing.findUnique({
       where: { id: listingId },
       select: {
@@ -654,7 +655,7 @@ export async function acceptArmoryTradeListing(userId: string, listingId: string
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  return armoryTransaction(async (tx) => {
     const listing = await tx.armoryTradeListing.findUnique({
       where: { id: listingId },
       include: listingInclude,
@@ -1022,7 +1023,7 @@ export async function adjustArmoryGuildGems(
     );
   }
 
-  await prisma.$transaction(async (tx) => {
+  await armoryTransaction(async (tx) => {
     const user = await tx.user.findFirst({
       where: { id: userId, role: 'USER' },
       select: { guildGems: true },

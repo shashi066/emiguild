@@ -1,5 +1,7 @@
 'use client';
 
+import { TournamentLoadError, useTournamentLoading } from '@/components/TournamentLoadingBoundary';
+
 import './tournament.css';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -29,6 +31,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 export default function TournamentsPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  useTournamentLoading(loading);
 
   useEffect(() => {
     fetchTournaments();
@@ -36,10 +40,17 @@ export default function TournamentsPage() {
 
   async function fetchTournaments() {
     setLoading(true);
-    const res = await fetch('/api/tournaments');
-    const data = await res.json();
-    setTournaments(data.tournaments || []);
-    setLoading(false);
+    setLoadError(false);
+    try {
+      const res = await fetch('/api/tournaments');
+      if (!res.ok) throw new Error('Tournament request failed');
+      const data = await res.json();
+      setTournaments(data.tournaments || []);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -73,7 +84,7 @@ export default function TournamentsPage() {
       <div className="container" style={{ paddingBottom: '4rem' }}>
         {loading ? (
           <Loading />
-        ) : tournaments.length === 0 ? (
+        ) : loadError ? (<TournamentLoadError retry={fetchTournaments} />) : tournaments.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: '4rem', marginTop: '2rem' }}>
             <Gamepad2 size={48} style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }} />
             <h3 style={{ color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>No Tournaments Yet</h3>

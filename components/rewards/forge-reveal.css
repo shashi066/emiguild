@@ -1,0 +1,35 @@
+.forge-reveal-layer { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(2,5,12,0.92); animation: revealFade 150ms ease; }
+.forge-reveal-scene { width: min(440px, 100%); min-height: min(640px, calc(100vh - 36px)); display: grid; grid-template-rows: auto 1fr auto auto; align-items: center; justify-items: center; gap: 14px; margin: auto; text-align: center; color: var(--color-text-primary); }
+.forge-reveal-layer:not(.reveal-ready) .forge-reveal-scene { grid-template-rows: 1fr; }
+.forge-charge { align-self: center; min-height: 150px; display: inline-grid; justify-items: center; align-content: center; gap: 14px; color: #dff8ff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.88rem; animation: revealFade 120ms ease both; }
+.forge-spinner { width: 88px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; color: #61e8ff; }
+.forge-spinner::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); border-top-color: #61e8ff; animation: forgeSpin 850ms linear infinite; }
+.forge-spinner svg { position: relative; z-index: 1; }
+.reveal-ready .forge-charge { display: none; }
+.reveal-rarity { min-height: 38px; display: none; align-items: center; border-top: 1px solid var(--reveal-color); border-bottom: 1px solid var(--reveal-color); padding: 0 18px; color: var(--reveal-color); font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.76rem; animation: revealFade 180ms ease both; }
+.reveal-ready .reveal-rarity { display: inline-flex; }
+.reveal-art-wrap { width: min(300px, 78vw); aspect-ratio: 1; display: grid; place-items: center; position: relative; animation: revealPop 280ms ease both; }
+.reveal-art-wrap::before, .reveal-art-wrap::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
+.reveal-art-wrap::before { inset: 12%; border: 1px solid var(--reveal-color); opacity: 0.28; }
+.reveal-art-wrap::after { inset: 5%; border: 1px solid rgba(255,255,255,0.18); }
+.reveal-lines { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.18) 50%, transparent 50.5%), linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.12) 50%, transparent 50.5%); opacity: 0.65; }
+.reveal-art { position: relative; z-index: 1; width: 82%; aspect-ratio: 1; display: grid; place-items: center; }
+.reveal-art img { width: 100%; height: 100%; object-fit: contain; }
+.reveal-art .artifact-sigil-lg { width: min(176px, 62vw); }
+.reveal-copy { display: grid; gap: 3px; animation: revealFade 180ms ease 430ms both; }
+.reveal-copy h2 { font-size: clamp(1.8rem, 8vw, 2.65rem); line-height: 1.02; }
+.reveal-copy p, .reveal-copy small { color: var(--color-text-secondary); }
+.reveal-copy strong { margin-top: 8px; color: #dff8ff; font-size: 0.82rem; }
+.reveal-actions { width: min(390px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; animation: revealFade 180ms ease 520ms both; }
+.artifact-sigil { border: 1px solid; border-radius: 50%; display: grid; place-items: center; position: relative; flex: 0 0 auto; }
+.artifact-sigil span { position: absolute; bottom: 11%; font-family: var(--font-orbitron); font-size: 0.72rem; font-weight: 900; }
+.artifact-sigil-sm { width: 44px; aspect-ratio: 1; }
+.artifact-sigil-md { width: 66px; aspect-ratio: 1; }
+.artifact-sigil-lg { width: 112px; aspect-ratio: 1; }
+@keyframes revealFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes revealPop { from { opacity: 0; transform: scale(0.92); } 45% { opacity: 1; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes forgeSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.forge-embedded { position: relative; inset: auto; z-index: auto; padding: 0; background: transparent; }
+.forge-embedded .forge-reveal-scene { min-height: 320px; }
+.forge-embedded .reveal-art-wrap { width: min(240px, 65vw); }
+@media(prefers-reduced-motion:reduce) { .forge-reveal-layer *, .forge-reveal-layer *::before { animation: none !important; transition: none !important; } }

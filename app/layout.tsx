@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { HomeEntryProvider } from '@/components/providers/HomeEntryProvider';
 import './globals.css';
 import { Navbar } from '@/components/layout/Navbar';
 import { SessionProvider } from '@/components/providers/SessionProvider';
@@ -53,18 +55,30 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  const assistantEnabled = await canUseAssistant(session?.user ?? null);
 
   return (
     <html lang="en">
       <body>
         <SessionProvider session={session}>
-          <Navbar />
-          <ActivityTracker />
-          <main>{children}</main>
-          {assistantEnabled && <EmiAssistant />}
+          <HomeEntryProvider>
+            <div data-site-chrome="header"><Navbar /></div>
+            <ActivityTracker />
+            <main>{children}</main>
+            <div data-site-chrome="assistant">
+              <Suspense fallback={null}><DeferredAssistant user={session?.user ?? null} /></Suspense>
+            </div>
+          </HomeEntryProvider>
         </SessionProvider>
       </body>
     </html>
   );
+}
+
+async function DeferredAssistant({ user }: { user: object | null }) {
+  try {
+    return await canUseAssistant(user) ? <EmiAssistant /> : null;
+  } catch (error) {
+    console.error('Assistant availability lookup failed:', error);
+    return null;
+  }
 }

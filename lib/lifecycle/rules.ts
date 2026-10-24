@@ -32,6 +32,8 @@ export type GameProgress = {
     canClaim?: boolean;
     slots?: Array<{ slot: string; name: string | null }>;
     goals?: Array<{ id: string; title: string; current: number; total: number; reward: string; missingOwned?: number; needsEquipment?: boolean }>;
+    // Live draws still open to this user (existing entries are excluded).
+    liveDrops?: Array<{ id: string; title: string; endsAt?: string }>;
     events?: Array<{ id: string; title: string; participation: string; at?: string }>;
   };
   status: 'available' | 'active' | 'completed' | 'empty' | 'disabled' | 'error';
