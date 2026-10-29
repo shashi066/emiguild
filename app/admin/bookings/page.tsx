@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   BookOpen, Search, CheckCircle, XCircle,
   AlertCircle, RefreshCw, Trash2, Globe, UserPlus, Phone, LogIn,
   Pencil, X, Gamepad2, Plus, Minus, Award, CupSoda, Trash,
-  IndianRupee,
+  IndianRupee, Ticket,
 } from 'lucide-react';
 import {
   formatCurrency, formatDate, formatTime,
@@ -31,9 +31,16 @@ import {
 } from '@/lib/admin-walkin-time';
 import { ADMIN_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
 import { MAX_FNB_QUANTITY } from '@/lib/fnb-rules';
+import { useSession } from 'next-auth/react';
+import { PendingRewardError, submitRewardRequest } from '@/lib/reward-request-client';
+import { happyBookingProblem, readHappyConfig, type HappyConfig } from '@/lib/happy-ticket-rules';
+import bookingStyles from '@/components/admin/BookingHappyTicket.module.css';
 import AdminBookingModalShell from '@/components/admin/AdminBookingModalShell';
 
 type Station = { id: string; name: string; hourlyRate: number; minDuration: number; hasControllers: boolean };
+
+type CustomerHappyTicket = { id: string; expiresAt: string; rules: HappyConfig };
+type BookingHappyRedemption = { id: string; ticketId: string; status: string; discount: number; ticket: { expiresAt: string; rulesSnapshot: string } };
 
 type Booking = {
   id: string;
@@ -42,6 +49,9 @@ type Booking = {
   endTime: string;
   duration: number;
   totalPrice: number;
+  happyDiscount: number;
+  happyRedemptions?: BookingHappyRedemption[];
+  updatedAt: string;
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'CHECKED_IN';
   bookingType: 'ONLINE' | 'OFFLINE';
   customerName: string | null;
@@ -62,7 +72,7 @@ type Booking = {
   createdAt: string;
 };
 
-type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
+type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD' | 'HAPPY_TICKET';
 
 const PASS_COLOR: Record<string, string> = {
   BRONZE: '#cd7f32',
@@ -121,6 +131,28 @@ function EditModal({
   onClose: () => void;
   onSaved: (updated: Booking) => void;
 }) {
+  const { data: adminSession } = useSession();
+  const activeHappy = booking.happyRedemptions?.find(r => r.status === 'APPLIED');
+  const [happyTickets, setHappyTickets] = useState<CustomerHappyTicket[]>([]);
+  const [ticketsLoaded, setTicketsLoaded] = useState(!booking.user?.id);
+  const [ticketError, setTicketError] = useState('');
+  const [happyTicketId, setHappyTicketId] = useState(activeHappy?.ticketId ?? '');
+  const [pendingEdit, setPendingEdit] = useState<Record<string, unknown> | null>(null);
+  const saveFlight = useRef(false);
+  const recoveryOwner = `${adminSession?.user?.id}:${booking.id}`;
+  useEffect(() => {
+    if (!adminSession?.user?.id) return;
+    try { const saved = localStorage.getItem(`emiguild:reward:${recoveryOwner}:ADMIN_BOOKING_EDIT`); if (saved) setPendingEdit(JSON.parse(saved).payload); }
+    catch { setError('Saved edit could not be read. Check the booking before retrying.'); }
+  }, [adminSession?.user?.id, recoveryOwner]);
+  const loadHappyTickets = useCallback(async () => {
+    if (!booking.user?.id) return;
+    setTicketsLoaded(false); setTicketError('');
+    try { const response = await fetch(`/api/admin/happy-tickets/customer?userId=${encodeURIComponent(booking.user.id)}`, { cache: 'no-store' }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Could not load tickets.'); setHappyTickets(data.tickets); }
+    catch (e) { setTicketError(e instanceof Error ? e.message : 'Could not load tickets.'); }
+    finally { setTicketsLoaded(true); }
+  }, [booking.user?.id]);
+  useEffect(() => { void loadHappyTickets(); }, [loadHappyTickets]);
   const [date, setDate]                   = useState(booking.date);
   const [stationId, setStationId]         = useState(booking.stationId ?? booking.station.id);
   const [startTime, setStartTime]         = useState(booking.startTime);
@@ -128,7 +160,7 @@ function EditModal({
   const [extraControllers, setExtra]      = useState(booking.extraControllers);
   const [discount, setDiscount]           = useState(booking.discount ?? 0);
   const [benefitMode, setBenefitMode] = useState<BookingBenefitMode>(
-    booking.passHoursDeducted > 0 && booking.userPass
+    activeHappy ? 'HAPPY_TICKET' : booking.passHoursDeducted > 0 && booking.userPass
       ? 'HOUR_PASS'
       : isGuildMembershipType(booking.appliedBenefitType)
         ? 'GUILD'
@@ -224,9 +256,12 @@ function EditModal({
     currentPassHours: booking.passHoursDeducted,
   });
   const usesHourPass = benefitMode === 'HOUR_PASS';
-  const totalPrice = usesHourPass
-    ? Math.round(controllerCharge)
-    : Math.round(priceBeforeDiscount * (1 - discount / 100));
+  const usesHappy = benefitMode === 'HAPPY_TICKET';
+  const selectedHappy = happyTickets.find(t => t.id === happyTicketId) ?? (activeHappy?.ticketId === happyTicketId ? { id: activeHappy.ticketId, expiresAt: activeHappy.ticket.expiresAt, rules: readHappyConfig(activeHappy.ticket.rulesSnapshot) } : null);
+  const happyProblem = selectedHappy ? happyBookingProblem({ config: selectedHappy.rules, stationId, hasControllers: selectedStation?.hasControllers ?? false, date, startTime, duration, expiresAt: new Date(selectedHappy.expiresAt), now: new Date() }) : 'Select a customer ticket.';
+  const canChangeHappy = booking.paymentStatus !== 'PAID' && ['PENDING', 'CONFIRMED'].includes(booking.status) && new Date(`${booking.date}T${booking.startTime}:00+05:30`) > new Date();
+  const happyDeduction = usesHappy ? selectedStation?.hourlyRate ?? 0 : 0;
+  const totalPrice = usesHourPass ? Math.round(controllerCharge) : Math.round(usesHappy ? Math.max(0, priceBeforeDiscount - happyDeduction) : priceBeforeDiscount * (1 - discount / 100));
   const membershipEligibility = getGuildMembershipEligibility({
     membership: activeMembership,
     bookingDate: date,
@@ -276,44 +311,32 @@ function EditModal({
   const startTimeValid = availableSlots.includes(startTime);
 
   const handleSave = async () => {
+    if (saveFlight.current || !adminSession?.user?.id) return;
     setError('');
-    if (!startTimeValid) {
-      setError('Please choose an available start time.');
-      return;
+    if (!pendingEdit && (!startTimeValid || (usesHourPass && !hourPassValidation.valid) || (usesHappy && happyProblem))) {
+      setError(!startTimeValid ? 'Please choose an available start time.' : usesHappy ? happyProblem ?? '' : hourPassValidation.valid ? '' : hourPassValidation.reason); return;
     }
-    if (usesHourPass && !hourPassValidation.valid) {
-      setError(hourPassValidation.reason);
-      return;
-    }
-    setLoading(true);
+    saveFlight.current = true; setLoading(true);
+    const payload = pendingEdit ?? {
+      date, stationId, startTime, duration, extraControllers,
+      discount: usesHourPass || usesHappy ? 0 : discount, benefitMode,
+      hourPassId: usesHourPass ? selectedHourPassId : null,
+      happyTicketId: usesHappy ? happyTicketId : null,
+      appliedBenefitType: benefitMode === 'GUILD' ? appliedBenefitType : null,
+      notes, customerName, customerPhone, expectedUpdatedAt: booking.updatedAt,
+    };
     try {
-      const res = await fetch(`/api/bookings/${booking.id}`, {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          date, stationId, startTime,
-          duration,
-          extraControllers,
-          discount: usesHourPass ? 0 : discount,
-          benefitMode,
-          hourPassId: usesHourPass ? selectedHourPassId : null,
-          appliedBenefitType: benefitMode === 'GUILD' ? appliedBenefitType : null,
-          notes,
-          customerName,
-          customerPhone,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Failed to update.'); return; }
-      onSaved({
-        ...data.booking,
-        customerPhone: decryptPhone(data.booking.customerPhone),
-      });
-    } catch {
-      setError('Something went wrong.');
-    } finally {
-      setLoading(false);
-    }
+      const data = await submitRewardRequest(recoveryOwner, 'ADMIN_BOOKING_EDIT', `/api/bookings/${booking.id}`, payload, 'PUT');
+      setPendingEdit(null);
+      // A recovered receipt can precede another admin's more recent change.
+      const latest = await fetch(`/api/bookings/${booking.id}`, { cache: 'no-store' });
+      const current = latest.ok ? await latest.json() : data;
+      onSaved({ ...current.booking, customerPhone: decryptPhone(current.booking.customerPhone) });
+    } catch (e) {
+      if (e instanceof PendingRewardError) setPendingEdit(payload);
+      else setPendingEdit(null);
+      setError(e instanceof Error ? e.message : 'Unable to save booking.');
+    } finally { saveFlight.current = false; setLoading(false); }
   };
 
   return (
@@ -334,7 +357,7 @@ function EditModal({
 
         {error && <div className="alert alert-error" style={{ marginBottom: 'var(--space-lg)' }}><AlertCircle size={15} /> {error}</div>}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+        <fieldset disabled={loading || !!pendingEdit} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
 
           {/* Date */}
           <div className="form-group">
@@ -429,6 +452,22 @@ function EditModal({
               </span>
             </div>
           </div>
+
+          {booking.user && <section className={bookingStyles.panel} aria-label="Customer Happy Ticket">
+            <div className={bookingStyles.heading}><Ticket size={17} aria-hidden="true" /><strong>Happy Ticket</strong>{usesHappy && <span>1 hour free</span>}</div>
+            {!ticketsLoaded ? <p role="status"><span className="spinner" aria-hidden="true" /> Loading tickets...</p> : ticketError ? <p role="alert">{ticketError} <button type="button" className="btn btn-ghost btn-sm" onClick={() => void loadHappyTickets()}>Retry</button></p> : <>
+              <div className={bookingStyles.controls}>
+                <select className="form-input" aria-label="Select customer Happy Ticket" value={happyTicketId} disabled={!canChangeHappy || !!pendingEdit} onChange={e => setHappyTicketId(e.target.value)}>
+                  <option value="">Select ticket</option>
+                  {activeHappy && !happyTickets.some(t => t.id === activeHappy.ticketId) && <option value={activeHappy.ticketId}>Applied ticket — expires {new Date(activeHappy.ticket.expiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</option>}
+                  {happyTickets.map(t => <option key={t.id} value={t.id}>1 free hour — expires {new Date(Date.parse(t.expiresAt) - 1).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</option>)}
+                </select>
+                <button type="button" className={`btn btn-sm ${usesHappy ? 'btn-ghost' : 'btn-primary'}`} disabled={!canChangeHappy || !!pendingEdit || (!usesHappy && !!happyProblem)} onClick={() => { setBenefitMode(usesHappy ? 'STANDARD' : 'HAPPY_TICKET'); setDiscount(0); setAppliedBenefitType(null); setError(''); }}>{usesHappy ? 'Remove Ticket' : 'Apply Ticket'}</button>
+              </div>
+              <p>{!canChangeHappy ? 'Ticket changes require an unpaid booking before it starts.' : usesHappy ? happyProblem ?? '1 base hour covered. Extra time and controllers payable.' : selectedHappy ? happyProblem ?? 'Ready to apply.' : 'Choose an available customer ticket.'}</p>
+              {activeHappy && !usesHappy && <p className={bookingStyles.notice}>Ticket will be returned with its original expiry. Normal pricing restored.</p>}
+            </>}
+          </section>}
 
           {booking.user && (
             <section
@@ -576,6 +615,7 @@ function EditModal({
                 ) : `₹${sessionCost}`}
               </span>
             </div>
+            {usesHappy && <div className={bookingStyles.deduction}><span>Happy Ticket · 1 hour free</span><strong>−₹{happyDeduction}</strong></div>}
             {extraControllers > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                 <span style={{ color: 'var(--color-text-secondary)' }}>
@@ -601,6 +641,7 @@ function EditModal({
             </div>
           </div>
 
+          {pendingEdit && <p role="status" className={bookingStyles.notice}>An edit is awaiting confirmation. Check its result before making another change.</p>}
           {/* Discount */}
           <div className="form-group">
             <label className="form-label">Discount <span style={{ color: 'var(--color-text-muted)', textTransform: 'none', letterSpacing: 0 }}>(optional, 10–100%)</span></label>
@@ -611,7 +652,7 @@ function EditModal({
                 max={100}
                 step={5}
                 value={discount}
-                disabled={usesHourPass}
+                disabled={usesHourPass || usesHappy || !!pendingEdit}
                 onChange={(e) => {
                   setDiscount(Number(e.target.value));
                   setBenefitMode('STANDARD');
@@ -652,7 +693,7 @@ function EditModal({
               style={{ resize: 'vertical' }}
             />
           </div>
-        </div>
+        </fieldset>
 
         <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 'var(--space-xl)' }}>
           <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
@@ -660,10 +701,10 @@ function EditModal({
             className="btn btn-primary"
             style={{ flex: 2 }}
             onClick={handleSave}
-            disabled={loading || !startTimeValid || (usesHourPass && !hourPassValidation.valid)}
+            disabled={loading || (!pendingEdit && (!startTimeValid || (usesHourPass && !hourPassValidation.valid) || (usesHappy && !!happyProblem)))}
           >
             <CheckCircle size={15} />
-            {loading ? 'Saving...' : 'Save Changes'}
+            {loading ? <><span className="spinner" aria-hidden="true" /> Saving...</> : pendingEdit ? 'Check result / Retry' : 'Save Changes'}
           </button>
         </div>
     </AdminBookingModalShell>
@@ -1001,6 +1042,7 @@ export default function AdminBookingsPage() {
   const [dayConfirmedBookings, setDayConfirmedBookings] = useState<{ date: string; count: number } | null>(null);
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState('');
+  useEffect(() => { const query = new URLSearchParams(window.location.search).get('search'); if (query) setSearch(query); }, []);
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter]     = useState('');
   const [typeFilter, setTypeFilter]     = useState('');
@@ -1430,6 +1472,7 @@ export default function AdminBookingsPage() {
                           {b.paymentStatus === 'PAID' ? '✓ Paid' : 'At counter'}
                         </div>
                       )}
+                      {(b.happyRedemptions ? b.happyRedemptions.some(r => r.status === 'APPLIED') : b.happyDiscount > 0) ? <div className={bookingStyles.badge}><Ticket size={12} aria-hidden="true" /> Happy Ticket · 1 hour free <span>−{formatCurrency(b.happyDiscount)}</span></div> : !!b.happyRedemptions?.length && <small className={bookingStyles.removed}>Happy Ticket · Removed</small>}
                       {b.appliedBenefitType && (
                         <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#4ade80' }}>
                           <Award size={11} />

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   CheckCircle, Calendar, Clock, Monitor,
-  IndianRupee, BookOpen, Home, Gamepad2, Loader2, AlertCircle, Award,
+  IndianRupee, BookOpen, Home, Gamepad2, Loader2, AlertCircle, Award, Ticket,
 } from 'lucide-react';
 import { formatTime, formatDate, formatCurrency } from '@/lib/utils';
 import { guildMembershipName, isGuildMembershipType } from '@/lib/guild-membership';
@@ -21,6 +21,7 @@ interface Booking {
   status: string;
   paymentStatus: string;
   discount: number;
+  happyDiscount: number;
   appliedBenefitType: string | null;
   station: { name: string };
 }
@@ -157,6 +158,7 @@ export default function ConfirmationContent() {
                 </div>
               </div>
             )}
+            {booking.happyDiscount > 0 && booking.status !== 'CANCELLED' && <div className="booking-detail-item happy-ticket-used" style={{ gridColumn: '1 / -1' }} role="status"><div className="booking-detail-label"><Ticket size={14} aria-hidden="true" /> Happy Ticket used</div><div className="booking-detail-value">1 free PS5 hour · −{formatCurrency(booking.happyDiscount)}</div></div>}
             {appliedMembership && (
               <div
                 className="booking-detail-item"
@@ -216,6 +218,12 @@ export default function ConfirmationContent() {
           </div>
         </div>
       </div>
+      <style jsx>{`
+        .happy-ticket-used { border-color: #5a4b7e; background: #201c32; animation: ticket-used 350ms ease-out both; }
+        .happy-ticket-used .booking-detail-label { display: flex; align-items: center; justify-content: center; gap: 6px; color: #c4b5fd; }
+        @keyframes ticket-used { from { opacity: .5; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+        @media(prefers-reduced-motion:reduce) { .happy-ticket-used { animation: none; } }
+      `}</style>
     </div>
   );
 }

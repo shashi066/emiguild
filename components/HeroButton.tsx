@@ -24,6 +24,7 @@ type AnimationVariant = 'none' | 'spin' | 'lucky' | 'tournament';
 
 interface HeroButtonProps {
   label: string;
+  badge?: React.ReactNode;
   icon: LucideIcon;
   href?: string;
   targetId?: string;
@@ -114,6 +115,7 @@ const animationClasses: Record<AnimationVariant, string> = {
 
 export default function HeroButton({
   label,
+  badge,
   icon: Icon,
   href,
   targetId,
@@ -133,6 +135,7 @@ export default function HeroButton({
     <>
       <Icon size={18} />
       <span>{label}</span>
+      {badge}
       {targetId === 'stations' && <ChevronRightIcon />}
     </>
   );

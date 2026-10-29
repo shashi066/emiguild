@@ -1,0 +1,11 @@
+.progress { min-width: 0; width: 100%; display: grid; gap: 8px; }
+.heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; font-size: 13px; line-height: 1.5; }
+.heading span { color: #67e8f9; font-weight: 600; }
+.heading strong { color: var(--color-text-primary); font-size: 15px; font-variant-numeric: tabular-nums; }
+.track { height: 6px; border-radius: 4px; background: #303241; overflow: hidden; }
+.track span { display: block; height: 100%; border-radius: inherit; background: #67e8f9; }
+.epic { display: grid; grid-template-columns: auto minmax(24px, 1fr) auto; align-items: center; gap: 10px; font-size: 12px; line-height: 1.5; color: var(--color-text-secondary); }
+.epic > span:first-child { color: #67e8f9; }
+.epic > span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.epic .track { height: 4px; }
+.remaining { margin: 0 !important; font-size: 12px !important; line-height: 1.5 !important; color: var(--color-text-secondary); }

@@ -6,6 +6,7 @@ import { ArrowRight, Castle, Check, Flame, Gift, Hammer, RotateCw, Target, User,
 import { AccountState, GameProgress, orderVaultItems, formatVaultTime } from '@/lib/lifecycle/rules';
 import { selectNextUnlock, selectVaultAction } from '@/lib/lifecycle/vault-presentation';
 import styles from './vault.module.css';
+import { VaultSpinProgress } from '@/components/rewards/VaultSpinProgress';
 
 const icons = { guess36: Target, spin: RotateCw, artifacts: Hammer, tower: Castle, 'guild-drop': Gift };
 function Action({ href, children, primary = false }: { href: string; children: React.ReactNode; primary?: boolean }) {
@@ -53,11 +54,13 @@ function DailyGameCard({ game, now, onDailyAction, dailyActionBusy }: { game: Ga
   return <article className={styles.card} data-game={game.id}>
     <CardHeader game={game} title={spin ? 'Daily Spin' : 'Daily Forge'} />
     {game.status === 'error' ? <p>Progress temporarily unavailable. Refresh to try again.</p> : spin ? <>
+      {game.facts?.legendary?.enabled ? <VaultSpinProgress legendary={game.facts.legendary} epic={game.progress && { current: game.progress.current, target: game.progress.total }} /> : <>
       <p className={styles.strong}><Flame size={20} />Streak: {game.progress?.current ?? 0} of {game.progress?.total ?? 10} days</p>
       <div className={styles.streak} aria-label={`${game.progress?.current ?? 0} of ${game.progress?.total ?? 10} streak days`}>
         {Array.from({ length: game.progress?.total ?? 10 }, (_, i) => <span key={i} data-filled={i < (game.progress?.current ?? 0)} />)}<Gift size={24} aria-hidden="true" />
       </div>
       <p className={styles.secondary}>{game.facts?.goals?.length ? `${Math.max(0, (game.progress?.total ?? 10) - (game.progress?.current ?? 0))} more consecutive spins toward an Epic reward` : 'Build your streak with a daily spin.'}</p>
+      </>}
       {game.facts?.rewardName && <div className={styles.inset}><Gift size={22} /><span>Today’s reward<br /><strong>{game.facts.rewardName}</strong></span></div>}
       {!available && <p className={styles.secondary}>{game.status === 'disabled' ? 'Daily spin is paused' : game.facts?.usedToday ? 'Your next spin unlocks at the daily reset.' : game.summary}</p>}
     </> : <>
@@ -94,7 +97,7 @@ export function VaultDashboard({ state, loading, error, refresh, now, onDailyAct
   const rewards = state ? orderVaultItems(state.items, now).filter((item) => item.kind === 'reward') : [];
   const stats = [
     { game: 'tower', label: 'Tower Tokens', value: tower?.facts?.tokenExpiries?.filter((at) => Date.parse(at) > now.getTime()).length, Icon: Castle, failed: tower?.status === 'error' },
-    { game: 'spin', label: 'Day Streak', value: spin?.progress?.current, Icon: Flame, failed: spin?.status === 'error' },
+    { game: 'spin', label: spin?.facts?.legendary?.enabled ? 'Legendary Streak' : 'Day Streak', value: spin?.facts?.legendary?.enabled ? spin.facts.legendary.current : spin?.progress?.current, Icon: Flame, failed: spin?.status === 'error' },
     { game: 'artifacts', label: 'Artifacts', value: artifacts?.facts?.ownedArtifacts, Icon: Hammer, failed: artifacts?.status === 'error' },
   ];
   return <div className={styles.shell}>
@@ -106,7 +109,7 @@ export function VaultDashboard({ state, loading, error, refresh, now, onDailyAct
       <section className={styles.stats} aria-label="Your account totals">{stats.map(({ game, label, value, Icon, failed }) => <div key={label} data-game={game}><Icon aria-hidden="true" /><strong>{failed ? '—' : value ?? 0}</strong><span>{label}{failed && <small>Unavailable</small>}</span></div>)}</section>
       {state.rewardsUnavailable && <p role="alert" className={styles.secondary}>Rewards are temporarily unavailable. Refresh to try again.</p>}
       {rewards.length > 0 && <section className={styles.rewardGrid} aria-label="Available rewards">{rewards.map((reward) => <article className={styles.reward} key={reward.id}><Gift size={30} /><div><p className={styles.eyebrow}>Reward unlocked</p><h2>{reward.description}</h2><p>{reward.title}</p><p className={styles.helper}>Available until <VaultTime value={reward.validUntil} /></p><Action href={reward.href} primary>{reward.action}</Action></div></article>)}</section>}
-      {unlock && <Link href={unlock.game.href} className={styles.unlock} data-game={unlock.game.id}><Gift size={40} aria-hidden="true" /><div><p className={styles.eyebrow}>Next unlock</p><h2>{unlock.game.id === 'artifacts' ? unlock.needsEquipment ? `Equip your four ${unlock.title} pieces` : `You’re ${unlock.missingOwned} artifact${unlock.missingOwned === 1 ? '' : 's'} away from ${unlock.title}` : `${unlock.total - unlock.current} more consecutive spins to your milestone`}</h2><p>Reward: {unlock.reward}</p></div><ChevronRight aria-hidden="true" /></Link>}
+      {unlock && <Link href={unlock.game.href} className={styles.unlock} data-game={unlock.game.id}><Gift size={40} aria-hidden="true" /><div><p className={styles.eyebrow}>Next unlock</p><h2>{unlock.game.id === 'artifacts' ? unlock.needsEquipment ? `Equip your four ${unlock.title} pieces` : `You’re ${unlock.missingOwned} artifact${unlock.missingOwned === 1 ? '' : 's'} away from ${unlock.title}` : unlock.id === 'spin-legendary' ? (unlock.current >= 29 ? 'Legendary on your next eligible spin' : `${unlock.total - unlock.current} more consecutive spins to Legendary`) : `${unlock.total - unlock.current} more consecutive spins to your milestone`}</h2><p>Reward: {unlock.reward}</p></div><ChevronRight aria-hidden="true" /></Link>}
       {action && <section><h2 className={styles.sectionTitle}>Today’s action</h2><article className={styles.hero} data-game={action.game.id}><CardHeader game={action.game} /><p>{action.game.summary}</p>{action.game.id === 'guess36' && <><GuessPicks game={action.game} /><Details game={action.game} /></>}<Deadline game={action.game} />{(action.game.id === 'spin' || action.game.id === 'artifacts') && action.game.facts?.dailyAvailable && action.label !== 'Exchange completed set' ? <button type="button" className={styles.primaryButton} disabled={dailyActionBusy} onClick={() => onDailyAction(action.game.id === 'spin' ? 'spin' : 'forge')}>{action.label}<ArrowRight size={18} aria-hidden="true" /></button> : <Action href={action.game.href} primary>{action.label}</Action>}</article></section>}
       <section><h2 className={styles.sectionTitle}>Today</h2><div className={styles.grid}>{spin && <DailyGameCard game={spin} now={now} onDailyAction={onDailyAction} dailyActionBusy={dailyActionBusy} />}{artifacts && <DailyGameCard game={artifacts} now={now} onDailyAction={onDailyAction} dailyActionBusy={dailyActionBusy} />}{byId('guess36') && action?.game.id !== 'guess36' && <OverviewCard game={byId('guess36')!} now={now} />}</div></section>
       <section><h2 className={styles.sectionTitle}>Your progress</h2>{tower && <OverviewCard game={tower} now={now} refresh={refresh} />}</section>

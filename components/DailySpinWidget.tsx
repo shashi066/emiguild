@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Gift } from 'lucide-react';
 import { SpinPresentation } from './rewards/SpinPresentation';
 import { animateDailySpin, executeDailyReward } from '@/lib/daily-reward-client';
 import { useSession } from 'next-auth/react';
+import { SpinGuarantees } from './rewards/SpinGuarantees';
+import progressStyles from './rewards/SpinGuarantees.module.css';
 import { GuildSpinRouteLoader } from '@/components/GuildSpinLoadingBoundary';
 
 type LootItem = {
@@ -22,6 +24,7 @@ type SpinStatus = {
   remainingRetries: number;
   nextReset: string;
   lootItems?: LootItem[];
+  legendary?: { enabled: boolean; current: number; target: number; spinsRemaining: number };
   streak?: {
     current: number;
     target: number;
@@ -48,8 +51,8 @@ export function DailySpinWidget() {
   const spinAbortRef = useRef<AbortController | null>(null);
   const spinBusyRef = useRef(false);
 
-  const loadStatus = async () => {
-    if (sessionStatus !== 'authenticated') { setLoading(false); return; }
+  const loadStatus = useCallback(async () => {
+    if (sessionStatus !== 'authenticated' || !session?.user?.id) { setLoading(false); return; }
     try {
       const res  = await fetch('/api/daily-spin');
       const data = await res.json();
@@ -61,11 +64,11 @@ export function DailySpinWidget() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionStatus, session?.user?.id]);
 
   useEffect(() => {
     if (sessionStatus !== 'loading') loadStatus();
-  }, [sessionStatus]);
+  }, [sessionStatus, loadStatus]);
 
   useEffect(() => {
     if (!spinStatus?.nextReset || !reward) return;
@@ -78,7 +81,7 @@ export function DailySpinWidget() {
       setTimeLeft(`${h}h ${m}m ${s}s`);
     }, 1000);
     return () => clearInterval(interval);
-  }, [spinStatus?.nextReset, reward]);
+  }, [spinStatus?.nextReset, reward, loadStatus]);
 
   // Build the display grid (pad/repeat items to MIN_CELLS)
   const rawItems: LootItem[] = spinStatus?.lootItems ?? [];
@@ -100,11 +103,11 @@ export function DailySpinWidget() {
     spinAbortRef.current = controller;
     try {
       const data = await animateDailySpin(gridItems,
-        executeDailyReward('spin', session.user.id) as Promise<{ reward: LootItem; streakReward?: boolean; streak?: SpinStatus['streak'] }>,
+        executeDailyReward('spin', session.user.id) as Promise<{ reward: LootItem; streakReward?: boolean; streak?: SpinStatus['streak']; legendary?: SpinStatus['legendary'] }>,
         setHighlighted, controller.signal, window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       setReward(data.reward);
       setStreakReward(Boolean(data.streakReward));
-      if (data.streak) setSpinStatus(prev => prev ? { ...prev, streak: data.streak, canSpin: false } : prev);
+      if (data.streak) setSpinStatus(prev => prev ? { ...prev, streak: data.streak, legendary: data.legendary ?? prev.legendary, canSpin: false } : prev);
       void loadStatus();
     } catch (cause) {
       if (!controller.signal.aborted) { setHighlighted(null); setError(cause instanceof Error ? cause.message : 'Spin failed'); }
@@ -160,12 +163,11 @@ export function DailySpinWidget() {
   const streak = spinStatus?.streak;
 
   return (
-    <div style={{
+    <div className={progressStyles.gameCard} style={{
       maxWidth: 620,
       margin: '0 auto',
       background: 'var(--color-bg-card)',
       borderRadius: 'var(--radius-xl)',
-      padding: 'var(--space-2xl)',
       boxShadow: 'var(--shadow-glow)',
       border: '1px solid var(--color-border-accent)',
       position: 'relative',
@@ -199,136 +201,15 @@ export function DailySpinWidget() {
             ? 'Daily spin available — one spin each day.'
             : 'Today’s spin used. Come back after the daily reset.'}
         </p>
-        {streak && (
-          <div
-            style={{
-              marginBottom: 'var(--space-lg)',
-              padding: '16px',
-              borderRadius: 'var(--radius-xl)',
-              border: '1px solid rgba(168,85,247,0.18)',
-              background: 'linear-gradient(180deg, rgba(168,85,247,0.10), rgba(15,23,42,0.16))',
-              textAlign: 'left',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                gap: 12,
-                marginBottom: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#d8b4fe' }}>
-                  Streak To Epic
-                </div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc' }}>
-                  Day {Math.min(streak.current, streak.target)} / {streak.target}
-                </div>
-              </div>
-              <div
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 999,
-                  background: streak.guaranteedToday ? 'rgba(168,85,247,0.18)' : 'rgba(255,255,255,0.06)',
-                  border: `1px solid ${streak.guaranteedToday ? 'rgba(168,85,247,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                  color: streak.guaranteedToday ? '#f5d0fe' : 'var(--color-text-secondary)',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {streak.guaranteedToday ? 'Epic Ready' : `${streak.spinsRemaining} Days Left`}
-              </div>
-            </div>
-
-            <div
-              style={{
-                position: 'relative',
-                height: 10,
-                borderRadius: 999,
-                overflow: 'hidden',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                marginBottom: 14,
-              }}
-            >
-              <div
-                style={{
-                  width: `${Math.max(6, Math.min(100, (streak.current / streak.target) * 100))}%`,
-                  height: '100%',
-                  borderRadius: 999,
-                  background: 'linear-gradient(90deg, #7c3aed, #c084fc)',
-                  transition: 'width 220ms ease',
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${streak.target}, minmax(0, 1fr))`,
-                gap: 6,
-                marginBottom: 12,
-              }}
-            >
-              {Array.from({ length: streak.target }, (_, index) => {
-                const day = index + 1;
-                const completed = day <= streak.current;
-                const finalDay = day === streak.target;
-
-                return (
-                  <div
-                    key={day}
-                    title={`Day ${day}`}
-                    style={{
-                      height: 24,
-                      borderRadius: 999,
-                      border: `1px solid ${
-                        finalDay
-                          ? 'rgba(168,85,247,0.5)'
-                          : completed
-                          ? 'rgba(192,132,252,0.35)'
-                          : 'rgba(255,255,255,0.08)'
-                      }`,
-                      background: finalDay
-                        ? completed
-                          ? 'linear-gradient(180deg, rgba(168,85,247,0.95), rgba(126,34,206,0.9))'
-                          : 'rgba(168,85,247,0.10)'
-                        : completed
-                        ? 'rgba(192,132,252,0.24)'
-                        : 'rgba(255,255,255,0.03)',
-                      color: finalDay ? '#fdf4ff' : completed ? '#f5d0fe' : 'var(--color-text-muted)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.68rem',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {finalDay ? '💜' : day}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ fontSize: '0.82rem', color: '#e9d5ff' }}>
-              {streak.guaranteedToday
-                ? 'Spin today and the reward will be guaranteed from the epic pool.'
-                : `Keep the streak alive for ${streak.spinsRemaining} more day${streak.spinsRemaining === 1 ? '' : 's'} to unlock a guaranteed epic reward.`}
-            </div>
-          </div>
-        )}
-        <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', textAlign: 'left', fontSize: '0.86rem' }}>
-          Daily spin gifts are redeemable only with a booking made on the same day. Missing a day breaks the streak, and epic-tier drops reset it.
-        </div>
+        <SpinGuarantees streak={streak} legendary={spinStatus?.legendary} canSpin={spinStatus?.canSpin}/>
+        <details className={progressStyles.rules}>
+          <summary>Spin rules</summary>
+          <p>Rewards need a same-day booking. Missing a daily spin resets both streaks. Epic drops reset only Epic progress. Legendary takes priority when both guarantees are ready.</p>
+        </details>
 
         {error && <div className="alert alert-error" style={{ marginBottom: 'var(--space-lg)' }}>{error}</div>}
 
-        <SpinPresentation gridItems={gridItems} highlighted={highlighted} spinning={spinning} reward={reward} streakReward={streakReward} timeLeft={timeLeft} shareReward={shareReward} />
+      <SpinPresentation gridItems={gridItems} highlighted={highlighted} spinning={spinning} reward={reward} streakReward={streakReward} timeLeft={timeLeft} shareReward={shareReward} />
 
         {/* Spin button */}
         {!reward && spinStatus?.canSpin && (

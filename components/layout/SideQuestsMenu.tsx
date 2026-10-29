@@ -9,6 +9,7 @@ import {
   Compass,
   Gift,
   ShoppingBag,
+  Ticket,
   Target,
   RotateCw,
   Shield,
@@ -73,6 +74,13 @@ const SIDE_QUESTS = [
     title: 'EMIC Rewards',
     subtitle: 'Use EMIC and collect rewards',
     icon: ShoppingBag,
+    accent: 'side-quest-accent-violet',
+  },
+  {
+    href: '/happy-tickets',
+    title: 'Happy Tickets',
+    subtitle: 'Claim an available free PS5 hour',
+    icon: Ticket,
     accent: 'side-quest-accent-violet',
   },
 ];
