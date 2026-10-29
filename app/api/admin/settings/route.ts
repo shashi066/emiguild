@@ -1,3 +1,4 @@
+import { NOVEMBER_FLAGS } from '@/lib/november';
 import { MESSAGING_SETTING_KEYS, RETIRED_SPIN_SETTING_KEYS } from '@/lib/lifecycle/settings-keys';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -7,6 +8,8 @@ import { PS5_RENTAL_STATUSES } from '@/lib/ps5-rental';
 import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
 
 const INTERNAL_SETTING_KEYS = new Set([
+  ...NOVEMBER_FLAGS, 'legendary_pity_launched_at',
+  ...NOVEMBER_FLAGS, 'legendary_pity_launched_at',
   ...MESSAGING_SETTING_KEYS, ...RETIRED_SPIN_SETTING_KEYS,
   'watch_party_economy_version',
   'tower_enabled',

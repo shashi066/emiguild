@@ -655,7 +655,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       assert.equal(armoryState.tickets.some((ticket) => ticket.id === hiddenTowerTicket.id), false);
     });
 
-    await suite.test('a red card wipes prior safe rewards and permits the next token', async () => {
+    await suite.test('a red card pays the last cleared reward once and permits the next token', async () => {
       const firstCheckIn = await booking(lossUser.id, 'CHECKED_IN', baseNow);
       const secondCheckIn = await booking(lossUser.id, 'CHECKED_IN', new Date(baseNow.getTime() + oneHour));
       await grantTowerToken(firstCheckIn.id, { id: lossUser.id });
@@ -666,7 +666,7 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       const continued = await continueTowerAttempt(lossUser.id, attempt.attemptId, 1, baseNow);
       const continuedRetry = await continueTowerAttempt(lossUser.id, attempt.attemptId, 1, baseNow);
       assert.equal(continued.canClaim, false);
-      assert.equal(continued.securedReward, null);
+      assert.equal(continued.securedReward?.id, DEFAULT_TOWER_REWARDS[0].id);
       assert.deepEqual(continuedRetry, continued);
       assert.equal((await getTowerCurrent(lossUser.id, baseNow)).attempt?.canClaim, false);
       assert.equal(continued.cards.length, 3);
@@ -677,20 +677,17 @@ test('Tower Token inventory, attempts, admin, banner, and Reward Ticket flows', 
       const loss = await pickTowerCard(lossUser.id, attempt.attemptId, continued.cards[0].id, baseNow);
 
       assert.equal(loss.result, 'LOSS');
-      assert.equal(loss.attempt.securedReward, null);
+      assert.equal(loss.attempt.securedReward?.id, DEFAULT_TOWER_REWARDS[0].id);
       assert.equal(loss.attempt.canClaim, false);
-      assert.equal((await prisma.towerAttempt.findUniqueOrThrow({ where: { id: attempt.attemptId } })).securedLevel, 0);
+      assert.equal((await prisma.towerAttempt.findUniqueOrThrow({ where: { id: attempt.attemptId } })).securedLevel, 1);
       assertTerminalReveal(loss.attempt);
       assert.equal((await getTowerCurrent(lossUser.id, baseNow)).attempt, null);
       const recoveredLoss = await getTowerCurrent(lossUser.id, baseNow, { recoveryAttemptId: attempt.attemptId });
       assert.equal(recoveredLoss.attempt?.status, 'LOST');
       assertTerminalReveal(recoveredLoss.attempt!);
       assert.equal((await getTowerCurrent(owner.id, baseNow, { recoveryAttemptId: attempt.attemptId })).attempt, null);
-      await assert.rejects(
-        () => claimTowerReward(lossUser.id, attempt.attemptId, baseNow),
-        (error: TowerError) => error.code === 'NO_SECURED_REWARD',
-      );
-      assert.equal(await prisma.armoryTicket.count({ where: { source: 'TOWER', sourceRefId: attempt.attemptId } }), 0);
+      assert.ok((await claimTowerReward(lossUser.id, attempt.attemptId, baseNow)).ticket);
+      assert.equal(await prisma.armoryTicket.count({ where: { source: 'TOWER', sourceRefId: attempt.attemptId } }), 1);
       assert.notEqual((await startTowerAttempt(lossUser.id, baseNow)).attemptId, attempt.attemptId);
     });
 

@@ -28,12 +28,13 @@ import {
   isVenueAtCapacityDuring,
   meetsStationMinimumDuration,
 } from '@/lib/booking-availability';
-import { runSerializableTransaction } from '@/lib/prisma-transaction';
+import { rewardTransaction as runSerializableTransaction, requestIdSchema, receipt, saveReceipt, requireOrigin, RewardError, rewardFailure } from '@/lib/november';
+import { applyHappyTicket } from '@/lib/happy-tickets';
 import { getActiveFnbSubtotals } from '@/lib/fnb';
 
 const CONTROLLER_PASS_TYPES = new Set(['BRONZE', 'SILVER', 'GOLD']);
 const SIMULATOR_PASS_TYPES = new Set(['BLACK', 'APEX']);
-type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
+type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD' | 'HAPPY_TICKET';
 
 function isPassTypeAllowedForStation(passType: string, hasControllers: boolean) {
   return hasControllers
@@ -91,6 +92,7 @@ export async function GET(req: NextRequest) {
       include: {
         user: { select: { id: true, name: true, email: true } },
         station: { select: { id: true, name: true } },
+        happyRedemptions: { orderBy: { createdAt: 'desc' }, select: { id: true, ticketId: true, status: true, discount: true, createdAt: true, restoredAt: true, ticket: { select: { expiresAt: true, rulesSnapshot: true } } } },
         userPass: {
           select: {
             id: true,
@@ -154,6 +156,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+    const happyRequested = body.benefitMode === 'HAPPY_TICKET';
+    const happyRequestId = happyRequested ? requestIdSchema.parse(body.happyRequestId ?? body.requestId) : null;
+    const happyTicketId = happyRequested && typeof body.happyTicketId === 'string' ? body.happyTicketId : null;
+    const happyPayload = { stationId: body.stationId, date: body.date, startTime: body.startTime, duration: body.duration,
+      extraControllers: body.extraControllers ?? 0, notes: body.notes ?? '', happyTicketId };
+    if (happyRequested) {
+      requireOrigin(req);
+      if (!happyTicketId || body.usePass === true || body.appliedBenefitType != null || body.hourPassId || body.passId || Number(body.discount ?? 0) > 0) throw new RewardError('BENEFIT_STACKING', 'Happy Tickets cannot be combined with another benefit.');
+      const replay = await runSerializableTransaction(tx => receipt<any>(tx, session.user.id, 'HAPPY_BOOKING', happyRequestId!, happyPayload));
+      if (replay) return NextResponse.json({ booking: { ...replay.booking, customerPhone: encryptPhone(replay.booking.customerPhone) } });
+    }
+
     const confirmation = req.headers.get('x-assistant-confirmation');
     const assistantAction = confirmation ? verifyActionToken(confirmation) : null;
     if (assistantAction && (assistantAction.action !== 'BOOKING' || assistantAction.userId !== session.user.id
@@ -196,6 +210,7 @@ export async function POST(req: NextRequest) {
       rawBenefitMode === 'STANDARD'
       || rawBenefitMode === 'HOUR_PASS'
       || rawBenefitMode === 'GUILD'
+      || rawBenefitMode === 'HAPPY_TICKET'
     ) {
       benefitMode = rawBenefitMode;
     } else {
@@ -340,6 +355,10 @@ export async function POST(req: NextRequest) {
     }
 
     const outcome = await runSerializableTransaction(async (tx) => {
+      if (happyRequestId) {
+        const replay = await receipt<any>(tx, session.user.id, 'HAPPY_BOOKING', happyRequestId, happyPayload);
+        if (replay) return { ...replay, recovered: true };
+      }
       if (assistantAction?.action === 'BOOKING') {
         const freshQuote = await quoteBooking(session.user.id, assistantAction.draft, tx);
         if (quoteFingerprint(freshQuote) !== assistantAction.quoteHash
@@ -472,13 +491,17 @@ export async function POST(req: NextRequest) {
         sessionPrice = 0;
       }
 
+      const happyDiscount = benefitMode === 'HAPPY_TICKET'
+        ? await applyHappyTicket(tx, { ticketId: happyTicketId!, userId: session.user.id, stationId, date, startTime, duration }, requestTime)
+        : 0;
+      if (happyDiscount && happyDiscount !== station.hourlyRate) throw new RewardError('PRICE_CHANGED', 'The station price changed. Refresh before booking.', 409);
       const normalPrice = sessionPrice + controllerCharge;
       const discount = benefitMode === 'GUILD'
         ? GUILD_MEMBERSHIP_DISCOUNT_PERCENTAGE
         : 0;
       const totalPrice = benefitMode === 'GUILD'
         ? getGuildMembershipDiscountedTotal(normalPrice)
-        : normalPrice;
+        : Math.max(0, normalPrice - happyDiscount);
 
       const booking = await tx.booking.create({
         data: {
@@ -494,7 +517,8 @@ export async function POST(req: NextRequest) {
           notes: notes || null,
           status: 'CONFIRMED',
           bookingType: 'ONLINE',
-          paymentStatus: benefitMode === 'HOUR_PASS' ? 'PAID' : 'UNPAID',
+          paymentStatus: benefitMode === 'HOUR_PASS' || totalPrice === 0 ? 'PAID' : 'UNPAID',
+          happyDiscount,
           extraControllers: safeExtraControllers,
           controllerCharge,
           userPassId,
@@ -509,10 +533,16 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      return { booking, passHoursDeducted, usedPassType, discount };
+      const result = { booking, passHoursDeducted, usedPassType, discount };
+      if (happyRequestId) {
+        await tx.happyRedemption.create({ data: { ticketId: happyTicketId!, bookingId: booking.id, activeBookingId: booking.id, activeTicketId: happyTicketId!, discount: happyDiscount } });
+        await saveReceipt(tx, session.user.id, 'HAPPY_BOOKING', happyRequestId, happyPayload, result);
+      }
+      return { ...result, recovered: false };
     });
     const { booking, passHoursDeducted, usedPassType, discount } = outcome;
 
+    if (outcome.recovered) return NextResponse.json({ booking: { ...booking, customerPhone: encryptPhone(booking.customerPhone) } });
     const notificationPayload = {
       bookingId:        booking.id,
       customerName:     booking.customerName ?? booking.user?.name ?? 'Unknown',
@@ -554,6 +584,7 @@ export async function POST(req: NextRequest) {
       booking: { ...booking, customerPhone: encryptPhone(booking.customerPhone) },
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof RewardError || (error as { name?: string })?.name === 'ZodError') return rewardFailure(error);
     if (error instanceof BookingCreationError) {
       return NextResponse.json(
         { error: error.message, ...(error.code ? { code: error.code } : {}) },

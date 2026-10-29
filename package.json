@@ -34,7 +34,8 @@
     "test:assistant": "tsx --test test/assistant/*.test.ts",
     "test:tower": "tsx --env-file=.env.local --test test/tower/*.test.ts",
     "test:guess-36": "tsx --env-file=.env.local --test test/guess-36/*.test.ts",
-    "test:lifecycle": "tsx --test --test-concurrency=1 test/lifecycle/*.test.ts"
+    "test:lifecycle": "tsx --test --test-concurrency=1 test/lifecycle/*.test.ts",
+    "test:november": "tsx --test --test-concurrency=1 test/november/rules.test.ts test/november/integration.test.ts test/november/admin-booking-edit.test.ts test/november/request-client.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

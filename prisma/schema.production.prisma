@@ -12,6 +12,12 @@ datasource db {
 }
 
 model User {
+  legendaryPity Int @default(0)
+  happyTickets HappyTicket[]
+  happyLastClaimedAt DateTime?
+  happyRateWindowAt DateTime?
+  happyRateCount Int @default(0)
+  rewardReceipts RewardReceipt[]
   armoryFusionReceipts ArmoryFusionReceipt[]
   id                     String   @id @default(cuid())
   name                   String
@@ -86,6 +92,8 @@ model Station {
 }
 
 model Booking {
+  happyRedemptions HappyRedemption[]
+  happyDiscount Float @default(0)
   id                 String   @id @default(cuid())
   userId             String?
   stationId          String
@@ -204,6 +212,9 @@ model LootItem {
 }
 
 model UserDailySpin {
+  rewardSnapshot String?
+  awardedRarity String?
+  guaranteeReason String?
   id         String   @id @default(cuid())
   userId     String
   lootItemId String?
@@ -521,6 +532,8 @@ model TowerToken {
 }
 
 model TowerAttempt {
+  lossProtection Boolean @default(false)
+  rewardsSnapshot String?
   id                    String    @id @default(cuid())
   tokenId               String    @unique
   userId                String
@@ -835,4 +848,88 @@ model ArmoryFusionReceipt {
   @@id([userId, requestId])
   @@index([createdAt, inputTier, outputTier])
   @@map("armory_fusion_receipts")
+}
+
+
+model RewardReceipt {
+  id String @id @default(cuid())
+  actorId String
+  operation String
+  requestId String
+  fingerprint String
+  response String
+  createdAt DateTime @default(now())
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  @@unique([actorId, operation, requestId])
+  @@map("reward_receipts")
+}
+
+model HappyPool {
+  id String @id @default("main")
+  available Int @default(5)
+  version Int @default(0)
+  config String @default("{}")
+  updatedAt DateTime @updatedAt
+  @@map("happy_pool")
+}
+
+model HappyTicket {
+  id String @id @default(cuid())
+  userId String
+  status String @default("CLAIMED")
+  rulesSnapshot String
+  claimedAt DateTime @default(now())
+  expiresAt DateTime
+  redeemedAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  redemptions HappyRedemption[]
+  @@index([userId, status, expiresAt])
+  @@index([status, claimedAt])
+  @@map("happy_tickets")
+}
+
+model HappyRedemption {
+  id String @id @default(cuid())
+  ticketId String
+  bookingId String
+  activeBookingId String? @unique
+  activeTicketId String? @unique
+  discount Float
+  status String @default("APPLIED")
+  createdAt DateTime @default(now())
+  restoredAt DateTime?
+  ticket HappyTicket @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  @@index([ticketId, status])
+  @@index([bookingId, status])
+  @@map("happy_redemptions")
+}
+
+model GuildReset {
+  id String @id @default(cuid())
+  kind String
+  status String
+  createdById String
+  reason String
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  activatedAt DateTime?
+  cancelledAt DateTime?
+  refillAudit RewardAudit?
+  @@index([status, expiresAt])
+  @@map("guild_resets")
+}
+
+model RewardAudit {
+  id String @id @default(cuid())
+  actorId String
+  action String
+  referenceId String
+  before String?
+  after String
+  createdAt DateTime @default(now())
+  @@index([action, createdAt])
+  resetId String? @unique
+  reset GuildReset? @relation(fields: [resetId], references: [id], onDelete: Restrict)
+  @@map("reward_audit")
 }

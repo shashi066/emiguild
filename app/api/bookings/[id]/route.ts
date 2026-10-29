@@ -1,3 +1,5 @@
+import { restoreHappyTicket, editHappyBooking } from '@/lib/happy-tickets';
+import { requireCurrentUser, requireOrigin, RewardError, rewardFailure } from '@/lib/november';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -54,6 +56,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     include: {
       user: { select: { id: true, name: true, email: true, phone: true } },
       station: true,
+      userPass: true,
+      happyRedemptions: { orderBy: { createdAt: 'desc' }, select: { id: true, ticketId: true, status: true, discount: true, createdAt: true, restoredAt: true, ticket: { select: { expiresAt: true, rulesSnapshot: true } } } },
     },
   });
 
@@ -78,6 +82,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const isOwner = booking.userId === session.user.id;
   const isAdmin = customerScopedAdmin(session.user.role, req.headers);
+  try { requireOrigin(req); await requireCurrentUser(session.user.id, prisma, isAdmin); } catch (error) { return rewardFailure(error); }
 
   const body = await req.json();
 
@@ -105,7 +110,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       );
     }
     try {
-      const outcome = await checkInBookingWithArtifact(id);
+      const outcome = await checkInBookingWithArtifact(id, session.user.id);
       const artifact = outcome.artifactAward.artifact;
       if (outcome.artifactAward.awarded && artifact && outcome.booking.user?.email) {
         after(async () => {
@@ -130,12 +135,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         artifactAward: outcome.artifactAward,
       });
     } catch (error) {
+      if (error instanceof RewardError) return rewardFailure(error);
       console.error('Booking check-in artifact award failed:', error);
       const friendly = friendlyArmoryError(error);
       return NextResponse.json({ error: friendly.error }, { status: friendly.status });
     }
   }
 
+  const happyLink = await prisma.happyRedemption.findFirst({ where: { bookingId: id } });
+  if (happyLink && booking.status === 'CANCELLED' && result.data.status !== 'CANCELLED') {
+    return NextResponse.json({ error: 'Create a new booking to reuse a restored Happy Ticket.' }, { status: 409 });
+  }
   const updateData = {
     status: result.data.status,
     ...(result.data.status === 'CANCELLED'
@@ -165,6 +175,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Restore a pass reservation once, in the same transaction that cancels the booking.
     const updated = result.data.status === 'CANCELLED'
       ? await runSerializableTransaction(async (tx) => {
+        await requireCurrentUser(session.user.id, tx, isAdmin);
         const currentBooking = await tx.booking.findUnique({ where: { id } });
         if (!currentBooking) {
           throw new BookingUpdateError('Booking not found', 404);
@@ -183,6 +194,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           );
         }
 
+        if (!isBookingStartPastInIndia(currentBooking.date, currentBooking.startTime, new Date(), 0)) {
+          await restoreHappyTicket(tx, id, new Date());
+        }
         if (
           currentBooking.userPassId
           && currentBooking.passHoursDeducted > 0
@@ -217,16 +231,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           include,
         });
         })
-      : await prisma.booking.update({
-          where: { id },
-          data: updateData,
-          include,
+      : await runSerializableTransaction(async (tx) => {
+          await requireCurrentUser(session.user.id, tx, true);
+          return tx.booking.update({ where: { id }, data: updateData, include });
         });
 
     return NextResponse.json({
       booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
     });
   } catch (error) {
+    if (error instanceof RewardError) return rewardFailure(error);
     if (error instanceof BookingUpdateError) {
       return NextResponse.json(
         { error: error.message, ...(error.code ? { code: error.code } : {}) },
@@ -257,6 +271,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
   const body = await req.json();
+  try { requireOrigin(req); await requireCurrentUser(session.user.id, prisma, true); } catch (error) { return rewardFailure(error); }
+  if (body.requestId || body.benefitMode === 'HAPPY_TICKET' || await prisma.happyRedemption.findFirst({ where: { bookingId: id } })) {
+    try {
+      requireOrigin(req);
+      const updated = await editHappyBooking(session.user.id, id, body);
+      return NextResponse.json({ booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) } });
+    } catch (error) { return rewardFailure(error); }
+  }
   const {
     date,
     stationId,
@@ -427,6 +449,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const updated = await runSerializableTransaction(async (tx) => {
+      await requireCurrentUser(session.user.id, tx, true);
+      if (await tx.happyRedemption.findFirst({ where: { bookingId: id } })) throw new BookingUpdateError('Ticket usage changed. Refresh before saving.', 409, 'STALE_EDIT');
       const currentBooking = await tx.booking.findUnique({
         where: { id },
         include: { userPass: true },
@@ -558,6 +582,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       booking: { ...updated, customerPhone: encryptPhone(updated.customerPhone) },
     });
   } catch (error) {
+    if (error instanceof RewardError) return rewardFailure(error);
     if (error instanceof BookingUpdateError) {
       return NextResponse.json(
         { error: error.message, ...(error.code ? { code: error.code } : {}) },
@@ -573,7 +598,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session || session.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -581,12 +606,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
 
   try {
+    requireOrigin(req);
     await runSerializableTransaction(async (tx) => {
+      await requireCurrentUser(session.user.id, tx, true);
       const booking = await tx.booking.findUnique({
         where: { id },
         include: { userPass: true },
       });
       if (!booking) throw new BookingUpdateError('Booking not found', 404);
+      if (await tx.happyRedemption.findFirst({ where: { bookingId: id } })) throw new BookingUpdateError('Cancel Happy Ticket bookings instead of deleting their history.', 409);
 
       if (
         ['PENDING', 'CONFIRMED'].includes(booking.status)
@@ -616,6 +644,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     });
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof RewardError) return rewardFailure(error);
     if (error instanceof BookingUpdateError) {
       return NextResponse.json(
         { error: error.message },

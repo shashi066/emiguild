@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { caseInsensitiveContains } from '@/lib/prisma-search';
-import { runSerializableTransaction } from '@/lib/prisma-transaction';
+import { rewardTransaction as runSerializableTransaction, featureEnabled } from '@/lib/november';
 import { getArmoryToday } from '@/lib/armory';
 import { getNextIstMidnight } from '@/lib/armory-clock';
 import {
@@ -460,6 +460,7 @@ function serializeAttempt(
   rewards: TowerRewardConfig[],
   now: Date = new Date(),
 ) {
+  rewards = parseJson<TowerRewardConfig[]>(attempt.rewardsSnapshot, rewards);
   const redCards = parseAttemptRedCards(attempt.redCards);
   const status = effectiveAttemptStatus(attempt, now);
   const forfeited = status === 'TIMED_OUT' || status === 'EXPIRED';
@@ -478,6 +479,8 @@ function serializeAttempt(
     totalLevels: TOWER_TOTAL_LEVELS,
     status,
     securedReward,
+    lossProtection: attempt.lossProtection,
+    rewardAddedToVault: status === 'LOST' && Boolean(attempt.claimedAt && securedReward),
     canClaim: Boolean(securedReward)
       && latestPick?.result === 'SAFE'
       && latestPick.continued !== true
@@ -777,7 +780,7 @@ export async function getTowerAdminHistory(input: { cursor?: string; take?: numb
   });
   if (status === 'NO_REWARD') Object.assign(where, {
     OR: [
-      { attempt: { is: { status: 'LOST' } } },
+      { attempt: { is: { status: 'LOST', claimedAt: null } } },
       {
         status: 'USED',
         expiresAt: { gt: now },
@@ -789,7 +792,7 @@ export async function getTowerAdminHistory(input: { cursor?: string; take?: numb
     expiresAt: { gt: now },
     attempt: { is: { status: 'COMPLETED', runExpiresAt: { gt: now } } },
   });
-  if (status === 'REWARD_CLAIMED') Object.assign(where, { attempt: { is: { status: 'CLAIMED' } } });
+  if (status === 'REWARD_CLAIMED') Object.assign(where, { OR: [{ attempt: { is: { status: 'CLAIMED' } } }, { attempt: { is: { status: 'LOST', claimedAt: { not: null } } } }] });
   if (['LOST', 'CLAIMED'].includes(status)) Object.assign(where, { attempt: { is: { status } } });
   const rows = await prisma.towerToken.findMany({
     where,
@@ -797,7 +800,7 @@ export async function getTowerAdminHistory(input: { cursor?: string; take?: numb
       id: true, source: true, status: true, earnedAt: true, expiresAt: true,
       user: { select: { id: true, name: true, email: true } },
       grantedBy: { select: { name: true } },
-      attempt: { select: { status: true, securedLevel: true, runExpiresAt: true } },
+      attempt: { select: { status: true, securedLevel: true, runExpiresAt: true, claimedAt: true } },
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
@@ -814,7 +817,7 @@ export async function getTowerAdminHistory(input: { cursor?: string; take?: numb
       }
       const adminStatus =
         effectiveStatus === 'AVAILABLE' ? 'TOKEN_READY'
-        : effectiveStatus === 'CLAIMED' ? 'REWARD_CLAIMED'
+        : effectiveStatus === 'CLAIMED' || (effectiveStatus === 'LOST' && row.attempt?.claimedAt) ? 'REWARD_CLAIMED'
         : ['LOST', 'TIMED_OUT'].includes(effectiveStatus) ? 'NO_REWARD'
         : effectiveStatus === 'EXPIRED' ? 'EXPIRED'
         : ['IN_PROGRESS', 'COMPLETED'].includes(effectiveStatus) ? 'IN_CLIMB'
@@ -900,6 +903,7 @@ export async function getTowerCurrent(
   ]);
   return {
     enabled: config.enabled,
+    lossRewardsEnabled: await featureEnabled('tower_loss_rewards_enabled'),
     runDurationSeconds: config.runDurationSeconds,
     availableTokens,
     review: {
@@ -950,6 +954,8 @@ export async function startTowerAttempt(userId: string, now: Date = new Date()) 
       data: {
         tokenId: token.id,
         userId,
+        lossProtection: await featureEnabled('tower_loss_rewards_enabled', tx),
+        rewardsSnapshot: JSON.stringify(config.rewards),
         redCards: JSON.stringify(generateRedCards(config.redCardsPerFloor)),
         startedAt: now,
         runExpiresAt: getTowerRunExpiry(now, token.expiresAt, config.runDurationSeconds),
@@ -968,11 +974,13 @@ export async function pickTowerCard(userId: string, attemptId: string, selectedC
     const attempt = await tx.towerAttempt.findUnique({ where: { id: attemptId }, include: { token: true } });
     if (!attempt) throw new TowerError('INVALID_ATTEMPT', undefined, 404);
     if (attempt.userId !== userId) throw new TowerError('FORBIDDEN', undefined, 403);
-    if (isTowerTokenExpired(attempt.token.expiresAt, now)) throw new TowerError('TOWER_EXPIRED', undefined, 410);
-    if (isTowerDeadlineReached(attempt.runExpiresAt, now)) throw new TowerError('TOWER_RUN_EXPIRED', undefined, 410);
+    const rewards = parseJson<TowerRewardConfig[]>(attempt.rewardsSnapshot, config.rewards);
     const history = parseJson<TowerPickRecord[]>(attempt.resolvedPicks, []);
     const duplicate = history.find((record) => record.cardId === selectedCardId);
-    if (duplicate) return pickResponse(attempt, config.rewards, duplicate, now);
+    if (duplicate && attempt.status === 'LOST' && attempt.claimedAt) return pickResponse(attempt, rewards, duplicate, now);
+    if (isTowerTokenExpired(attempt.token.expiresAt, now)) throw new TowerError('TOWER_EXPIRED', undefined, 410);
+    if (isTowerDeadlineReached(attempt.runExpiresAt, now)) throw new TowerError('TOWER_RUN_EXPIRED', undefined, 410);
+    if (duplicate) return pickResponse(attempt, rewards, duplicate, now);
     if (attempt.status !== 'IN_PROGRESS') throw new TowerError('ATTEMPT_ENDED', undefined, 409);
     const level = attempt.currentLevel;
     const slot = slotForCard(attempt.id, level, selectedCardId);
@@ -988,20 +996,28 @@ export async function pickTowerCard(userId: string, attemptId: string, selectedC
     const redSlots = parseAttemptRedCards(attempt.redCards)[level - 1];
 
     if (redSlots.includes(slot)) {
-      const record: TowerPickRecord = { level, cardId: selectedCardId, cardSlot: slot, result: 'LOSS', securedReward: null };
+      const cleared = history.filter(pick => pick.result === 'SAFE').at(-1);
+      const protectedReward = attempt.lossProtection && cleared?.level === level - 1 ? cleared.reward ?? rewardForLevel(rewards, cleared.level) : null;
+      const record: TowerPickRecord = { level, cardId: selectedCardId, cardSlot: slot, result: 'LOSS', securedReward: protectedReward };
       const updated = await tx.towerAttempt.updateMany({
         where: { id: attempt.id, status: 'IN_PROGRESS', currentLevel: level },
         data: {
-          status: 'LOST', securedLevel: 0, securedRewardSnapshot: null, completedAt: now,
+          status: 'LOST', securedLevel: protectedReward ? level - 1 : 0, securedRewardSnapshot: protectedReward ? JSON.stringify(protectedReward) : null, completedAt: now, claimedAt: protectedReward ? now : null,
           resolvedPicks: JSON.stringify([...history, record]),
         },
       });
       if (updated.count !== 1) throw new TowerError('ATTEMPT_ENDED', undefined, 409);
+      if (protectedReward) {
+        const ticket = await tx.armoryTicket.create({ data: {
+          userId, setId: null, code: makeTicketCode(), status: 'UNUSED', source: 'TOWER', sourceRefId: attempt.id,
+          claimDate: getArmoryToday(now), rewardSnapshot: towerTicketSnapshot(protectedReward, level - 1), expiresAt: attempt.token.expiresAt,
+        } });
+      }
       const ended = await tx.towerAttempt.findUniqueOrThrow({ where: { id: attempt.id }, include: { token: true } });
       return pickResponse(ended, config.rewards, record, now);
     }
 
-    const reward = rewardForLevel(config.rewards, level);
+    const reward = rewardForLevel(rewards, level);
     const status = level === TOWER_TOTAL_LEVELS ? 'COMPLETED' : 'IN_PROGRESS';
     const record: TowerPickRecord = { level, cardId: selectedCardId, cardSlot: slot, result: 'SAFE', reward, securedReward: reward };
     const updated = await tx.towerAttempt.updateMany({
@@ -1053,8 +1069,8 @@ export async function continueTowerAttempt(userId: string, attemptId: string, le
         resolvedPicks: attempt.resolvedPicks,
       },
       data: {
-        securedLevel: 0,
-        securedRewardSnapshot: null,
+        securedLevel: attempt.lossProtection ? attempt.securedLevel : 0,
+        securedRewardSnapshot: attempt.lossProtection ? attempt.securedRewardSnapshot : null,
         resolvedPicks: JSON.stringify(continuedHistory),
       },
     });
@@ -1069,6 +1085,15 @@ export async function continueTowerAttempt(userId: string, attemptId: string, le
     const continued = await tx.towerAttempt.findUniqueOrThrow({ where: { id: attempt.id }, include: { token: true } });
     return serializeAttempt(continued, config.rewards, now);
   });
+}
+
+function towerTicketSnapshot(reward: TowerPublicReward, level: number) {
+  return JSON.stringify({ source: 'Tower of Rewards', rewardId: reward.id, rewardType: reward.type,
+    description: reward.name, value: reward.value ?? null,
+    discountPercentage: reward.type === 'DISCOUNT' ? reward.value ?? null : null,
+    gamingMinutes: reward.type === 'GAMING_TIME' || reward.type === 'PASS' ? reward.value ?? null : null,
+    racingMinutes: reward.type === 'RACING_TIME' ? reward.value ?? null : null,
+    passType: reward.passType ?? null, towerLevel: level });
 }
 
 export async function claimTowerReward(userId: string, attemptId: string, now: Date = new Date()) {
@@ -1098,14 +1123,7 @@ export async function claimTowerReward(userId: string, attemptId: string, now: D
         if (!reward || attempt.securedLevel <= 0) throw new TowerError('NO_SECURED_REWARD');
         if (!['IN_PROGRESS', 'COMPLETED'].includes(attempt.status)) throw new TowerError('ATTEMPT_ENDED', undefined, 409);
 
-        const rewardSnapshot = JSON.stringify({
-          source: 'Tower of Rewards', rewardId: reward.id, rewardType: reward.type,
-          description: reward.name, value: reward.value ?? null,
-          discountPercentage: reward.type === 'DISCOUNT' ? reward.value ?? null : null,
-          gamingMinutes: reward.type === 'GAMING_TIME' || reward.type === 'PASS' ? reward.value ?? null : null,
-          racingMinutes: reward.type === 'RACING_TIME' ? reward.value ?? null : null,
-          passType: reward.passType ?? null, towerLevel: attempt.securedLevel,
-        });
+        const rewardSnapshot = towerTicketSnapshot(reward, attempt.securedLevel);
         const claimedAttempt = await tx.towerAttempt.updateMany({
           where: { id: attempt.id, status: { in: ['IN_PROGRESS', 'COMPLETED'] }, resolvedPicks: attempt.resolvedPicks },
           data: { status: 'CLAIMED', completedAt: attempt.completedAt ?? now, claimedAt: now },

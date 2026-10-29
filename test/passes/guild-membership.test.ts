@@ -256,7 +256,7 @@ test('wires explicit Guild Membership selection through public booking and confi
   const myBookings = readFileSync(new URL('../../app/my-bookings/page.tsx', import.meta.url), 'utf8');
   const notifications = readFileSync(new URL('../../lib/notify.ts', import.meta.url), 'utf8');
 
-  assert.equal(bookingClient.includes("useState<BookingBenefitMode>('STANDARD')"), true);
+  assert.equal(bookingClient.includes("useState<BookingBenefitMode>(searchParams.get('happyTicket') ? 'HAPPY_TICKET' : 'STANDARD')"), true);
   assert.equal(bookingClient.includes("setBenefitMode('GUILD')"), true);
   assert.equal(bookingClient.includes("setBenefitMode('HOUR_PASS')"), true);
   assert.equal(bookingClient.includes("setBenefitMode('STANDARD')"), true);
@@ -269,7 +269,7 @@ test('wires explicit Guild Membership selection through public booking and confi
   assert.equal(bookingRoute.includes('validateGuildBenefitApplication({'), true);
   assert.equal(bookingRoute.includes('getGuildMembershipDiscountedTotal(normalPrice)'), true);
   assert.equal(bookingRoute.includes('appliedBenefitType,'), true);
-  assert.equal(bookingRoute.includes("paymentStatus: benefitMode === 'HOUR_PASS' ? 'PAID' : 'UNPAID'"), true);
+  assert.equal(bookingRoute.includes("paymentStatus: benefitMode === 'HOUR_PASS' || totalPrice === 0 ? 'PAID' : 'UNPAID'"), true);
   assert.equal(bookingRoute.includes("code: 'BENEFIT_STACKING'"), true);
 
   assert.equal(confirmation.includes('booking.discount}% discount applied'), true);
