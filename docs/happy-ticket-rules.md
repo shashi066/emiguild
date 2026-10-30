@@ -1,39 +1,31 @@
-# Happy Ticket rules and operational model
+# Happy Tickets: personal accounts
 
-One ticket covers one base PS5 screen-hour. Extra controllers, additional hours and food remain payable. A booking must last at least one hour; its first hour must fit the ticket's eligible schedule. Benefits do not stack with passes, memberships or other discounts.
+## Claims and bookings
 
-## Pool, claims and expiry
+- Each existing or new account starts with five claimable tickets. Balances are independent.
+- One successful claim consumes one personal balance unit and starts a 24-hour cooldown. Other accounts are unaffected.
+- A claimed ticket belongs only to its account and grants one base PS5 screen-hour. Extra time, controllers and food remain payable. Benefits cannot be stacked.
+- New claims expire at the exclusive start of the next IST day: displayed as 11:59 PM on the claim day. The whole booking must finish before expiry.
+- Eligible PS5 stations, weekdays and hours remain globally configurable. Issued tickets retain their rule snapshots.
+- Pre-start cancellation restores the claimed ticket with its original expiry. It never restores claimable balance, changes cooldown or extends expiry.
+- Claimed-ticket expiry never refills the personal balance. No automatic refill is scheduled.
 
-- The public available balance starts at five and stays between zero and five. A claim decrements it once.
-- Any signed-in user can claim. Another claim is allowed exactly 24 hours after the last successful claim, including across resets.
-- A new claimed ticket expires at the exclusive start of the next IST calendar day. A November 3 claim is displayed as expiring November 3, 11:59 PM IST, and rejected at November 4 midnight. Existing issued tickets retain their stored expiry.
-- The entire session must finish by that boundary. Expiry, cancellation and redemption never refill the pool.
-- Initial eligibility is Monday–Friday, 16:00–23:00 IST, on explicitly selected active PS5 stations. Admins can edit days/hours/stations. Normal booking opening hours and availability also apply.
-- Claims stay open on weekends. Show a warning if the issued ticket has no eligible one-hour window before expiry. No extension or weekend exception is silently granted.
-- Claimed tickets snapshot their eligibility configuration. Later configuration changes do not rewrite issued tickets.
-- A valid pre-start cancellation restores the ticket once with its original expiry. Already-expired tickets remain expired. No cooldown reset or pool refund occurs.
-- Redeemed/cancelled bookings retain redemption history. Financial/session edits revalidate eligibility; paid bookings cannot silently change price. Deletion is blocked for bookings with redemption history.
+## Personal banked resets
 
-## Resets
+- A reset belongs to exactly one account. Its owner can activate it even with tickets remaining; the balance becomes exactly five.
+- Activation consumes only that copy and changes no other account, cooldown, claimed ticket or booking.
+- Each copy expires one calendar month after issuance at the same IST time, clamped for short months.
+- Old ownerless shared reset fixtures are archived by the personal-balance migration, never multiplied across accounts. Existing tickets, cooldowns and redemption history are preserved.
 
-Forced Reset sets available balance to exactly five. It does not add five. It preserves existing claims and cooldowns, even when the pool is already full.
+## Admin controls
 
-Banked Reset stores a separately identified entitlement without changing the balance. It expires one calendar month later at the same IST local time, clamping to the destination month's last day (January 31 → February 28/29). An admin can activate it once, or cancel it while unused and unexpired. Activation refills to five. No automatic activation or refill exists.
+- Give everyone one banked reset: snapshot the existing accounts, issue one copy to each in a single transaction and save one recovery receipt. Later signups receive no copy of past grants.
+- Refill everyone: set each existing account's personal balance to five, preserving their cooldowns and claimed tickets.
+- Confirm the affected account count and require a reason. If the count changed before submission, refresh and reconfirm.
+- Cancelling a grant revokes only unused, unexpired copies. Activated copies and their audit history remain.
+- Search members to inspect personal stock, next claim time, claimed-ticket history and reset history. Eligibility configuration remains global.
+- Server pause switches and receipt recovery remain available. Happy Tickets stay outside Vault.
 
-Banking can count as a November challenge result, but the public status must say **Banked—awaiting activation** until activation. Expiry/cancellation remains visible as the actual outcome.
+Duplicate requests return committed results; changed inputs conflict. Ownership, balance limits and writes are checked transactionally. Ten attempts per account per minute remain enforced separately from the successful-claim cooldown.
 
-## Data and interfaces
-
-Six dedicated tables: HappyPool, HappyTicket, HappyRedemption, GuildReset, RewardReceipt and RewardAudit. Happy Ticket cooldown and durable rate counters live on User; reset/admin history is stored once. Existing passes and ArmoryTickets keep their original lifecycle. Outstanding claimed tickets can exceed five after deliberate resets; five limits available pool tickets, not total unexpired liabilities.
-
-- `GET /api/happy-tickets`: public pool/rules; authenticated users also receive their own wallet and cooldown. Private/no-store response.
-- `POST /api/happy-tickets/claim`: same-origin authenticated claim with requestId.
-- `GET /api/rewards/receipts/HAPPY_CLAIM/{requestId}` and `HAPPY_BOOKING/{requestId}`: owner-only committed result recovery.
-- `POST /api/bookings`: benefitMode HAPPY_TICKET, happyTicketId and requestId; original booking inputs remain required.
-- `GET/POST /api/admin/happy-tickets`: current database ADMIN only. Management, configuration, reset operations and feature switches. Mutations require same origin.
-
-Requests use actor/operation/request ID uniqueness, payload fingerprints, serializable transactions and bounded retries. A reused ID with different inputs conflicts. Pool refill events, claims and booking redemption/restoration are durable. Expiry is enforced from timestamps even without cleanup jobs. Claim attempt limits are ten per account per minute; legitimate receipt replay is not a new claim.
-
-## Operational risks
-
-Signup does not verify email/phone, so per-account cooldowns do not prevent duplicate-account farming. No invasive identity collection was added. Admins can pause new claims and resets; existing valid redemptions and receipt recovery remain available. Check available station capacity and liabilities before refills.
+Five claimable hours now exist per account. An all-account reset can add up to five times the eligible account count in claimable hours. Duplicate-account farming remains a risk; no new identity collection or reward caps are added.

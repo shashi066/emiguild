@@ -53,7 +53,7 @@ export function HappyTicketPanel({ compact = false }: { compact?: boolean }) {
       if (!response.ok) throw new Error((data as unknown as { error: string }).error || 'Unable to load tickets.');
       if (generation.current !== id) return;
       const old = previous.current;
-      if (old && data.pool.lastRefill?.id && old.pool.lastRefill?.id !== data.pool.lastRefill.id && !ownRefill.current && !document.hidden) { setRefill(data.pool.lastRefill.id); setMessage('Pool refilled.'); }
+      if (old && data.pool.lastRefill?.id && old.pool.lastRefill?.id !== data.pool.lastRefill.id && !ownRefill.current && !document.hidden) { setRefill(data.pool.lastRefill.id); setMessage('Your tickets refilled.'); }
       ownRefill.current = false;
       const newlyUsed = data.wallet?.tickets.filter(t => t.status === 'REDEEMED' && old?.wallet?.tickets.some(o => o.id === t.id && o.status === 'CLAIMED')).map(t => t.id) ?? [];
       setUsed(newlyUsed);
@@ -88,7 +88,7 @@ export function HappyTicketPanel({ compact = false }: { compact?: boolean }) {
       if (identity.current !== owner) return;
       generation.current++; setPending(false); setRefill(''); setRevealed(document.hidden ? '' : result.ticket.id);
       // Reflect a committed receipt even if the subsequent pool refresh fails.
-      setState(old => old ? { ...old, wallet: { nextClaimAt: result.nextClaimAt, tickets: [{ ...result.ticket, redemptions: [] }, ...(old.wallet?.tickets.filter(t => t.id !== result.ticket.id) ?? [])] } } : old);
+      setState(old => old ? { ...old, pool: { ...old.pool, available: result.available ?? old.pool.available, version: result.version ?? old.pool.version }, wallet: { nextClaimAt: result.nextClaimAt, tickets: [{ ...result.ticket, redemptions: [] }, ...(old.wallet?.tickets.filter(t => t.id !== result.ticket.id) ?? [])] } } : old);
       setMessage('Happy Ticket claimed. Your free hour is ready.'); void refresh();
     } catch (cause) { if (identity.current === owner) { setPending(cause instanceof PendingRewardError); setError(cause instanceof Error ? cause.message : 'Unable to claim.'); } }
     finally { flight.current = false; setBusy(false); }
@@ -103,9 +103,9 @@ export function HappyTicketPanel({ compact = false }: { compact?: boolean }) {
       const result = await submitRewardRequest(owner, 'HAPPY_RESET', '/api/happy-tickets/reset', payload);
       if (identity.current !== owner) return;
       generation.current++; ownRefill.current = true; setResetPending(false); setRevealed('');
-      setRefill(document.hidden ? '' : result.resetId);
-      setState(old => old ? { ...old, pool: { ...old.pool, available: result.available, banked: old.pool.banked ? { ...old.pool.banked, count: Math.max(0, old.pool.banked.count - 1) } : undefined } } : old);
-      setMessage('Pool refilled.'); void refresh();
+      setRefill(document.hidden || result.version === undefined ? '' : result.resetId);
+      setState(old => old ? { ...old, pool: { ...old.pool, available: result.version === undefined ? old.pool.available : result.available, version: result.version ?? old.pool.version, banked: old.pool.banked ? { ...old.pool.banked, count: result.version === undefined ? old.pool.banked.count : Math.max(0, old.pool.banked.count - 1) } : undefined } } : old);
+      setMessage('Your tickets refilled.'); void refresh();
     } catch (cause) { if (identity.current === owner) { setResetPending(cause instanceof PendingRewardError); setError(cause instanceof Error ? cause.message : 'Unable to use reset.'); } }
     finally { flight.current = false; setResetBusy(false); }
   };

@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { configureHappyPool } from '@/lib/happy-tickets';
 import { changeGuildReset } from '@/lib/guild-resets';
-import { happyConfigSchema, readHappyConfig } from '@/lib/happy-ticket-rules';
-import { audit, getFeatureFlags, NOVEMBER_FLAGS, requestIdSchema, requireCurrentUser, requireOrigin, rewardFailure, rewardTransaction } from '@/lib/november';
+import { happyConfigSchema } from '@/lib/happy-ticket-rules';
+import { audit, NOVEMBER_FLAGS, requestIdSchema, requireCurrentUser, requireOrigin, rewardFailure, rewardTransaction } from '@/lib/november';
+import { getAdminHappyTicketsReport } from '@/lib/admin-happy-tickets';
 import { lifecycleJson } from '@/lib/lifecycle/http';
 
 export async function GET(request: Request) {
@@ -12,23 +13,10 @@ export async function GET(request: Request) {
   if (!session?.user?.id) return lifecycleJson({ error: 'Forbidden' }, 403);
   try {
     await requireCurrentUser(session.user.id, prisma, true);
-    const cursor = new URL(request.url).searchParams.get('cursor');
-    const now = new Date();
-    const [pool, tickets, resets, history, stations, issued, redeemed, expired, flags] = await Promise.all([
-      prisma.happyPool.findUnique({ where: { id: 'main' } }),
-      prisma.happyTicket.findMany({ take: 50, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), orderBy: [{ claimedAt: 'desc' }, { id: 'desc' }], include: { user: { select: { id: true, name: true, email: true } }, redemptions: true } }),
-      prisma.guildReset.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }),
-      prisma.rewardAudit.findMany({ where: { action: { in: ['POOL_FORCE', 'POOL_ACTIVATE'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100, select: { id: true, action: true, createdAt: true, before: true, after: true } }),
-      prisma.station.findMany({ where: { hasControllers: true, isActive: true }, select: { id: true, name: true } }),
-      prisma.happyTicket.count(), prisma.happyTicket.count({ where: { status: 'REDEEMED' } }),
-      prisma.happyTicket.count({ where: { OR: [{ status: 'EXPIRED' }, { status: 'CLAIMED', expiresAt: { lte: now } }] } }),
-      getFeatureFlags(),
-    ]);
-    const events = history.map(row => ({ id: row.id, kind: row.action.replace('POOL_', ''), createdAt: row.createdAt, before: JSON.parse(row.before ?? '{}').available, after: JSON.parse(row.after).available }));
-    return lifecycleJson({ pool: { ...(pool ?? { id: 'main', available: 5, version: 0 }), config: readHappyConfig(pool?.config ?? '{}') }, tickets, nextCursor: tickets.length === 50 ? tickets.at(-1)?.id : null, resets: resets.map(r => ({ ...r, status: r.status === 'PENDING' && r.expiresAt && r.expiresAt <= now ? 'EXPIRED' : r.status })), events, stations, counts: { issued, redeemed, expired }, flags });
+    return lifecycleJson(await getAdminHappyTicketsReport(session.user.id, new URL(request.url).searchParams));
   } catch (error) { return rewardFailure(error); }
 }
-const resetSchema = z.object({ requestId: requestIdSchema, action: z.enum(['FORCE', 'BANK', 'ACTIVATE', 'CANCEL']), reason: z.string().trim().min(1).max(500), resetId: z.string().optional(), version: z.number().int().min(0).optional() }).strict();
+const resetSchema = z.object({ requestId: requestIdSchema, action: z.enum(['FORCE', 'BANK', 'CANCEL']), reason: z.string().trim().min(1).max(500), grantId: z.string().min(1).optional(), expectedAccounts: z.number().int().min(1).optional() }).strict().refine(v => v.action === 'CANCEL' ? !!v.grantId : v.expectedAccounts !== undefined, 'Confirm the affected account count or choose a grant.');
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return lifecycleJson({ error: 'Forbidden' }, 403);

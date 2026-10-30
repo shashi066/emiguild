@@ -44,22 +44,22 @@ export function HappyTicketDispenser(p: DispenserProps) {
       </div>
       <div className={styles.dispenserSlot} aria-hidden="true" />
       <div key={'marks-' + (p.refill || 'availability')} className={`${styles.availability} ${p.refill ? styles.refilling : ''}`} aria-hidden="true">{Array.from({length:5},(_,i)=><span key={i} data-filled={i < p.available} style={{'--ticket-index':i} as React.CSSProperties} />)}</div>
-      {!p.loading && <div className={styles.poolLabel}><strong>{p.available} of 5 available</strong><span>Available to everyone</span></div>}
+      {!p.loading && <div className={styles.poolLabel}><strong>{p.signedIn ? `Your tickets: ${p.available}/5` : '5 tickets per account'}</strong><span>{p.signedIn ? 'Only for your account' : 'Sign in to view your balance'}</span></div>}
     </div>
     {p.loading ? <p className={styles.loadingCaption} role="status">Loading Happy Tickets...</p> : <>
-      <div ref={resultLine} tabIndex={-1} className={styles.resultLine} aria-hidden={!p.claimResult && !p.refill}>{p.claimResult ? <><Check size={17} aria-hidden="true" /> Your ticket is ready</> : p.refill ? <><Check size={17} aria-hidden="true" /> Pool refilled</> : null}</div>
+      <div ref={resultLine} tabIndex={-1} className={styles.resultLine} aria-hidden={!p.claimResult && !p.refill}>{p.claimResult ? <><Check size={17} aria-hidden="true" /> Your ticket is ready</> : p.refill ? <><Check size={17} aria-hidden="true" /> Your tickets refilled</> : null}</div>
       <div className={styles.actions}>
         {p.claimResult ? <Link className={styles.primary} href={p.claimResult.href}>Book your hour <Gamepad2 size={18} aria-hidden="true" /></Link> : p.signedIn ? <button className={styles.primary} disabled={busy || p.pendingReset || !canClaim} onClick={p.onClaim} aria-busy={p.claiming}>{p.claiming ? <><span className="spinner" aria-hidden="true" /> Claiming...</> : p.pendingClaim ? 'Check claim result' : p.cooldown ? <><Clock3 size={16} aria-hidden="true" /> Claimed · {p.cooldown} left</> : !p.enabled ? 'Claims unavailable' : !p.available ? 'No tickets available' : <><Ticket size={18} aria-hidden="true" /> Claim Ticket</>}</button> : <Link className={styles.primary} href="/login?callbackUrl=/happy-tickets">Sign in to claim</Link>}
-        {p.signedIn ? <button ref={resetButton} className={styles.resetButton} disabled={busy || p.pendingClaim || !canReset} aria-busy={p.resetting} onClick={() => { if(p.pendingReset) p.onReset(); else { setConfirmationVersion(p.version); dialog.current?.showModal(); } }}><RotateCcw key={p.refill || 'reset'} className={p.refill ? styles.resetTurn : ''} size={18} aria-hidden="true" />{p.resetting ? <><span className="spinner" aria-hidden="true" /> Refilling...</> : p.pendingReset ? 'Check reset result' : 'Reset Pool'}<span className={styles.resetCount}>{p.resets}</span></button> : <Link className={styles.resetButton} href="/login?callbackUrl=/happy-tickets"><RotateCcw size={18} aria-hidden="true" /> Sign in to reset <span className={styles.resetCount}>{p.resets}</span></Link>}
+        {p.signedIn ? <button ref={resetButton} className={styles.resetButton} disabled={busy || p.pendingClaim || !canReset} aria-busy={p.resetting} onClick={() => { if(p.pendingReset) p.onReset(); else { setConfirmationVersion(p.version); dialog.current?.showModal(); } }}><RotateCcw key={p.refill || 'reset'} className={p.refill ? styles.resetTurn : ''} size={18} aria-hidden="true" />{p.resetting ? <><span className="spinner" aria-hidden="true" /> Refilling...</> : p.pendingReset ? 'Check reset result' : 'Reset My Tickets'}<span className={styles.resetCount}>{p.resets}</span></button> : <Link className={styles.resetButton} href="/login?callbackUrl=/happy-tickets"><RotateCcw size={18} aria-hidden="true" /> Sign in to reset <span className={styles.resetCount}>{p.resets}</span></Link>}
       </div>
       {p.claimResult && <p className={styles.supporting}>Expires {p.claimResult.expires}</p>}
       {!p.resetsEnabled && <p className={styles.supporting}>Resets paused</p>}
       {p.warning && <p className={styles.warning}>{p.warning}</p>}
       <dialog ref={dialog} className={styles.resetDialog} aria-labelledby={titleId} onCancel={e=>{e.preventDefault();close();}}>
-        <h2 id={titleId}>Refill the guild?</h2>
+        <h2 id={titleId}>Refill your tickets?</h2>
         <div className={styles.resetPreview}><span>{p.available}<small> / 5</small></span><RotateCcw size={24} aria-hidden="true" /><span>5<small> / 5</small></span></div>
-        <p>Uses 1 banked reset. Refills tickets for everyone.</p><p className={styles.muted}>Your claim cooldown stays the same.</p>
-        {p.available === 5 && <p className={styles.warning}>The pool is already full. This still uses one reset.</p>}
+        <p>Uses 1 banked reset. Refills only your tickets to five.</p><p className={styles.muted}>Your claim cooldown stays the same.</p>
+        {p.available === 5 && <p className={styles.warning}>Your tickets are already full. This still uses one reset.</p>}
         {confirmationVersion !== p.version && <p role="status">Tickets changed. Go back and review the new count.</p>}
         <div className={styles.dialogActions}><button className={styles.secondary} onClick={close}>Back</button><button className={styles.primary} disabled={busy || !canReset || confirmationVersion !== p.version} onClick={()=>{close();p.onReset();}}>Use Reset</button></div>
       </dialog>

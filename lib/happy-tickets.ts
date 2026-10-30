@@ -1,17 +1,23 @@
+import { readHappySettings, writeHappySettings } from './happy-config';
 import { prisma } from './prisma';
-import { DEFAULT_HAPPY_CONFIG, HAPPY_COOLDOWN_MS, happyConfigSchema, happyExpiry, readHappyConfig, hasHappyWindow, happyBookingProblem, type HappyConfig } from './happy-ticket-rules';
+import { HAPPY_COOLDOWN_MS, happyConfigSchema, happyExpiry, readHappyConfig, hasHappyWindow, happyBookingProblem, type HappyConfig } from './happy-ticket-rules';
 import { audit, featureEnabled, getFeatureFlags, receipt, requireCurrentUser, RewardError, requestIdSchema, rewardTransaction, saveReceipt, type RewardTx } from './november';
 
-export async function happyPoolState(now = new Date()) {
-  const [pool, flags, lastRefill, bankedCount, nextReset] = await Promise.all([
-    prisma.happyPool.findUnique({ where: { id: 'main' } }),
+export async function happyPoolState(userId?: string, now = new Date()) {
+  const owner = { userId: userId ?? '' };
+  const [pool, flags, account, bankedCount, nextReset] = await Promise.all([
+    readHappySettings(),
     getFeatureFlags(['happy_tickets_enabled', 'guild_resets_enabled']),
-    prisma.rewardAudit.findFirst({ where: { action: { in: ['POOL_FORCE', 'POOL_ACTIVATE'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { id: true, createdAt: true } }),
-    prisma.guildReset.count({ where: { kind: 'BANKED', status: 'PENDING', expiresAt: { gt: now } } }),
-    prisma.guildReset.findFirst({ where: { kind: 'BANKED', status: 'PENDING', expiresAt: { gt: now } }, orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }], select: { id: true, expiresAt: true } }),
+    userId ? prisma.user.findUnique({ where: { id: userId }, select: { happyAvailable: true, happyVersion: true, happyLastRefillId: true, happyLastRefillAt: true } }) : Promise.resolve(null),
+    userId ? prisma.guildReset.count({ where: { ...owner, kind: 'BANKED', status: 'PENDING', expiresAt: { gt: now } } }) : Promise.resolve(0),
+    userId ? prisma.guildReset.findFirst({ where: { ...owner, kind: 'BANKED', status: 'PENDING', expiresAt: { gt: now } }, orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }], select: { id: true, expiresAt: true } }) : Promise.resolve(null),
   ]);
-  const rules = readHappyConfig(pool?.config ?? '{}');
-  return { available: pool?.available ?? 5, capacity: 5, version: pool?.version ?? 0, banked: { count: bankedCount, next: nextReset, enabled: flags.guild_resets_enabled }, lastRefill, enabled: flags.happy_tickets_enabled && rules.stationIds.length > 0, rules, noEligibleWindow: !hasHappyWindow(rules, now), serverNow: now.toISOString() };
+  if (userId && !account) throw new RewardError('FORBIDDEN', 'Forbidden', 403);
+  const rules = pool.config;
+  return { available: account?.happyAvailable ?? 0, capacity: 5, version: account?.happyVersion ?? 0,
+    banked: { count: bankedCount, next: nextReset, enabled: flags.guild_resets_enabled },
+    lastRefill: account?.happyLastRefillId && account.happyLastRefillAt ? { id: account.happyLastRefillId, createdAt: account.happyLastRefillAt } : null,
+    enabled: flags.happy_tickets_enabled && rules.stationIds.length > 0, rules, noEligibleWindow: !hasHappyWindow(rules, now), serverNow: now.toISOString() };
 }
 export async function happyWallet(userId: string, now = new Date()) {
   const [account, tickets] = await Promise.all([
@@ -41,16 +47,14 @@ export async function claimHappyTicket(userId: string, requestId: string, now = 
     const replay = await receipt<any>(tx, userId, 'HAPPY_CLAIM', requestId, {});
     if (replay) return replay;
     if (!await featureEnabled('happy_tickets_enabled', tx)) throw new RewardError('CLAIMS_PAUSED', 'Happy Ticket claims are paused.', 403);
-    const pool = await tx.happyPool.upsert({ where: { id: 'main' }, create: { id: 'main', config: JSON.stringify(DEFAULT_HAPPY_CONFIG) }, update: {} });
-    const rules = readHappyConfig(pool.config);
+    const { config: rules } = await readHappySettings(tx);
     if (!rules.stationIds.length) throw new RewardError('NOT_CONFIGURED', 'Happy Tickets will be available after station setup.', 409);
-    const account = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { happyLastClaimedAt: true } });
+    const account = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { happyLastClaimedAt: true, happyAvailable: true, happyVersion: true } });
     if (account.happyLastClaimedAt && now.getTime() < account.happyLastClaimedAt.getTime() + HAPPY_COOLDOWN_MS) throw new RewardError('CLAIM_COOLDOWN', 'Wait 24 hours between claims.', 409);
-    const updated = await tx.happyPool.updateMany({ where: { id: 'main', version: pool.version, available: { gt: 0 } }, data: { available: { decrement: 1 }, version: { increment: 1 } } });
-    if (!updated.count) throw new RewardError('POOL_EMPTY', 'All Happy Tickets have been claimed.', 409);
+    const updated = await tx.user.updateMany({ where: { id: userId, happyVersion: account.happyVersion, happyAvailable: { gt: 0 } }, data: { happyAvailable: { decrement: 1 }, happyVersion: { increment: 1 }, happyLastClaimedAt: now } });
+    if (!updated.count) throw new RewardError('POOL_EMPTY', 'You have no tickets left. Use one of your banked resets.', 409);
     const ticket = await tx.happyTicket.create({ data: { userId, rulesSnapshot: JSON.stringify(rules), claimedAt: now, expiresAt: happyExpiry(now) } });
-    await tx.user.update({ where: { id: userId }, data: { happyLastClaimedAt: now } });
-    const result = { ticket, nextClaimAt: new Date(now.getTime() + HAPPY_COOLDOWN_MS).toISOString() };
+    const result = { ticket, available: account.happyAvailable - 1, version: account.happyVersion + 1, nextClaimAt: new Date(now.getTime() + HAPPY_COOLDOWN_MS).toISOString() };
     await saveReceipt(tx, userId, 'HAPPY_CLAIM', requestId, {}, result);
     return result;
   });
@@ -61,11 +65,9 @@ export async function configureHappyPool(actorId: string, config: HappyConfig, v
     await requireCurrentUser(actorId, tx, true);
     const stations = await tx.station.count({ where: { id: { in: rules.stationIds }, hasControllers: true, isActive: true } });
     if (!rules.stationIds.length || stations !== new Set(rules.stationIds).size) throw new RewardError('INVALID_STATIONS', 'Select active PS5 stations.');
-    const old = await tx.happyPool.upsert({ where: { id: 'main' }, create: { id: 'main' }, update: {} });
-    const saved = await tx.happyPool.updateMany({ where: { id: 'main', version }, data: { config: JSON.stringify(rules), version: { increment: 1 } } });
-    if (!saved.count) throw new RewardError('STALE_EDIT', 'Configuration changed. Refresh first.', 409);
-    await audit(tx, actorId, 'HAPPY_CONFIG', 'main', old.config, rules);
-    return tx.happyPool.findUniqueOrThrow({ where: { id: 'main' } });
+    const { previous, next } = await writeHappySettings(tx, rules, version);
+    await audit(tx, actorId, 'HAPPY_CONFIG', 'main', previous.config, rules);
+    return next;
   });
 }
 export async function applyHappyTicket(tx: RewardTx, input: { ticketId: string; userId: string; stationId: string; date: string; startTime: string; duration: number }, now: Date) {

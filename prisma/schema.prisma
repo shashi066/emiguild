@@ -13,6 +13,11 @@ datasource db {
 model User {
   legendaryPity Int @default(0)
   happyTickets HappyTicket[]
+  happyAvailable Int @default(5)
+  happyVersion Int @default(0)
+  happyLastRefillId String?
+  happyLastRefillAt DateTime?
+  happyResets GuildReset[]
   happyLastClaimedAt DateTime?
   happyRateWindowAt DateTime?
   happyRateCount Int @default(0)
@@ -863,15 +868,6 @@ model RewardReceipt {
   @@map("reward_receipts")
 }
 
-model HappyPool {
-  id String @id @default("main")
-  available Int @default(5)
-  version Int @default(0)
-  config String @default("{}")
-  updatedAt DateTime @updatedAt
-  @@map("happy_pool")
-}
-
 model HappyTicket {
   id String @id @default(cuid())
   userId String
@@ -905,6 +901,9 @@ model HappyRedemption {
 }
 
 model GuildReset {
+  userId String?
+  grantId String?
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
   id String @id @default(cuid())
   kind String
   status String
@@ -916,6 +915,8 @@ model GuildReset {
   cancelledAt DateTime?
   refillAudit RewardAudit?
   @@index([status, expiresAt])
+  @@index([userId, status, expiresAt])
+  @@unique([grantId, userId])
   @@map("guild_resets")
 }
 

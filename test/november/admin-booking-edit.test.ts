@@ -24,7 +24,7 @@ async function fixture() {
 
 test('admin apply/remove/replace/reapply preserve history, pricing, expiry and replay', async () => {
   const f = await fixture(); const first = await f.issue(); const second = await f.issue();
-  const pool = await happyPoolState(now);
+  const pool = await happyPoolState(f.owner.id, now);
   const payload = await f.input({ benefitMode: 'HAPPY_TICKET', happyTicketId: first.id, notes: 'Audit metadata must not be duplicated.', customerName: 'Changed private name' });
   const applied = await editHappyBooking(f.admin.id, f.booking.id, payload, now);
   assert.equal(applied.totalPrice, 200); assert.equal(applied.happyDiscount, 150);
@@ -51,7 +51,7 @@ test('admin apply/remove/replace/reapply preserve history, pricing, expiry and r
   await rewardTransaction(tx => restoreHappyTicket(tx, f.booking.id, now));
   const history = await prisma.happyRedemption.findMany({ where: { bookingId: f.booking.id } });
   assert.equal(history.length, 3); assert.ok(history.every(r => r.status === 'RESTORED' && !r.activeBookingId && !r.activeTicketId));
-  assert.equal((await happyPoolState(now)).available, pool.available);
+  assert.equal((await happyPoolState(f.owner.id, now)).available, pool.available);
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: f.owner.id } })).happyLastClaimedAt, null);
 });
 

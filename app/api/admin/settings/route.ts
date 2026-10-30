@@ -1,3 +1,4 @@
+import { HAPPY_CONFIG_KEY } from '@/lib/happy-config';
 import { NOVEMBER_FLAGS } from '@/lib/november';
 import { MESSAGING_SETTING_KEYS, RETIRED_SPIN_SETTING_KEYS } from '@/lib/lifecycle/settings-keys';
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,6 +9,7 @@ import { PS5_RENTAL_STATUSES } from '@/lib/ps5-rental';
 import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
 
 const INTERNAL_SETTING_KEYS = new Set([
+  HAPPY_CONFIG_KEY,
   ...NOVEMBER_FLAGS, 'legendary_pity_launched_at',
   ...NOVEMBER_FLAGS, 'legendary_pity_launched_at',
   ...MESSAGING_SETTING_KEYS, ...RETIRED_SPIN_SETTING_KEYS,

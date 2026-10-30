@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "prisma generate --schema=prisma/schema.production.prisma && prisma migrate deploy --schema=prisma/schema.production.prisma && next build",
     "start": "next start",
     "lint": "eslint .",
@@ -35,7 +35,7 @@
     "test:tower": "tsx --env-file=.env.local --test test/tower/*.test.ts",
     "test:guess-36": "tsx --env-file=.env.local --test test/guess-36/*.test.ts",
     "test:lifecycle": "tsx --test --test-concurrency=1 test/lifecycle/*.test.ts",
-    "test:november": "tsx --test --test-concurrency=1 test/november/rules.test.ts test/november/integration.test.ts test/november/admin-booking-edit.test.ts test/november/request-client.test.ts"
+    "test:november": "tsx --test --test-concurrency=1 test/november/rules.test.ts test/november/integration.test.ts test/november/admin-booking-edit.test.ts test/november/request-client.test.ts test/november/admin-page-render.test.cjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

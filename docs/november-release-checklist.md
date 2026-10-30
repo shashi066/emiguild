@@ -1,3 +1,5 @@
+> Personal-account update (29 October 2026): shared balances/resets below are superseded by [personal Happy Tickets](personal-happy-tickets.md) and [current ticket rules](happy-ticket-rules.md). The original reward migration is followed by a separate personal-balance migration. Earlier verification is historical, not proof of the revised UI.
+
 # November joint launch checklist
 
 ## Before release

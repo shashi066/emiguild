@@ -1,3 +1,5 @@
+> Personal-account update (29 October 2026): shared balances/resets below are superseded by [personal Happy Tickets](personal-happy-tickets.md) and [current ticket rules](happy-ticket-rules.md). The original reward migration is followed by a separate personal-balance migration. Earlier verification is historical, not proof of the revised UI.
+
 # Add Happy Tickets, Guild Resets and protected daily rewards
 
 Adds a five-ticket shared PS5 pool with claim cooldowns, same-day IST expiry, booking benefits and member-activated banked resets. Daily Spin gains a thirty-day consecutive Legendary guarantee with immutable results and recovery receipts; Tower losses on protected new runs award one last-cleared-floor reward.

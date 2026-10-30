@@ -1,3 +1,5 @@
+import { getAdminHappyTicketsReport } from '../../lib/admin-happy-tickets';
+import { readHappySettings, parseHappySettings } from '../../lib/happy-config';
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
 import test, { after } from 'node:test';
@@ -66,34 +68,30 @@ test('Legendary boundary, ordinary probabilities, Epic interaction, immutable re
 test('Happy claims, last-ticket contention, cooldown, refill idempotency, banked expiry and restoration', async () => {
   const admin = await user(true); const owner = await user();
   const station = await prisma.station.create({ data: { name: 'Happy PS5', specs: 'test', description: 'test', hourlyRate: 150 } });
-  const pool = await prisma.happyPool.upsert({ where: { id: 'main' }, create: { id: 'main' }, update: { available: 5 } });
+  const pool = await readHappySettings();
   await setting('happy_tickets_enabled', 'true'); await setting('guild_resets_enabled', 'true');
   await configureHappyPool(admin.id, { stationIds: [station.id], days: [1,2,3,4,5], startTime: '16:00', endTime: '23:00' }, pool.version);
   const rid = randomUUID(); const claimed = await claimHappyTicket(owner.id, rid, now);
   assert.equal(new Date(claimed.ticket.expiresAt).toISOString(), '2026-11-02T18:30:00.000Z');
   assert.equal((await claimHappyTicket(owner.id, rid, next(1))).ticket.id, claimed.ticket.id);
   await assert.rejects(() => claimHappyTicket(owner.id, randomUUID(), new Date(now.getTime() + 86_399_999)), /24 hours/);
-  const remainingBefore = (await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } })).available;
-  assert.equal(remainingBefore, 4);
-  await prisma.happyPool.update({ where: { id: 'main' }, data: { available: 1 } });
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).happyAvailable, 4);
   const contenders = await Promise.all([user(), user(), user()]);
   const claims = await Promise.allSettled(contenders.map(u => claimHappyTicket(u.id, randomUUID(), now)));
-  assert.equal(claims.filter(r => r.status === 'fulfilled').length, 1);
-  assert.equal((await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } })).available, 0);
-  const version = (await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } })).version;
-  const force = { requestId: randomUUID(), action: 'FORCE' as const, reason: 'Fixture refill', version };
+  assert.equal(claims.filter(r => r.status === 'fulfilled').length, 3);
+  await prisma.user.update({ where: { id: owner.id }, data: { happyAvailable: 1, happyLastClaimedAt: null } });
+  const races = await Promise.allSettled([1,2].map(() => claimHappyTicket(owner.id, randomUUID(), now)));
+  assert.equal(races.filter(r => r.status === 'fulfilled').length, 1);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).happyAvailable, 0);
+  const force = { requestId: randomUUID(), action: 'FORCE' as const, reason: 'Fixture refill' };
   const reset = await changeGuildReset(admin.id, force, now);
-  assert.equal((await changeGuildReset(admin.id, force, now)).reset.id, reset.reset.id);
-  assert.equal((await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } })).available, 5);
+  assert.equal((await changeGuildReset(admin.id, force, now)).grantId, reset.grantId);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).happyAvailable, 5);
   await assert.rejects(() => claimHappyTicket(owner.id, randomUUID(), now), /24 hours/);
   const bank = await changeGuildReset(admin.id, { requestId: randomUUID(), action: 'BANK', reason: 'Banked fixture' }, new Date('2026-01-31T18:00:00+05:30'));
-  assert.equal(new Date(bank.reset.expiresAt).toISOString(), '2026-02-28T12:30:00.000Z');
-  await assert.rejects(() => changeGuildReset(admin.id, { requestId: randomUUID(), action: 'ACTIVATE', resetId: bank.reset.id, reason: 'Expired fixture', version }, now), /expired/);
-  const validBank = await changeGuildReset(admin.id, { requestId: randomUUID(), action: 'BANK', reason: 'Valid bank' }, now);
-  const activation = { requestId: randomUUID(), action: 'ACTIVATE' as const, resetId: validBank.reset.id, reason: 'Activate fixture', version: (await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } })).version };
-  const activations = await Promise.all([changeGuildReset(admin.id, activation, now), changeGuildReset(admin.id, activation, now)]);
-  assert.equal(activations[0].reset.id, activations[1].reset.id);
-  assert.equal(await prisma.rewardAudit.count({ where: { resetId: validBank.reset.id } }), 1);
+  assert.equal(new Date(bank.expiresAt!).toISOString(), '2026-02-28T12:30:00.000Z');
+  const expiredCopy = await prisma.guildReset.findFirstOrThrow({ where: { grantId: bank.grantId, userId: owner.id } });
+  await assert.rejects(() => activateBankedReset(owner.id, { requestId: randomUUID(), resetId: expiredCopy.id, version: 2 }, now), /expired/);
   await assert.rejects(() => changeGuildReset(owner.id, { ...force, requestId: randomUUID() }, now), /Forbidden/);
   await assert.rejects(() => requireCurrentUser(owner.id, prisma, true), /Forbidden/);
   const booking = await rewardTransaction(async tx => {
@@ -178,40 +176,71 @@ test('Tower last-cleared reward pays once; first-floor loss, legacy run and time
 
 
 
-test('Users activate banked resets with tickets remaining; replay, contention and stale versions are safe', async () => {
-  const admin = await user(true); const member = await user(); const other = await user();
-  await setting('guild_resets_enabled', 'true');
-  await prisma.happyPool.upsert({ where: { id: 'main' }, create: { id: 'main', available: 3 }, update: { available: 3 } });
-  const bank = await changeGuildReset(admin.id, { requestId: randomUUID(), action: 'BANK', reason: 'Member activation test' }, now);
-  const version = (await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } })).version;
-  const input = { requestId: randomUUID(), resetId: bank.reset.id, version };
-  const result = await activateBankedReset(member.id, input, now);
-  assert.equal(result.available, 5);
-  assert.deepEqual(await activateBankedReset(member.id, input, next(1)), result);
-  assert.equal(await prisma.rewardAudit.count({ where: { resetId: bank.reset.id } }), 1);
-  assert.equal((await prisma.rewardAudit.findUniqueOrThrow({ where: { resetId: bank.reset.id } })).actorId, member.id);
-  await assert.rejects(() => activateBankedReset(member.id, { ...input, version: version + 1 }, now), /different action/);
-  await assert.rejects(() => activateBankedReset(other.id, { ...input, requestId: randomUUID() }, now), /no longer pending/);
-  const nextBank = await changeGuildReset(admin.id, { requestId: randomUUID(), action: 'BANK', reason: 'Concurrency test' }, now);
-  const currentVersion = (await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } })).version;
-  const attempts = await Promise.allSettled([member, other].map(u => activateBankedReset(u.id, { requestId: randomUUID(), resetId: nextBank.reset.id, version: currentVersion }, now)));
-  assert.equal(attempts.filter(a => a.status === 'fulfilled').length, 1);
-  assert.equal(await prisma.rewardAudit.count({ where: { resetId: nextBank.reset.id } }), 1);
-  const expiredBank = await changeGuildReset(admin.id, { requestId: randomUUID(), action: 'BANK', reason: 'Expired test' }, now);
-  const latest = (await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } })).version;
-  await assert.rejects(() => activateBankedReset(member.id, { requestId: randomUUID(), resetId: expiredBank.reset.id, version: latest }, next(40)), /expired/);
-  await setting('guild_resets_enabled', 'false');
-  await assert.rejects(() => activateBankedReset(member.id, { requestId: randomUUID(), resetId: expiredBank.reset.id, version: latest }, now), /paused/);
-  await setting('guild_resets_enabled', 'true');
-  await assert.rejects(() => activateBankedReset('missing-user', { requestId: randomUUID(), resetId: expiredBank.reset.id, version: latest }, now), /Forbidden/);
+test('personal reset copies isolate accounts, exclude future signups and recover atomically', async () => {
+  const admin = await user(true), member = await user(), other = await user();
+  await setting('guild_resets_enabled','true');
+  const expectedAccounts = await prisma.user.count();
+  const payload = { requestId: randomUUID(), action: 'BANK' as const, reason: 'Personal grant', expectedAccounts };
+  const bank = await changeGuildReset(admin.id,payload,now);
+  assert.equal(bank.affectedCount,expectedAccounts);
+  assert.equal((await changeGuildReset(admin.id,payload,now)).grantId,bank.grantId);
+  assert.equal(await prisma.guildReset.count({where:{grantId:bank.grantId}}),expectedAccounts);
+  const later = await user();
+  assert.equal(await prisma.guildReset.count({where:{grantId:bank.grantId,userId:later.id}}),0);
+  assert.equal(later.happyAvailable,5);
+  const own = await prisma.guildReset.findFirstOrThrow({where:{grantId:bank.grantId,userId:member.id}});
+  const foreign = await prisma.guildReset.findFirstOrThrow({where:{grantId:bank.grantId,userId:other.id}});
+  await assert.rejects(()=>activateBankedReset(other.id,{requestId:randomUUID(),resetId:own.id,version:0},now),/not available/);
+  const activation={requestId:randomUUID(),resetId:own.id,version:member.happyVersion};
+  const [first,replay]=await Promise.all([activateBankedReset(member.id,activation,now),activateBankedReset(member.id,activation,now)]);
+  assert.deepEqual(first,replay);
+  assert.equal((await prisma.user.findUniqueOrThrow({where:{id:other.id}})).happyVersion,other.happyVersion);
+  assert.equal((await prisma.guildReset.findUniqueOrThrow({where:{id:foreign.id}})).status,'PENDING');
+  assert.equal(await prisma.rewardAudit.count({where:{resetId:own.id}}),1);
+  await assert.rejects(()=>activateBankedReset(member.id,{...activation,version:1},now),/different action/);
+  await changeGuildReset(admin.id,{requestId:randomUUID(),action:'CANCEL',reason:'Cancel unused copies',grantId:bank.grantId},now);
+  assert.equal((await prisma.guildReset.findUniqueOrThrow({where:{id:own.id}})).status,'ACTIVATED');
+  assert.equal((await prisma.guildReset.findUniqueOrThrow({where:{id:foreign.id}})).status,'CANCELLED');
+  await assert.rejects(()=>changeGuildReset(admin.id,{requestId:randomUUID(),action:'BANK',reason:'Stale count',expectedAccounts},now),/account count changed/);
+  const nextBank=await changeGuildReset(admin.id,{requestId:randomUUID(),action:'BANK',reason:'Concurrent copies'},now);
+  const copies=await prisma.guildReset.findMany({where:{grantId:nextBank.grantId,userId:{in:[member.id,other.id]}}});
+  const results=await Promise.allSettled(copies.map(async copy=>activateBankedReset(copy.userId!,{requestId:randomUUID(),resetId:copy.id,version:(await prisma.user.findUniqueOrThrow({where:{id:copy.userId!}})).happyVersion},now)));
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,2);
+  const expiredBank=await changeGuildReset(admin.id,{requestId:randomUUID(),action:'BANK',reason:'Expired copy'},now);
+  const expired=await prisma.guildReset.findFirstOrThrow({where:{grantId:expiredBank.grantId,userId:member.id}});
+  const latest=(await prisma.user.findUniqueOrThrow({where:{id:member.id}})).happyVersion;
+  await assert.rejects(()=>activateBankedReset(member.id,{requestId:randomUUID(),resetId:expired.id,version:latest},next(40)),/expired/);
+  await setting('guild_resets_enabled','false');
+  await assert.rejects(()=>activateBankedReset(member.id,{requestId:randomUUID(),resetId:expired.id,version:latest},now),/paused/);
+  await setting('guild_resets_enabled','true');
 });
 
+test('claim racing a personal reset preserves stock, cooldown and the other account', async () => {
+  const admin = await user(true), owner = await user(), other = await user();
+  const station = await prisma.station.create({ data: { name: 'Race PS5', specs: 'test', description: 'test', hourlyRate: 150 } });
+  const pool = await readHappySettings();
+  await configureHappyPool(admin.id, { stationIds: [station.id], days: [1,2,3,4,5], startTime: '16:00', endTime: '23:00' }, pool.version);
+  await prisma.user.update({ where: { id: owner.id }, data: { happyAvailable: 1 } });
+  const grant = await changeGuildReset(admin.id, { requestId: randomUUID(), action: 'BANK', reason: 'Race fixture' }, now);
+  const copy = await prisma.guildReset.findFirstOrThrow({ where: { grantId: grant.grantId, userId: owner.id } });
+  const results = await Promise.allSettled([
+    claimHappyTicket(owner.id, randomUUID(), now),
+    activateBankedReset(owner.id, { requestId: randomUUID(), resetId: copy.id, version: 0 }, now),
+  ]);
+  assert.equal(results[0].status, 'fulfilled');
+  const account = await prisma.user.findUniqueOrThrow({ where: { id: owner.id } });
+  assert.equal(account.happyAvailable, results[1].status === 'fulfilled' ? 4 : 0);
+  assert.equal(account.happyLastClaimedAt?.toISOString(), now.toISOString());
+  assert.equal(await prisma.happyTicket.count({ where: { userId: owner.id } }), 1);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: other.id } })).happyAvailable, 5);
+  assert.equal((await prisma.guildReset.findUniqueOrThrow({ where: { id: copy.id } })).status, results[1].status === 'fulfilled' ? 'ACTIVATED' : 'PENDING');
+});
 
 test('User claim counters survive concurrent Spin, enforce limits, and skip duplicate audit writes', async () => {
   const admin = await user(true); const owner = await user();
   const station = await prisma.station.create({ data: { name: 'Counter PS5', description: 'fixture', specs: 'fixture', hourlyRate: 150 } });
-  await prisma.happyPool.upsert({ where: { id: 'main' }, create: { id: 'main' }, update: { available: 5 } });
-  const pool = await prisma.happyPool.findUniqueOrThrow({ where: { id: 'main' } });
+  await readHappySettings();
+  const pool = await readHappySettings();
   await setting('happy_tickets_enabled', 'true'); await setting('daily_spin_enabled', 'true'); await setting('legendary_pity_30_enabled', 'true');
   await configureHappyPool(admin.id, { stationIds: [station.id], days: [1,2,3,4,5], startTime: '16:00', endTime: '23:00' }, pool.version);
   const requestId = randomUUID();
@@ -233,4 +262,26 @@ test('User claim counters survive concurrent Spin, enforce limits, and skip dupl
   assert.equal(await prisma.rewardReceipt.count({ where: { actorId: owner.id, operation: 'HAPPY_CLAIM' } }), 1);
   await assert.rejects(() => claimHappyTicket(owner.id, randomUUID(), new Date(now.getTime() + 60_000)), /24 hours/);
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).happyRateCount, 1);
+});
+
+test('internal ticket settings reject stale edits and admin lists are bounded and isolated', async () => {
+  const admin = await user(true), member = await user();
+  const station = await prisma.station.create({ data: { name: 'Settings PS5', description: 'fixture', specs: 'fixture', hourlyRate: 150 } });
+  assert.deepEqual(parseHappySettings(JSON.stringify({version:0,config:{}})).config.stationIds,[]);
+  const before = await readHappySettings();
+  const rules = { stationIds: [station.id], days: [1,2,3,4,5], startTime: '16:00', endTime: '23:00' };
+  const saved = await configureHappyPool(admin.id, rules, before.version);
+  assert.equal(saved.version, before.version + 1);
+  await assert.rejects(() => configureHappyPool(admin.id, rules, before.version), /Configuration changed/);
+  await assert.rejects(() => configureHappyPool(member.id, rules, saved.version), /Forbidden/);
+  assert.deepEqual((await readHappySettings()).config, rules);
+  const tickets = await getAdminHappyTicketsReport(admin.id);
+  assert.equal(tickets.section, 'tickets'); assert.ok(tickets.tickets.length <= 20);
+  assert.deepEqual(tickets.members, []); assert.deepEqual(tickets.resets, []); assert.deepEqual(tickets.events, []);
+  const members = await getAdminHappyTicketsReport(admin.id, new URLSearchParams({section:'members',search:member.email,userId:member.id}));
+  assert.equal(members.members.length,1); assert.equal(members.member?.user.id,member.id); assert.deepEqual(members.tickets,[]);
+  const empty = await getAdminHappyTicketsReport(admin.id,new URLSearchParams({section:'members',search:'nonexistent-unique-search'}));
+  assert.equal(empty.members.length,0);
+  await assert.rejects(() => getAdminHappyTicketsReport(member.id), /Forbidden/);
+  for (const query of ['section=bad','page=0','page=1.5','page=100001','unknown=value']) await assert.rejects(() => getAdminHappyTicketsReport(admin.id,new URLSearchParams(query)));
 });
