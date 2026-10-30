@@ -9,7 +9,7 @@ export type DispenserProps = {
   available: number; resets: number; version: number; signedIn: boolean; enabled: boolean; resetsEnabled: boolean;
   cooldown: string | null; claiming: boolean; resetting: boolean; pendingClaim: boolean; pendingReset: boolean;
   claimResult?: { id: string; expires: string; href: string } | null;
-  refill: string; loading?: boolean; hours: string; warning?: string;
+  refill: string; loading?: boolean; warning?: string;
   onClaim: () => void; onReset: () => void;
 };
 export function HappyTicketDispenser(p: DispenserProps) {
@@ -38,15 +38,15 @@ export function HappyTicketDispenser(p: DispenserProps) {
     <span>Loading Happy Tickets...</span>
   </div>;
   return <div className={styles.game}>
-    <div className={`${styles.dispenser} ${p.loading ? styles.loadingDispenser : ''}`}>
+    <div className={styles.dispenser}>
       <div key={'ticket-' + (p.claimResult?.id || p.refill || 'ready')} className={`${styles.artworkWrap} ${p.claimResult ? styles.dispensed : p.refill ? styles.restocked : ''}`}>
         <HappyTicketArtwork available={p.available} />
       </div>
       <div className={styles.dispenserSlot} aria-hidden="true" />
       <div key={'marks-' + (p.refill || 'availability')} className={`${styles.availability} ${p.refill ? styles.refilling : ''}`} aria-hidden="true">{Array.from({length:5},(_,i)=><span key={i} data-filled={i < p.available} style={{'--ticket-index':i} as React.CSSProperties} />)}</div>
-      {!p.loading && <div className={styles.poolLabel}><strong>{p.signedIn ? `Your tickets: ${p.available}/5` : '5 tickets per account'}</strong><span>{p.signedIn ? 'Only for your account' : 'Sign in to view your balance'}</span></div>}
+      <div className={styles.poolLabel}><strong>{p.signedIn ? `Your tickets: ${p.available}/5` : '5 tickets per account'}</strong><span>{p.signedIn ? 'Only for your account' : 'Sign in to view your balance'}</span></div>
     </div>
-    {p.loading ? <p className={styles.loadingCaption} role="status">Loading Happy Tickets...</p> : <>
+    <>
       <div ref={resultLine} tabIndex={-1} className={styles.resultLine} aria-hidden={!p.claimResult && !p.refill}>{p.claimResult ? <><Check size={17} aria-hidden="true" /> Your ticket is ready</> : p.refill ? <><Check size={17} aria-hidden="true" /> Your tickets refilled</> : null}</div>
       <div className={styles.actions}>
         {p.claimResult ? <Link className={styles.primary} href={p.claimResult.href}>Book your hour <Gamepad2 size={18} aria-hidden="true" /></Link> : p.signedIn ? <button className={styles.primary} disabled={busy || p.pendingReset || !canClaim} onClick={p.onClaim} aria-busy={p.claiming}>{p.claiming ? <><span className="spinner" aria-hidden="true" /> Claiming...</> : p.pendingClaim ? 'Check claim result' : p.cooldown ? <><Clock3 size={16} aria-hidden="true" /> Claimed · {p.cooldown} left</> : !p.enabled ? 'Claims unavailable' : !p.available ? 'No tickets available' : <><Ticket size={18} aria-hidden="true" /> Claim Ticket</>}</button> : <Link className={styles.primary} href="/login?callbackUrl=/happy-tickets">Sign in to claim</Link>}
@@ -63,6 +63,6 @@ export function HappyTicketDispenser(p: DispenserProps) {
         {confirmationVersion !== p.version && <p role="status">Tickets changed. Go back and review the new count.</p>}
         <div className={styles.dialogActions}><button className={styles.secondary} onClick={close}>Back</button><button className={styles.primary} disabled={busy || !canReset || confirmationVersion !== p.version} onClick={()=>{close();p.onReset();}}>Use Reset</button></div>
       </dialog>
-    </>}
+    </>
   </div>;
 }

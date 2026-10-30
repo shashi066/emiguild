@@ -1,57 +1,45 @@
-> Personal-account update (29 October 2026): shared balances/resets below are superseded by [personal Happy Tickets](personal-happy-tickets.md) and [current ticket rules](happy-ticket-rules.md). The original reward migration is followed by a separate personal-balance migration. Earlier verification is historical, not proof of the revised UI.
+# Reward release guide
 
-# November joint launch checklist
+Current source of truth: 30 October 2026. See [ticket rules](happy-ticket-rules.md), [artwork](happy-ticket-artwork.md), and [verification](november-test-results.md). No production deployment or activation is claimed by this document.
 
-## Before release
+## Approved behavior
 
-- Confirm final rules: same-day IST expiry for new claims, normal 24-hour claim cooldown, member-activated banked resets even with remaining stock, and both Spin counters resetting after a missed daily spin. Keep Happy Tickets out of Vault.
-- Do not mark merge-ready until the final updated browser pages have been verified; see november-test-results.md for the current cache blocker.
+- Happy Tickets: five claimable tickets per account, one claim every 24 hours, same-day IST expiry. Banked resets belong to each existing recipient; later signups do not inherit old grants. Members activate their own reset, even with stock remaining. Resets preserve cooldowns and issued tickets.
+- Spin: independent Epic/Legendary counters; missing a daily spin resets both. Epic awards preserve Legendary progress. Legendary takes precedence and resets progress. Preserve ordinary weights, immutable results and receipt recovery.
+- Tower: valid protected losses award only the last cleared floor's reward; floor-one losses award nothing. Legacy runs/timeouts retain their policy. No new reward caps.
+- Vault retains its compact cyan Epic/Legendary trackers and existing reward popups. No Happy Tickets in Vault. Keep the wheel unchanged.
+- All approved features launch together after verification. Announcements stay in Excel; there is no website campaign/calendar, automatic activation schedule or restored Artifact collection showcase.
 
-- Review the single unreleased `20261028000000_reward_features` migration. Use migration.sql for PostgreSQL and migration.sqlite.sql for SQLite verification. Preserve existing application data; there is no reward-history backfill. Test baseline-plus-migration on both disposable providers before production.
-- Run focused reward tests, real HTTP/browser checks, affected existing suites, TypeScript, targeted lint and direct production compilation. Do not use `npm run build` as a local compilation check: it runs production migrations.
-- Reconfirm production reward weights and at least one positive-weight Legendary. No invented reward amounts or changed odds.
-- Select explicit active PS5 station IDs and review the weekday 16:00–23:00 starting eligibility. Admin may configure a different approved schedule.
-- Review the economy report below. Keep existing Lucky Fusion setting independent.
+## Storage and rollout order
 
-## Deploy and enable together
+Five feature tables remain: HappyTicket, HappyRedemption, GuildReset, RewardReceipt, RewardAudit. Personal stock/cooldown fields stay on User. Internal Settings key `happy_ticket_config` holds eligibility and its stale-edit version; generic Settings cannot edit it.
 
-1. Deploy additive schema changes before dependent application code. Existing active Tower runs keep their old policy; historical Spin progress is not reconstructed.
-2. Deploy the reviewed application build through the existing project deployment process.
-3. Against the explicitly selected production database, run `tsx scripts/prepare-november-launch.ts --admin=EXISTING_ADMIN_ID --stations=COMMA_SEPARATED_PS5_IDS --check-only`.
-4. Run the same command without `--check-only` to configure an empty pool and enable all four new switches together. It preserves an existing pool balance, configured schedule, tickets and cooldowns. It never refills an existing pool as a launch side effect.
-5. Verify production customer and admin flows and record deployment URL, commit, migration result and actual enable timestamp.
+The migration chain is **not entirely additive**:
+1. `20261028000000_reward_features`: initial reward fields/tables.
+2. `20261029000000_personal_happy_tickets`: personal balances and reset ownership; archives ownerless legacy resets.
+3. `20261029010000_happy_settings`: preserves eligibility/version in Settings and removes HappyPool.
 
-The switches use the existing Setting convention and default enabled when absent: legendary_pity_30_enabled, tower_loss_rewards_enabled, happy_tickets_enabled, guild_resets_enabled. No calendar-based access gate or activation cron exists. An unconfigured ticket pool cannot issue claims. No website challenge calendar or campaign editor is implemented; Excel is the planning source.
+Do not rewrite applied migration history. Verify the full chain on disposable SQLite/PostgreSQL and a non-production copy of the actual deployed schema. For production, use PostgreSQL migration.sql files; SQLite companions are verification/local tooling.
 
-## Recovery
+Use a coordinated maintenance rollout: stop traffic and jobs using old reward code, back up the database, apply all pending migrations, deploy the matching application, smoke-test, then reopen traffic. Never leave old code serving while its referenced columns/table are removed. A pause flag alone does not make old reads schema-compatible. Application rollback must support the new schema and retain legitimate tickets, receipts and history.
 
-- The Happy Tickets page no longer exposes Emergency controls. Existing server-side Setting switches remain available through authorized recovery tooling/API; valid issued-ticket booking and receipt recovery remain available.
-- If Spin generation is unsafe, use the existing overall daily_spin_enabled switch. Legendary counters and launch timestamp persist; do not reset users during rollback.
-- Tower policy is snapshotted per run. Turn protection off for future runs without rewriting legitimate finished payouts.
-- Keep a history-compatible application when rolling back. Preserve the new active-redemption fields and all historical rows. Never delete legitimate tickets, receipts or reward history to undo a release.
-- For an ambiguous reset/claim/booking response, recover the saved request ID. Do not start another request blindly.
+## Launch checklist
 
-## Monitoring
+- Run affected service/handler/client regressions, TypeScript, targeted lint, whitespace and `npx next build --webpack`. **Never use `npm run build` for a local compile check:** it includes production migration deployment.
+- Configure positive-weight Legendary rewards and explicit active PS5 stations. Review per-account ticket exposure and configured Tower/Spin economics.
+- Against the explicitly selected deployment database, run `tsx scripts/prepare-november-launch.ts --admin=EXISTING_ADMIN_ID --stations=COMMA_SEPARATED_PS5_IDS --check-only`.
+- During the verified rollout, run without `--check-only` to configure missing eligibility and enable the four approved switches together. Existing balances, schedules, cooldowns and tickets remain unchanged.
+- Flags: `legendary_pity_30_enabled`, `tower_loss_rewards_enabled`, `happy_tickets_enabled`, `guild_resets_enabled`; absent flags default enabled. No claims can issue before station configuration. Preserve launch timestamp across pauses.
+- Record deployed commit, database migration results, build, station/reward configuration and actual production smoke tests. Local screenshots are not deployment evidence.
 
-Review the compact RewardAudit reset/admin history, claim success/failure and rate-limit patterns, receipt replay/conflicts, tier distributions, issued/redeemed/expired hours and Tower issuance. Inspect expected transaction retries separately from failed operations. New failure logging emits safe codes rather than request bodies or secrets.
+## Recovery and economy
 
-## Economy review (local configured pool, not a production forecast)
+Pause unsafe generation through existing server flags; already-issued ticket redemption and receipt recovery remain available. Recover ambiguous requests using their saved IDs. Do not clear balances/history to roll back a release. Monitor failures, retries, receipt conflicts, reset grants/activation and reward issuance.
 
-Read-only simulation used the local configured Spin weights COMMON 40, UNCOMMON 35, RARE 10, EPIC 5, LEGENDARY 1. Seed 20261027, 10,000 players × 90 consecutive daily spins:
+Prior local simulation (seed 20261027, 10,000 players x 90 consecutive spins; weights 40/35/10/5/1) estimated Legendary awards rising from 10.106 to 35.686 per 1,000 spins and Epic from 119.261 to 106.129. This is not a production forecast. Tower's configured always-climb policy estimated 1.084 versus 666.667 rewarded runs per 1,000 with protection; reward values differ. Rerun `tsx scripts/simulate-november-economy.ts` with explicitly supplied actual configuration before launch; it does not write rewards.
 
-| Model | Legendary / 1,000 spins | Epic / 1,000 spins |
-|---|---:|---:|
-| Existing ten-day Epic guarantee | 10.106 | 119.261 |
-| With thirty-spin Legendary guarantee | 35.686 | 106.129 |
+Ticket exposure is five claimable hours **per account**, limited by cooldown/expiry. Bulk reset grants create one entitlement per existing account; issuance and transaction duration should be monitored as membership grows. Expiry/cancellation never refill personal stock.
 
-The guarantee takes precedence over some Epic milestones, explaining the Epic reduction. No weights were changed.
+## Local development
 
-With local Tower risks (one red through floor 6, two thereafter), an always-climb player clears all ten floors with probability 0.1084%. Tickets increase from about 1.084 to 666.667 per 1,000 always-climb runs under loss protection. This compares one specific play policy, not current player behavior, and does not price unlike rewards. Cash-out players already receive rewards under the old game. Token eligibility is unchanged; no arbitrary payout caps were added.
-
-Happy Tickets initially expose five available base hours. A reset adds zero to five available hours. Existing claimed tickets persist, so outstanding unexpired liabilities can exceed five after multiple resets. Expired tickets do not refill the pool.
-
-Reproduce with an explicitly supplied database URL: `tsx scripts/simulate-november-economy.ts`. The script reads reward settings only and never grants items or edits users. Rerun on production configuration before launch.
-
-## Deployment evidence
-
-No production deployment or production migration has been performed in this workspace yet. There is no linked `.vercel` project, Vercel login token or production database connection here. Local verification and code readiness must not be reported as a live launch.
+Release configuration uses standard `next dev`. For this workstation's preview, run `npm run dev -- --webpack --hostname 127.0.0.1 --port 3000`. Temporary origin/asset-prefix workarounds and obsolete mock previews are archived under ignored `output/pr-cleanup-backup-20261030/`, not shipped. Never use browser mock results as real transaction evidence.

@@ -7,12 +7,12 @@ const { chromium } = require('playwright');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const baseURL = process.env.NOVEMBER_BROWSER_URL || 'http://127.0.0.1:3006';
-if (!process.env.DATABASE_URL?.includes('november-test')) throw new Error('Browser checks require the disposable November database.');
+if (!['localhost','127.0.0.1'].includes(new URL(baseURL).hostname)) throw new Error('Use a loopback disposable test server.');
+if (!process.env.DATABASE_URL?.includes('november-test') || process.env.DATABASE_URL !== process.env.NOVEMBER_TEST_DATABASE_URL) throw new Error('Browser checks require the disposable November database.');
 const prisma = new PrismaClient();
 const password = 'November-fixture-only-123';
 const now = new Date();
 const dateKey = date => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
-const day = dateKey(new Date(now.getTime() + 86400000));
 const output = mkdtempSync(path.join(tmpdir(), 'emiguild-november-browser-'));
 async function member(role) {
   return prisma.user.create({ data: { name: `Browser ${role}`, email: `browser-${randomUUID()}@example.test`, password: await bcrypt.hash(password, 4), role, phone: '9999999999' } });
@@ -50,19 +50,8 @@ async function post(context, route, data, origin = baseURL) { return context.req
     const ticket = (await claim.json()).ticket;
     const claimReplay = await post(account, '/api/happy-tickets/claim', { requestId }); assert.equal((await claimReplay.json()).ticket.id, ticket.id);
     assert.equal((await other.request.get(`/api/rewards/receipts/HAPPY_CLAIM/${requestId}`)).status(), 404);
-    const payload = { stationId: station.id, date: day, startTime: '16:00', duration: 2, extraControllers: 1, notes: '', benefitMode: 'HAPPY_TICKET', happyTicketId: ticket.id, requestId: randomUUID() };
-    const booked = await post(account, '/api/bookings', payload); assert.equal(booked.status(), 201, await booked.text());
-    const booking = (await booked.json()).booking;
-    assert.equal(booking.totalPrice, 200); assert.equal(booking.happyDiscount, 150); assert.equal(booking.controllerCharge, 50);
-    const replay = await post(account, '/api/bookings', payload); assert.equal((await replay.json()).booking.id, booking.id);
-    assert.equal((await post(account, '/api/bookings', { ...payload, duration: 3 })).status(), 409);
-    assert.equal((await post(other, '/api/bookings', { ...payload, requestId: randomUUID() })).status(), 409);
-    const edited = await staff.request.put(`/api/bookings/${booking.id}`, { data: { ...payload, startTime: '17:00' }, headers: { origin: baseURL } });
-    assert.equal(edited.status(), 200, await edited.text()); assert.equal((await edited.json()).booking.happyDiscount, 150);
-    const invalidEdit = await staff.request.put(`/api/bookings/${booking.id}`, { data: { ...payload, duration: .5 }, headers: { origin: baseURL } }); assert.ok([400, 409].includes(invalidEdit.status()));
-    const cancel = await account.request.patch(`/api/bookings/${booking.id}`, { data: { status: 'CANCELLED' }, headers: { origin: baseURL } }); assert.equal(cancel.status(), 200, await cancel.text());
-    assert.equal((await prisma.happyTicket.findUniqueOrThrow({ where: { id: ticket.id } })).status, 'CLAIMED');
-    assert.equal((await staff.request.delete(`/api/bookings/${booking.id}`, { headers: { origin: baseURL } })).status(), 409);
+    // Booking pricing/restoration runs in booking-http.test.cjs with a controlled
+    // clock. Live browser checks must not book tomorrow using a same-day ticket.
     const spinRequest = { requestId: randomUUID(), spinDate: dateKey(now) };
     const spin = await post(account, '/api/daily-spin', spinRequest); assert.equal(spin.status(), 200, await spin.text());
     const spinResult = await spin.json();
@@ -94,7 +83,21 @@ async function post(context, route, data, origin = baseURL) { return context.req
     const adminPage = await staff.newPage();
     for (const width of [320,375,430,1440]) {
       await adminPage.setViewportSize({ width, height: 900 }); await adminPage.goto('/admin/happy-tickets');
-      await adminPage.getByRole('heading', { name: 'Resets for existing accounts', exact: true }).waitFor();
+      await adminPage.getByRole('region', { name: 'tickets table' }).waitFor();
+      await adminPage.getByRole('button', { name: 'Members', exact: true }).click();
+      await adminPage.getByPlaceholder('Search name or email').fill(owner.email);
+      await adminPage.getByRole('button', { name: 'Search', exact: true }).click();
+      await adminPage.getByRole('button', { name: `View ${owner.name}`, exact: true }).click();
+      await adminPage.getByRole('dialog').getByText(owner.email, { exact: true }).waitFor();
+      await adminPage.getByRole('dialog').press('Escape');
+      await adminPage.getByRole('button', { name: 'Resets', exact: true }).click();
+      await adminPage.getByRole('button', { name: 'Refill accounts', exact: true }).click();
+      const dialog = adminPage.getByRole('dialog', { name: 'Refill accounts' });
+      await dialog.waitFor();
+      assert.equal(await dialog.getByRole('button', { name: 'Confirm', exact: true }).isEnabled(), false);
+      const bounds = await dialog.boundingBox();
+      assert.ok(bounds.x >= 15 && bounds.x + bounds.width <= width - 15);
+      await dialog.press('Escape');
       assert.equal(await adminPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Admin overflow at ${width}`);
       await adminPage.screenshot({ path: path.join(output, `admin-${width}.png`), fullPage: true });
     }
@@ -104,6 +107,22 @@ async function post(context, route, data, origin = baseURL) { return context.req
     await page.getByRole('button', { name: /Claimed/ }).waitFor();
     await page.waitForFunction(() => !document.querySelector('[aria-label="Refresh Happy Tickets"]').disabled);
     await page.getByRole('button', { name: 'Refresh Happy Tickets' }).focus(); assert.ok(await page.getByRole('button', { name: 'Refresh Happy Tickets' }).evaluate(el => el === document.activeElement));
+    // Returning to the page fires both events; coalesce them into one GET.
+    let reads = 0;
+    const countRead = request => { if (new URL(request.url()).pathname === '/api/happy-tickets') reads++; };
+    page.on('request', countRead);
+    const resumed = page.waitForResponse(r => new URL(r.url()).pathname === '/api/happy-tickets');
+    await page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
+    await resumed; await page.waitForTimeout(250); assert.equal(reads, 1);
+    page.off('request', countRead);
+    // Stall only GET; timeout must leave loaded tickets visible and allow retry.
+    await page.route('**/api/happy-tickets', () => {});
+    await page.getByRole('button', { name: 'Refresh Happy Tickets' }).click();
+    await page.getByText('Loading took too long. Please retry.', { exact: true }).waitFor({ timeout: 25_000 });
+    await page.getByRole('button', { name: /Claimed/ }).waitFor();
+    await page.unroute('**/api/happy-tickets');
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await page.getByText('Loading took too long. Please retry.', { exact: true }).waitFor({ state: 'hidden' });
     await prisma.user.update({ where: { id: admin.id }, data: { role: 'USER' } });
     assert.equal((await staff.request.get('/api/admin/happy-tickets')).status(), 403);
     assert.deepEqual(errors, []);
