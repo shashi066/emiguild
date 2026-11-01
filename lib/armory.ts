@@ -1,3 +1,4 @@
+import { requireCurrentUser } from './november';
 import { FUSION_ODDS, FUSION_VERSION, type FusionTier } from './armory-fusion-rules';
 import { armoryTransaction } from './armory-transaction';
 import crypto from 'crypto';
@@ -715,19 +716,15 @@ const checkInBookingInclude = {
   station: { select: { id: true, name: true } },
 } as const;
 
-async function markBookingCheckedIn(bookingId: string, checkedInAt: Date) {
-  await prisma.booking.updateMany({
-    where: { id: bookingId, checkedInAt: null },
-    data: { status: 'CHECKED_IN', checkedInAt },
-  });
-  return prisma.booking.update({
-    where: { id: bookingId },
-    data: { status: 'CHECKED_IN' },
-    include: checkInBookingInclude,
+async function markBookingCheckedIn(bookingId: string, checkedInAt: Date, actorId?: string) {
+  return armoryTransaction(async tx => {
+    if (actorId) await requireCurrentUser(actorId, tx, true);
+    await tx.booking.updateMany({ where: { id: bookingId, checkedInAt: null }, data: { status: 'CHECKED_IN', checkedInAt } });
+    return tx.booking.update({ where: { id: bookingId }, data: { status: 'CHECKED_IN' }, include: checkInBookingInclude });
   });
 }
 
-export async function checkInBookingWithArtifact(bookingId: string) {
+export async function checkInBookingWithArtifact(bookingId: string, actorId?: string) {
   const claimId = `checkin_${bookingId}`;
   const [booking, existingClaim] = await Promise.all([
     prisma.booking.findUnique({ where: { id: bookingId }, include: checkInBookingInclude }),
@@ -743,7 +740,7 @@ export async function checkInBookingWithArtifact(bookingId: string) {
   if (existingClaim) {
     const updatedBooking = booking.status === 'CHECKED_IN' && booking.checkedInAt
       ? booking
-      : await markBookingCheckedIn(bookingId, checkedInAt);
+      : await markBookingCheckedIn(bookingId, checkedInAt, actorId);
     return {
       booking: updatedBooking,
       artifactAward: {
@@ -757,7 +754,7 @@ export async function checkInBookingWithArtifact(bookingId: string) {
   if (booking.status === 'CHECKED_IN') {
     const checkedInBooking = booking.checkedInAt
       ? booking
-      : await markBookingCheckedIn(bookingId, checkedInAt);
+      : await markBookingCheckedIn(bookingId, checkedInAt, actorId);
     return {
       booking: checkedInBooking,
       artifactAward: { awarded: false, reason: 'ALREADY_CHECKED_IN' } satisfies CheckInArtifactAward,
@@ -765,7 +762,7 @@ export async function checkInBookingWithArtifact(bookingId: string) {
   }
 
   if (!booking.userId) {
-    const updatedBooking = await markBookingCheckedIn(bookingId, checkedInAt);
+    const updatedBooking = await markBookingCheckedIn(bookingId, checkedInAt, actorId);
     return {
       booking: updatedBooking,
       artifactAward: { awarded: false, reason: 'NO_USER_ACCOUNT' } satisfies CheckInArtifactAward,
@@ -774,7 +771,7 @@ export async function checkInBookingWithArtifact(bookingId: string) {
 
   const config = await getArmoryForgeConfig();
   if (!config.enabled) {
-    const updatedBooking = await markBookingCheckedIn(bookingId, checkedInAt);
+    const updatedBooking = await markBookingCheckedIn(bookingId, checkedInAt, actorId);
     return {
       booking: updatedBooking,
       artifactAward: { awarded: false, reason: 'ARMORY_DISABLED' } satisfies CheckInArtifactAward,
@@ -789,6 +786,7 @@ export async function checkInBookingWithArtifact(bookingId: string) {
 
   try {
     const updatedBooking = await armoryTransaction(async (tx) => {
+      if (actorId) await requireCurrentUser(actorId, tx, true);
       await tx.booking.updateMany({
         where: { id: bookingId, checkedInAt: null },
         data: { status: 'CHECKED_IN', checkedInAt },
@@ -1236,7 +1234,8 @@ export async function lookupArmoryTicket(code: string) {
 }
 
 export async function redeemArmoryTicket(ticketId: string, now: Date = new Date()) {
-  const ticket = await prisma.armoryTicket.findUnique({
+  return armoryTransaction(async (tx) => {
+  const ticket = await tx.armoryTicket.findUnique({
     where: { id: ticketId },
     select: { id: true, status: true, source: true, claimDate: true, expiresAt: true },
   });
@@ -1246,9 +1245,10 @@ export async function redeemArmoryTicket(ticketId: string, now: Date = new Date(
     ? ticket.expiresAt.getTime() <= now.getTime()
     : ticket.claimDate !== getIstDateKey(now);
   if (expired) throw new Error('TICKET_EXPIRED');
-  return prisma.armoryTicket.update({
+  const changed = await tx.armoryTicket.updateMany({ where: { id: ticketId, status: 'UNUSED' }, data: { status: 'REDEEMED', redeemedAt: now } });
+  if (changed.count !== 1) throw new Error('TICKET_REDEEMED');
+  return tx.armoryTicket.findUniqueOrThrow({
     where: { id: ticketId },
-    data: { status: 'REDEEMED', redeemedAt: now },
     select: {
       id: true,
       rewardSnapshot: true,
@@ -1262,6 +1262,7 @@ export async function redeemArmoryTicket(ticketId: string, now: Date = new Date(
       user: { select: { name: true, email: true, phone: true } },
       set: { select: { id: true, name: true, rarity: true } },
     },
+  });
   });
 }
 

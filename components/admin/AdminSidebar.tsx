@@ -30,6 +30,7 @@ const NAV_GROUPS = [
     { href: '/admin/passes', label: 'Passes', icon: Award },
   ] },
   { label: 'Activities & Rewards', items: [
+    { href: '/admin/happy-tickets', label: 'Happy Tickets', icon: Gift },
     { href: '/admin/armory', label: 'Artifacts', icon: Shield },
     { href: '/admin/tower', label: 'Tower', icon: Castle },
     { href: '/admin/guess-36', label: 'Guess 36', icon: Target },

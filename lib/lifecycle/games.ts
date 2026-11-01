@@ -49,16 +49,21 @@ export async function spinProgress(userId: string, now: Date): Promise<GameResul
   const available = state.canSpin && playable;
   const summary = !state.settings.enabled ? 'Daily spin is paused' : state.spin ? 'Today’s spin used' : available ? 'Daily spin available' : 'No spin rewards configured';
   const details = ['One spin each day.'];
+  const rarity = state.legendary.enabled ? 'LEGENDARY' : 'EPIC';
   if (state.spin?.lootItem) details.push(`Today’s reward: ${state.spin.lootItem.name}.`);
-  details.push(`Current streak: ${state.streak.current} of ${state.streak.target} days. Epic and legendary rewards reset the streak.`);
+  details.push(state.legendary.enabled
+    ? `Legendary Guarantee: ${state.legendary.current} of 30 days. Missing a daily spin resets progress; Epic rewards preserve it.`
+    : `Current streak: ${state.streak.current} of ${state.streak.target} days. Epic and legendary rewards reset the streak.`);
   const item: VaultItem = { id: 'spin', kind: 'spin', sourceRef: `DailySpin:${userId}:${state.spinDate}`, title: 'Daily spin available',
     description: 'Your daily spin is ready. One spin each day.', href: '/daily-spin', action: 'Open Guild Spin', validUntil: state.nextReset.toISOString(), expires: false };
   return { items: available ? [item] : [], game: game('spin', {
     status: !state.settings.enabled ? 'disabled' : state.spin ? 'completed' : available ? 'available' : 'empty',
     summary, details, action: 'Open Guild Spin',
-    facts: { dailyAvailable: available, usedToday: !!state.spin, rewardName: state.spin?.lootItem?.name,
-      goals: state.settings.enabled && state.items.some((item) => item.weight > 0 && (item.rarity ?? '').toUpperCase() === 'EPIC')
-        ? [{ id: 'spin', title: 'Epic spin reward', current: state.streak.current, total: state.streak.target, reward: 'An Epic reward on the milestone spin' }] : [] },
+    facts: { dailyAvailable: available, usedToday: !!state.spin, rewardName: state.spin?.lootItem?.name, legendary: state.legendary,
+      goals: state.settings.enabled && state.items.some((item) => item.weight > 0 && (item.rarity ?? '').toUpperCase() === rarity)
+        ? [state.legendary.enabled
+          ? { id: 'spin-legendary', title: 'Legendary spin reward', current: state.legendary.current, total: 30, reward: 'A Legendary reward on the guarantee spin' }
+          : { id: 'spin', title: 'Epic spin reward', current: state.streak.current, total: state.streak.target, reward: 'An Epic reward on the milestone spin' }] : [] },
     progress: { current: state.streak.current, total: state.streak.target, label: 'Daily spin streak' },
     deadline: { at: state.nextReset.toISOString(), label: 'Daily reset' },
   }) };

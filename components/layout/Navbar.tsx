@@ -10,7 +10,7 @@ import HomeVaultButton from '@/components/HomeVaultButton';
 import {
   Calendar, BookOpen, User, LogOut,
   LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw,
-  Gamepad2, Trophy, Shield, Castle, Target, Tv, ShoppingBag,
+  Gamepad2, Trophy, Shield, Castle, Target, Tv, ShoppingBag, Ticket,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -56,6 +56,7 @@ export function Navbar() {
     { href: '/passes',      label: 'Passes',      icon: <Award size={15} /> },
     { href: '/watch-party', label: 'Watch Party', icon: <Tv size={15} /> },
     { href: '/rewards',     label: 'EMIC Rewards', icon: <ShoppingBag size={15} /> },
+    { href: '/happy-tickets', label: 'Happy Tickets', icon: <Ticket size={15} /> },
     { href: '/armory',      label: 'Artifacts',   icon: <Shield size={15} /> },
     { href: '/tower',       label: 'Tower',        icon: <Castle size={15} /> },
     { href: '/guess-36',  label: 'Guess 36',   icon: <Target size={15} /> },

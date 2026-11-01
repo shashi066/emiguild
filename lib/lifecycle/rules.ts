@@ -29,6 +29,7 @@ export type GameProgress = {
     dailyAvailable?: boolean;
     usedToday?: boolean;
     rewardName?: string;
+    legendary?: import('../vault-spin-progress').VaultLegendary;
     canClaim?: boolean;
     slots?: Array<{ slot: string; name: string | null }>;
     goals?: Array<{ id: string; title: string; current: number; total: number; reward: string; missingOwned?: number; needsEquipment?: boolean }>;

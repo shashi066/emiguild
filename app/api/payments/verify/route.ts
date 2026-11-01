@@ -1,55 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
-import crypto from 'crypto';
-
-export async function POST(req: NextRequest) {
+import { z } from 'zod';
+import { lifecycleJson } from '@/lib/lifecycle/http';
+import { requireOrigin, requireCurrentUser, RewardError, rewardFailure, rewardTransaction } from '@/lib/november';
+import { validBookingPayment } from '@/lib/payment-verification';
+const schema = z.object({ bookingId: z.string().min(1), razorpay_order_id: z.string().min(1).max(100), razorpay_payment_id: z.string().min(1).max(100), razorpay_signature: z.string().regex(/^[a-f\d]{64}$/i) }).strict();
+export async function POST(request: Request) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
+  if (!session?.user?.id) return lifecycleJson({ error: 'Unauthorized' }, 401);
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, bookingId } = await req.json();
-
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !bookingId) {
-      return NextResponse.json({ error: 'Missing payment details' }, { status: 400 });
-    }
-
-    // Verify the booking belongs to this user
-    const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
-    if (!booking || booking.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
-    }
-
-    if (booking.paymentStatus === 'PAID') {
-      return NextResponse.json({ error: 'Payment already completed' }, { status: 400 });
-    }
-
-    // Verify Razorpay signature
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest('hex');
-
-    if (expectedSignature !== razorpay_signature) {
-      return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 });
-    }
-
-    // Payment verified — confirm booking
-    const updatedBooking = await prisma.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: 'CONFIRMED',
-        paymentStatus: 'PAID',
-        razorpayPaymentId: razorpay_payment_id,
-      },
-      include: {
-        station: { select: { id: true, name: true } },
-      },
+    requireOrigin(request);
+    const input = schema.parse(await request.json());
+    const booking = await rewardTransaction(async tx => {
+      await requireCurrentUser(session.user.id, tx);
+      const row = await tx.booking.findUnique({ where: { id: input.bookingId } });
+      if (!row || row.userId !== session.user.id) throw new RewardError('NOT_FOUND', 'Booking not found.', 404);
+      if (!validBookingPayment({ storedOrderId: row.razorpayOrderId, orderId: input.razorpay_order_id, paymentId: input.razorpay_payment_id, signature: input.razorpay_signature, secret: process.env.RAZORPAY_KEY_SECRET ?? '' })) throw new RewardError('INVALID_PAYMENT', 'Payment does not match this booking.');
+      if (row.paymentStatus === 'PAID') {
+        if (row.razorpayPaymentId !== input.razorpay_payment_id) throw new RewardError('ALREADY_PAID', 'This booking is already paid.', 409);
+        return tx.booking.findUniqueOrThrow({ where: { id: row.id }, include: { station: { select: { id: true, name: true } } } });
+      }
+      if (!['PENDING', 'CONFIRMED'].includes(row.status)) throw new RewardError('BOOKING_ENDED', 'This booking can no longer accept payment.', 409);
+      const reused = await tx.booking.findFirst({ where: { razorpayPaymentId: input.razorpay_payment_id, id: { not: row.id } }, select: { id: true } });
+      if (reused) throw new RewardError('PAYMENT_USED', 'This payment is already linked to another booking.', 409);
+      return tx.booking.update({ where: { id: row.id }, data: { status: 'CONFIRMED', paymentStatus: 'PAID', razorpayPaymentId: input.razorpay_payment_id }, include: { station: { select: { id: true, name: true } } } });
     });
-
-    return NextResponse.json({ booking: updatedBooking, success: true });
-  } catch (error) {
-    console.error('Payment verification error:', error);
-    return NextResponse.json({ error: 'Payment verification failed' }, { status: 500 });
-  }
+    return lifecycleJson({ booking, success: true });
+  } catch (error) { return rewardFailure(error); }
 }

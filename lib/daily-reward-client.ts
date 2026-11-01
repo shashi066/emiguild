@@ -26,8 +26,53 @@ function period(kind: DailyRewardKind, state: DailyRewardData) {
   return kind === 'spin' ? state.nextReset : state.forge?.nextResetAt;
 }
 function normalized(kind: DailyRewardKind, reward: any, state: DailyRewardData) {
-  return kind === 'spin' ? { reward, streak: state.streak, streakReward: Boolean(state.spin?.streakReward) } : { selected: reward, state };
+  return kind === 'spin' ? { reward, streak: state.streak, legendary: state.legendary, streakReward: Boolean(state.spin?.streakReward) } : { selected: reward, state };
 }
+async function runSpin(ownerId: string, options: {
+  prepared?: (state: DailyRewardData) => void; fetcher?: typeof fetch;
+  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+}): Promise<DailyRewardData> {
+  const fetcher = options.fetcher ?? fetch;
+  const storage = options.storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+  const key = `emiguild:spin-request:${ownerId}`;
+  const raw = storage?.getItem(key);
+  const state = await readDailyReward('spin', fetcher);
+  options.prepared?.(state);
+  let pending: { requestId: string; spinDate: string };
+  if (raw) {
+    try { pending = JSON.parse(raw); if (!pending.requestId || !pending.spinDate) throw new Error(); }
+    catch { throw new DailyRewardError('Saved spin request could not be read. Check your history before clearing it.', true); }
+    let recovered;
+    try { recovered = await request(`/api/daily-spin/receipts/${encodeURIComponent(pending.requestId)}`, { cache: 'no-store' }, fetcher); }
+    catch { throw new DailyRewardError('Could not check the saved spin result. Try again.', true); }
+    if (recovered.response.ok && recovered.data.reward?.id) { storage?.removeItem(key); return recovered.data; }
+    if (recovered.response.status !== 404) throw new DailyRewardError('Could not check the saved spin result. Try again.', true);
+  } else {
+    if (!state.enabled || !state.canSpin) throw new DailyRewardError('Your daily spin is unavailable or already used.');
+    if (!state.lootItems?.length) throw new DailyRewardError('No spin rewards are configured yet.');
+    pending = { requestId: crypto.randomUUID(), spinDate: state.spinDate };
+    if (!storage) throw new DailyRewardError('Browser storage is required to recover your spin.');
+    try { storage.setItem(key, JSON.stringify(pending)); }
+    catch { throw new DailyRewardError('Enable browser storage before spinning so your result can be recovered.'); }
+  }
+  try {
+    const { response, data } = await request('/api/daily-spin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pending) }, fetcher);
+    if (!response.ok) {
+      if (response.status < 500) storage?.removeItem(key);
+      throw new DailyRewardError(data.error || 'Could not confirm the spin.', response.status >= 500 || response.status === 409);
+    }
+    if (!data.reward?.id) throw new Error('Missing committed reward');
+    storage?.removeItem(key); return data;
+  } catch (error) {
+    if (error instanceof DailyRewardError && !storage?.getItem(key)) throw error;
+    try {
+      const recovered = await request(`/api/daily-spin/receipts/${encodeURIComponent(pending.requestId)}`, { cache: 'no-store' }, fetcher);
+      if (recovered.response.ok && recovered.data.reward?.id) { storage?.removeItem(key); return recovered.data; }
+    } catch { /* Retain original request for explicit recovery/retry. */ }
+    throw error instanceof DailyRewardError ? error : new DailyRewardError('Could not confirm your spin. Check result before spinning again.', true);
+  }
+}
+
 // A submitted request may complete after its browser connection is lost. Remember it
 // across modal/page remounts and reconcile with GET; never automatically repeat POST.
 async function runDailyReward(kind: DailyRewardKind, ownerId: string, options: {
@@ -35,6 +80,7 @@ async function runDailyReward(kind: DailyRewardKind, ownerId: string, options: {
   fetcher?: typeof fetch;
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 } = {}): Promise<DailyRewardData> {
+  if (kind === 'spin') return runSpin(ownerId, options);
   const fetcher = options.fetcher ?? fetch;
   const storage = options.storage ?? (typeof window !== 'undefined' ? window.sessionStorage : undefined);
   const key = `emiguild:pending:${ownerId}:${kind}`;
@@ -47,13 +93,12 @@ async function runDailyReward(kind: DailyRewardKind, ownerId: string, options: {
     if (reward) { options.prepared?.(state); storage?.removeItem(key); return normalized(kind, reward, state); }
     throw new DailyRewardError('Your previous request may still be processing. Check status again before trying another action.', true);
   }
-  const available = kind === 'spin' ? state.enabled && state.canSpin : state.forge?.canForge;
-  if (!available) throw new DailyRewardError(kind === 'spin' ? 'Your daily spin is not available. It may already be used or paused.' : 'Your daily forge is not available. It may already be used or paused.');
-  if (kind === 'spin' && !state.lootItems?.length) throw new DailyRewardError('No spin rewards are configured yet.');
+  const available = state.forge?.canForge;
+  if (!available) throw new DailyRewardError('Your daily forge is not available. It may already be used or paused.');
   options.prepared?.(state);
   storage?.setItem(key, reset);
   try {
-    const { response, data } = await request(kind === 'spin' ? paths.spin : '/api/armory/forge', { method: 'POST' }, fetcher);
+    const { response, data } = await request('/api/armory/forge', { method: 'POST' }, fetcher);
     if (!response.ok) {
       if (response.status < 500) {
         storage?.removeItem(key);
@@ -61,7 +106,7 @@ async function runDailyReward(kind: DailyRewardKind, ownerId: string, options: {
       }
       throw new Error('Server response could not confirm the result.');
     }
-    if (!(kind === 'spin' ? data.reward?.id : data.selected?.id)) throw new Error('Missing result');
+    if (!data.selected?.id) throw new Error('Missing result');
     storage?.removeItem(key);
     return data;
   } catch (cause) {

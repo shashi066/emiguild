@@ -1,5 +1,7 @@
 import { getIstDateKey, getNextIstMidnight } from '@/lib/armory-clock';
 import { prisma } from '@/lib/prisma';
+import type { RewardTx } from './november';
+import { featureEnabled } from './november';
 
 export const STREAK_EPIC_TARGET = 10;
 const STREAK_LOOKBACK_LIMIT = STREAK_EPIC_TARGET + 2;
@@ -20,8 +22,8 @@ export function normalizeSpinResetHour(value: unknown) {
 }
 
 // Fetch all relevant settings at once
-export async function getSpinSettings() {
-  const settings = await prisma.setting.findMany({
+export async function getSpinSettings(db: typeof prisma | RewardTx = prisma) {
+  const settings = await db.setting.findMany({
     where: {
       key: {
         in: [
@@ -56,13 +58,18 @@ function addDays(spinDate: string, days: number) {
   return formatSpinDate(date);
 }
 
-function isStreakResetReward(spin: { lootItem?: { rarity?: string | null } | null }) {
-  const rarity = spin.lootItem?.rarity?.toUpperCase() ?? 'COMMON';
+// Today remains playable: the streak breaks only after a full spin day is missed.
+export function calculateLegendaryProgress(current: number, lastSpinDate: string | null, effectiveToday: string) {
+  return lastSpinDate === effectiveToday || lastSpinDate === addDays(effectiveToday, -1) ? current : 0;
+}
+
+function isStreakResetReward(spin: { awardedRarity?: string | null; lootItem?: { rarity?: string | null } | null }) {
+  const rarity = (spin.awardedRarity ?? spin.lootItem?.rarity)?.toUpperCase() ?? 'COMMON';
   return STREAK_RESET_RARITIES.has(rarity);
 }
 
 export function calculateCurrentStreak(
-  spins: Array<{ spinDate: string; lootItem?: { rarity?: string | null } | null }>,
+  spins: Array<{ spinDate: string; awardedRarity?: string | null; lootItem?: { rarity?: string | null } | null }>,
   effectiveToday: string
 ) {
   const spinByDate = new Map(spins.map((spin) => [spin.spinDate, spin]));
@@ -84,14 +91,15 @@ export function calculateCurrentStreak(
   return streak;
 }
 
-export async function getUserStreakSnapshot(userId: string, effectiveToday: string) {
-  const spins = await prisma.userDailySpin.findMany({
+export async function getUserStreakSnapshot(userId: string, effectiveToday: string, db: typeof prisma | RewardTx = prisma) {
+  const spins = await db.userDailySpin.findMany({
     where: {
       userId,
       spinDate: { lte: effectiveToday },
     },
     select: {
       spinDate: true,
+      awardedRarity: true,
       lootItem: {
         select: {
           rarity: true,
@@ -123,12 +131,21 @@ export function getSpinAvailability(settings: { enabled: boolean; retriesEnabled
 export async function getSpinState(userId: string, now: Date = new Date()) {
   const settings = await getSpinSettings();
   const { spinDate, nextReset } = getEffectiveSpinDate(settings.resetHour, now);
-  const [spin, streak, items] = await Promise.all([
+  const [spin, streak, items, legendaryEnabled, user, lastSpin] = await Promise.all([
     prisma.userDailySpin.findUnique({ where: { userId_spinDate: { userId, spinDate } }, include: { lootItem: true } }),
     getUserStreakSnapshot(userId, spinDate),
     prisma.lootItem.findMany({ where: { enabled: true } }),
+    featureEnabled('legendary_pity_30_enabled'),
+    prisma.user.findUnique({ where: { id: userId }, select: { legendaryPity: true } }),
+    prisma.userDailySpin.findFirst({ where: { userId, spinDate: { lte: spinDate } }, orderBy: { spinDate: 'desc' }, select: { spinDate: true } }),
   ]);
-  return { settings, spinDate, nextReset, spin, streak, items, ...getSpinAvailability(settings, spin) };
+  let displaySpin = spin;
+  if (spin?.rewardSnapshot) {
+    try { displaySpin = { ...spin, lootItem: JSON.parse(spin.rewardSnapshot) }; } catch { /* Legacy row. */ }
+  }
+  const current = calculateLegendaryProgress(user?.legendaryPity ?? 0, lastSpin?.spinDate ?? null, spinDate);
+  const legendary = { enabled: legendaryEnabled, current, target: 30, spinsRemaining: Math.max(1, 30 - current) };
+  return { settings, spinDate, nextReset, spin: displaySpin, streak, legendary, items, ...getSpinAvailability(settings, spin) };
 }
 
 export async function getSpinEligibility(userId: string, now = new Date()) {

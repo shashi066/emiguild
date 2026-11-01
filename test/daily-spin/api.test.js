@@ -1,31 +1,28 @@
 const test = require('node:test');
-const assert = require('node:assert');
-
-// Note: To run proper API integration tests for Next.js App Router (which uses Web Request/Response),
-// a framework like Next.js Test Server, Playwright, or Supertest is typically required.
-// Since this environment lacks a dedicated test framework, these tests define the expected
-// integration behavior for the Daily Spin API endpoints.
-
-test('Daily Spin API Integration Requirements', async (t) => {
-  await t.test('POST /api/daily-spin unauthorized -> 401', () => {
-    // Expected behavior:
-    // When a request is made without a valid NextAuth session,
-    // the server should return a 401 Unauthorized status.
-    assert.ok(true, 'Behavior verified manually during development');
-  });
-
-  await t.test('POST /api/daily-spin authorized first spin -> 200 and records loot item', () => {
-    // Expected behavior:
-    // When an authenticated user makes their first POST request of the day (in IST),
-    // the server performs a weighted random selection, upserts the UserDailySpin record,
-    // and returns a 200 status with the selected reward.
-    assert.ok(true, 'Behavior verified manually during development');
-  });
-
-  await t.test('POST /api/daily-spin second spin (retries disabled) -> 429', () => {
-    // Expected behavior:
-    // When retries are disabled, a second POST request on the same day (IST)
-    // should return a 429 Too Many Requests status.
-    assert.ok(true, 'Behavior verified manually during development');
-  });
+const assert = require('node:assert/strict');
+const { build } = require('esbuild');
+const Module = require('node:module');
+const path = require('node:path');
+async function loadRoute() {
+  const result = await build({ entryPoints: ['app/api/daily-spin/route.ts'], bundle: true, platform: 'node', format: 'cjs', packages: 'external', write: false,
+    plugins: [{ name: 'session', setup(build) {
+      build.onResolve({ filter: /^@\/auth$/ }, () => ({ path: 'auth', namespace: 'test' }));
+      build.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: 'export const auth = async () => globalThis.__spinSession;', loader: 'js' }));
+    } }] });
+  const filename = path.join(process.cwd(), 'spin-api-test.cjs');
+  const mod = new Module(filename, module); mod.filename = filename; mod.paths = module.paths;
+  mod._compile(result.outputFiles[0].text, filename); return mod.exports;
+}
+test('Spin handlers reject unauthenticated, cross-origin and malformed requests before touching rewards', async () => {
+  const route = await loadRoute();
+  const request = (body, origin = 'http://localhost') => new Request('http://localhost/api/daily-spin', { method: 'POST', headers: { 'Content-Type': 'application/json', origin }, body });
+  globalThis.__spinSession = null;
+  assert.equal((await route.GET()).status, 401);
+  assert.equal((await route.POST(request('{}'))).status, 401);
+  globalThis.__spinSession = { user: { id: 'fixture-owner' } };
+  assert.equal((await route.POST(request('{}', 'https://evil.example'))).status, 403);
+  assert.equal((await route.POST(request('{broken'))).status, 400);
+  assert.equal((await route.POST(request(JSON.stringify({ requestId: 'bad' })))).status, 400);
+  assert.equal((await route.POST(request(JSON.stringify({ result: 'LEGENDARY', pity: 29 })))).status, 400);
+  delete globalThis.__spinSession;
 });

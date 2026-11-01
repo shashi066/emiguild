@@ -7,7 +7,7 @@ function storage() {
   return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
 }
 const reward = { id: 'reward-1', name: 'Test reward' };
-const spin = { enabled: true, canSpin: true, nextReset: '2026-10-24T18:30:00Z', lootItems: [reward] };
+const spin = { spinDate: '2026-10-24', enabled: true, canSpin: true, nextReset: '2026-10-24T18:30:00Z', lootItems: [reward] };
 const forge = { forge: { canForge: true, nextResetAt: spin.nextReset } };
 function mockFetch(responses: (Response | Error)[]) {
   const calls: { url: string; method: string }[] = [];
@@ -56,9 +56,13 @@ test('expired session never submits', async () => {
   assert.equal(calls.length, 1);
 });
 test('lost POST response reconciles saved Spin result', async () => {
-  const { fetcher, calls } = mockFetch([json(spin), Error('connection lost'), json({ ...spin, canSpin: false, spin: { lootItem: reward } })]);
+  const legendary = { enabled: true, current: 21, target: 30, spinsRemaining: 9 };
+  const streak = { current: 0, target: 10 };
+  const { fetcher, calls } = mockFetch([json(spin), Error('connection lost'), json({ reward, legendary, streak, spinRecord: { id: 'receipt-spin', spinDate: spin.spinDate } })]);
   const result = await executeDailyReward('spin', 'lost-response', { fetcher, storage: storage() });
   assert.equal(result.reward.id, reward.id);
+  assert.deepEqual(result.legendary, legendary);
+  assert.deepEqual(result.streak, streak);
   assert.deepEqual(calls.map(c => c.method), ['GET', 'POST', 'GET']);
 });
 test('uncertain Forge remains read-only across retries and recovers later', async () => {

@@ -1,0 +1,5 @@
+.button:global(.happy-ticket-btn) { position:relative; isolation:isolate; overflow:hidden; background:#08182e; border:1px solid #22d3ee; color:#f4faff; box-shadow:inset 0 0 10px #1186d51a,0 0 3px #22d3ee28; }
+.button::before { content:''; position:absolute; z-index:-1; pointer-events:none; top:-70%; bottom:-70%; right:15%; width:21%; transform:skewX(-38deg); background:#1262ae38; border-left:1px solid #2884dc30; }
+.button:global(.happy-ticket-btn) > svg { color:#4be7ff; }
+.button:global(.happy-ticket-btn):hover { background:#0b223c; border-color:#67e8f9; }
+.button:global(.happy-ticket-btn):focus-visible { outline:2px solid #a5f3fc; outline-offset:4px; }

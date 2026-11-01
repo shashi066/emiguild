@@ -477,11 +477,11 @@ h1, h2, h3, h4, h5, h6 {
   .watch-party-btn:hover { background: #0b1220 !important; border-color: #a8c7ed !important; }
 }
 
-.emic-rewards-btn {
+.hero-actions .emic-rewards-btn {
   box-shadow: inset 0 0 14px rgba(232, 121, 249, 0.08);
 }
 
-.emic-rewards-btn::before {
+.hero-actions .emic-rewards-btn::before {
   content: '';
   position: absolute;
   top: 7px;
@@ -490,10 +490,15 @@ h1, h2, h3, h4, h5, h6 {
   height: 10px;
   border-top: 1px solid rgba(232, 121, 249, 0.72);
   border-right: 1px solid rgba(232, 121, 249, 0.72);
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  box-shadow: none;
   border-radius: 0 3px 0 0;
 }
 
-.emic-rewards-btn svg { color: #e879f9; }
+.hero-actions .emic-rewards-btn svg { color: #e879f9; }
+.hero-actions .happy-ticket-btn svg { color: #4be7ff; }
 
 /* ── PS5 Rental Hero Button — Steel Red ── */
 .hero-ps5-rental-btn {
@@ -609,7 +614,8 @@ h1, h2, h3, h4, h5, h6 {
   .emi-panel[data-compact] .emi-direct-links { display: none; }
   .emi-panel[data-compact] .emi-type-toggle { margin: 6px 12px; }
   .emi-panel[data-compact] .emi-composer { padding: 8px; }
-  .emi-launcher { min-width: 56px; width: 56px; height: 56px; padding: 0; gap: 0; }
+  .emi-launcher { min-width: 48px; width: 48px; height: 48px; padding: 0; gap: 0; }
+  .emi-launcher-avatar { width: 34px; height: 34px; flex-basis: 34px; }
   .emi-launcher > span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1178,6 +1184,28 @@ input.form-input[type="time"]:focus {
   align-items: center;
   gap: var(--space-md);
   flex-wrap: wrap;
+}
+
+.hero-reward-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  max-width: 100%;
+}
+
+@media (max-width: 600px) {
+  .hero-reward-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-sm);
+    width: 100%;
+  }
+  .hero-actions .hero-reward-actions .btn {
+    min-width: 0;
+    padding-inline: 10px !important;
+    font-size: .8rem !important;
+    gap: 6px;
+  }
 }
 
 .home-side-quests {

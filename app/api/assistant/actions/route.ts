@@ -22,6 +22,7 @@ async function customerFetch(req: NextRequest, path: string, init: RequestInit) 
     headers: {
       ...(init.headers ?? {}),
       cookie: req.headers.get('cookie') ?? '',
+      origin: req.headers.get('origin') ?? new URL(req.url).origin,
       'x-emiguild-customer-scope': '1',
     },
     cache: 'no-store',

@@ -28,6 +28,8 @@ import {
   isGuildMembershipType,
   selectPreferredGuildMembership,
 } from '@/lib/guild-membership';
+import { happyBookingProblem, readHappyConfig } from '@/lib/happy-ticket-rules';
+import { submitRewardRequest } from '@/lib/reward-request-client';
 import { CUSTOMER_GAME_REQUEST_MAX_LENGTH } from '@/lib/game-request';
 
 type Station = {
@@ -42,7 +44,7 @@ type Station = {
 };
 
 type BookedSlot = { startTime: string; endTime: string; status: string };
-type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD';
+type BookingBenefitMode = 'STANDARD' | 'HOUR_PASS' | 'GUILD' | 'HAPPY_TICKET';
 
 const STATION_ICONS: Record<number, string> = {
   1: '🖥️', 2: '💻', 3: '🎮', 4: '🕹️', 5: '⚡',
@@ -88,12 +90,30 @@ export default function BookPageInner({
   const [settingsMap, setSettingsMap]           = useState<Record<string, string>>(initialSettings ?? {});
   const [notes, setNotes]                       = useState('');
 
-  const [benefitMode, setBenefitMode]           = useState<BookingBenefitMode>('STANDARD');
+  const [benefitMode, setBenefitMode]           = useState<BookingBenefitMode>(searchParams.get('happyTicket') ? 'HAPPY_TICKET' : 'STANDARD');
   const [activePasses, setActivePasses]         = useState<Array<{
     id: string; passType: string; totalHours: number; usedHours: number;
     status: string; purchasedAt: string; expiresAt: string;
   }>>([]);
 
+  const [happyTickets, setHappyTickets] = useState<Array<{ id: string; status: string; expiresAt: string; rulesSnapshot: string }>>([]);
+  const [happyTicketId, setHappyTicketId] = useState(searchParams.get('happyTicket') ?? '');
+  const [pendingHappyBooking, setPendingHappyBooking] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (!session?.user?.id) { setHappyTickets([]); return; }
+    fetch('/api/happy-tickets', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(data => {
+      if (!alive) return;
+      setHappyTickets(data?.wallet?.tickets?.filter((t: { status: string }) => t.status === 'CLAIMED') ?? []);
+      if (searchParams.get('happyTicket')) setBenefitMode('HAPPY_TICKET');
+    }).catch(() => undefined);
+    try { const raw = localStorage.getItem(`emiguild:reward:${session.user.id}:HAPPY_BOOKING`); if (raw) setPendingHappyBooking(JSON.parse(raw).payload); } catch { setError('Saved booking could not be read. Check My Bookings before retrying.'); }
+    return () => { alive = false; };
+  }, [session?.user?.id, searchParams]);
+  const happyTicket = happyTickets.find(t => t.id === happyTicketId);
+  const usesHappyTicket = benefitMode === 'HAPPY_TICKET';
+  const happyProblem = happyTicket && selectedStation && selectedTime ? happyBookingProblem({ config: readHappyConfig(happyTicket.rulesSnapshot), stationId: selectedStation.id, hasControllers: selectedStation.hasControllers,
+    date: selectedDate, startTime: selectedTime, duration: selectedDuration, expiresAt: new Date(happyTicket.expiresAt), now: new Date(`${bookingClock.date}T${bookingClock.time}:00+05:30`) }) : 'Choose a ticket and session.';
   const controllerSectionRef = useRef<HTMLDivElement>(null);
 
   // Advance the booking UI from the server-rendered instant with a monotonic
@@ -208,7 +228,7 @@ export default function BookPageInner({
     ? controllerCharge
     : usesGuildMembership
       ? guildMembershipPrice
-      : normalPrice;
+      : usesHappyTicket ? Math.max(0, normalPrice - (selectedStation?.hourlyRate ?? 0)) : normalPrice;
   const stationPassAllowed = selectedStation != null;
   const hourPasses = activePasses.filter((pass) => !isGuildMembershipType(pass.passType));
   const compatiblePass = selectedStation
@@ -249,10 +269,7 @@ export default function BookPageInner({
     setError('');
     setSubmitting(true);
     try {
-      const res = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const payload = {
           stationId:       selectedStation!.id,
           date:            selectedDate,
           startTime:       selectedTime,
@@ -264,8 +281,13 @@ export default function BookPageInner({
           appliedBenefitType: usesGuildMembership ? activeMembership?.passType ?? null : null,
           usePass: usesHourPass,
           passId: usesHourPass ? compatiblePass?.id ?? null : null,
-        }),
-      });
+        };
+      if (usesHappyTicket) {
+        if (!happyTicketId || happyProblem) throw new Error(happyProblem || 'Choose a Happy Ticket.');
+        const data = await submitRewardRequest(session.user!.id, 'HAPPY_BOOKING', '/api/bookings', { ...payload, happyTicketId });
+        router.push(`/book/confirm?id=${data.booking.id}`); return;
+      }
+      const res = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? 'Booking failed. Please try again.');
@@ -273,8 +295,9 @@ export default function BookPageInner({
         return;
       }
       router.push(`/book/confirm?id=${data.booking.id}`);
-    } catch {
-      setError('Something went wrong. Please try again.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Something went wrong. Please try again.');
+      try { const raw = localStorage.getItem(`emiguild:reward:${session?.user?.id}:HAPPY_BOOKING`); if (raw) setPendingHappyBooking(JSON.parse(raw).payload); } catch { /* Keep visible failure. */ }
       setSubmitting(false);
     }
   };
@@ -282,7 +305,7 @@ export default function BookPageInner({
   const canProceed = () => {
     if (step === 1) return !!selectedDate;
     if (step === 2) return !!selectedStation;
-    if (step === 3) return !!selectedTime;
+    if (step === 3) return !!selectedTime && (!usesHappyTicket || !happyProblem);
     return true;
   };
 
@@ -839,6 +862,13 @@ export default function BookPageInner({
                   );
                 })()}
 
+                {happyTickets.length > 0 && <div className="card" style={{ padding: 14, marginTop: 14 }}>
+                  <label htmlFor="happy-booking-ticket">Happy Ticket · 1 free base PS5 hour</label>
+                  <select id="happy-booking-ticket" className="form-input" value={happyTicketId} onChange={e => { setHappyTicketId(e.target.value); setBenefitMode(e.target.value ? 'HAPPY_TICKET' : 'STANDARD'); }} style={{ minHeight: 44, width: '100%', marginTop: 8 }}>
+                    <option value="">Choose a ticket</option>{happyTickets.map(t => <option key={t.id} value={t.id}>Expires {new Date(Date.parse(t.expiresAt) - 1).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</option>)}
+                  </select>
+                  {usesHappyTicket && <><p>{happyProblem || 'One base hour covered. Extra time and controllers remain payable.'}</p><button type="button" className="btn btn-ghost" onClick={() => { setBenefitMode('STANDARD'); setHappyTicketId(''); }}>Pay normally instead</button></>}
+                </div>}
                 <div
                   className="alert alert-success"
                   style={{ marginTop: 'var(--space-lg)', flexWrap: 'wrap', gap: 4 }}
@@ -866,6 +896,15 @@ export default function BookPageInner({
         )}
 
         {/* ── STEP 4: Confirm ── */}
+        {pendingHappyBooking && <div className="alert alert-warning" role="status" style={{ flexWrap: 'wrap' }}>
+          <span>Previous Happy Ticket booking: {String(pendingHappyBooking.date)} ? {String(pendingHappyBooking.startTime)}. Check its result before booking again.</span>
+          <button className="btn btn-secondary" disabled={submitting} onClick={async () => {
+            if (!session?.user?.id) return; setSubmitting(true);
+            try { const data = await submitRewardRequest(session.user.id, 'HAPPY_BOOKING', '/api/bookings', pendingHappyBooking); setPendingHappyBooking(null); router.push(`/book/confirm?id=${data.booking.id}`); }
+            catch (e) { setError(e instanceof Error ? e.message : 'Unable to recover booking.'); }
+            finally { setSubmitting(false); }
+          }}>Check result / Retry</button>
+        </div>}
         {step === 4 && (
           <div className="card animate-fade-in-up">
             <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: 'var(--space-xl)' }}>

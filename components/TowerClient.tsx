@@ -68,6 +68,8 @@ type TowerAttemptState = {
   totalLevels: number;
   status: 'IN_PROGRESS' | 'LOST' | 'COMPLETED' | 'CLAIMED' | 'TIMED_OUT' | 'EXPIRED';
   securedReward: TowerReward | null;
+  lossProtection?: boolean;
+  rewardAddedToVault?: boolean;
   canClaim: boolean;
   expiresAt: string;
   runExpiresAt: string;
@@ -79,6 +81,7 @@ type TowerAttemptState = {
   cards: TowerCard[];
 };
 type TowerState = {
+  lossRewardsEnabled?: boolean;
   review?: TowerReviewState;
   enabled: boolean;
   runDurationSeconds: number;
@@ -107,7 +110,7 @@ function formatGuideDuration(totalSeconds: number) {
   return `${minuteLabel} ${seconds} seconds`;
 }
 
-function getTowerGuideSteps(runDurationSeconds: number) {
+function getTowerGuideSteps(runDurationSeconds: number, lossProtection = true) {
   const duration = formatGuideDuration(runDurationSeconds);
   return [
   {
@@ -132,7 +135,7 @@ function getTowerGuideSteps(runDurationSeconds: number) {
   },
   {
     title: 'Red Card',
-    description: 'A Red Card ends your climb immediately, and you lose all unclaimed rewards.',
+    description: lossProtection ? 'A Red Card ends your climb. Your last cleared floor reward is added to Vault once. A first-floor loss gives no reward.' : 'A Red Card ends your climb immediately, and you lose all unclaimed rewards.',
     visual: { kind: 'cards', state: 'red', label: 'Red card' },
   },
   {
@@ -246,8 +249,8 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
   const timerEnded = Boolean(timedStatus && remainingMs === 0);
   const announcement = attemptMessage(attempt, result);
   const guideSteps = useMemo(
-    () => getTowerGuideSteps(attempt?.climbDurationSeconds ?? state.runDurationSeconds),
-    [attempt?.climbDurationSeconds, state.runDurationSeconds],
+    () => getTowerGuideSteps(attempt?.climbDurationSeconds ?? state.runDurationSeconds, attempt?.lossProtection ?? state.lossRewardsEnabled ?? true),
+    [attempt?.climbDurationSeconds, attempt?.lossProtection, state.runDurationSeconds, state.lossRewardsEnabled],
   );
   const pendingAnnouncement = isPicking
     ? 'Revealing your card.'
@@ -598,6 +601,11 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         <p className="sr-only" aria-live="polite">{pendingAnnouncement || announcement}</p>
         <p className="sr-only" aria-live="assertive">{timerAnnouncement}</p>
 
+        {attempt?.status === 'LOST' && <section className={`tower-result ${attempt.rewardAddedToVault ? 'rewarded' : ''}`} role="status" aria-label="Tower run result">
+          <div className="tower-result-heading"><span className="tower-result-icon" aria-hidden="true">{attempt.rewardAddedToVault ? <Gift size={22}/> : <Castle size={22}/>}</span><div><span>Run complete</span><h2>Tower run complete</h2></div><span className="tower-result-floor">Floor <strong>{attempt.level}</strong></span></div>
+          <div className="tower-result-reward"><span>Reward earned</span><strong>{attempt.rewardAddedToVault ? rewardLabel(attempt.securedReward) : 'No reward this run'}</strong></div>
+          {attempt.rewardAddedToVault && <div className="tower-result-footer"><span><Check size={14} aria-hidden="true"/> Added to Vault</span><Link className="tower-secondary-button" href="/vault">View in Vault</Link></div>}
+        </section>}
         {screen === 'loading' ? (
           <div className="loading-state tower-inline-loading">
             <TowerLoader />
@@ -697,7 +705,7 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
                 );
               })}
             </div>
-            {!showInlineFeedback && <div className="tower-message"><span>{announcement}</span></div>}
+            {!showInlineFeedback && attempt.status !== 'LOST' && <div className="tower-message"><span>{announcement}</span></div>}
             {canUseNextToken && (
               <div className="tower-actions">
                 <button className="tower-main-button" type="button" onClick={start} disabled={loading}><Coins size={16} /> Use Next Token</button>
@@ -772,6 +780,18 @@ export function TowerClient({ initialState, initialError = '' }: TowerClientProp
         .tower-alert { margin: 0; }
         .tower-alert span { min-width: 0; flex: 1; }
         .tower-alert button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; }
+        .tower-result { margin: 12px 0; padding: 16px; border: 1px solid #3b344e; border-radius: 8px; background: #151b2b; }
+        .tower-result-heading { display: flex; align-items: center; gap: 10px; }
+        .tower-result-icon { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #51436b; border-radius: 8px; color: #c4b5fd; background: #252137; flex-shrink: 0; }
+        .tower-result-heading>div>span { font-size: .6rem; text-transform: uppercase; letter-spacing: .1em; color: #a6b3c8; }
+        .tower-result-heading h2 { margin: 3px 0 0; font-size: .92rem; font-weight: 800; }
+        .tower-result-floor { margin-left: auto; display: grid; gap: 3px; text-align: center; color: #a6b3c8; font-size: .65rem; flex-shrink: 0; }
+        .tower-result-floor strong { font-size: 1.2rem; color: #e7ddff; }
+        .tower-result-reward { display: grid; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #30394c; }
+        .tower-result-reward>span { font-size: .7rem; color: #9eafc6; }.tower-result-reward strong { font-size: 1rem; color: #d8def0; }
+        .tower-result.rewarded { border-color: #31534c; }.tower-result.rewarded .tower-result-reward strong { color: #a3e4d4; }
+        .tower-result-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+        .tower-result-footer>span { display: flex; align-items: center; gap: 5px; font-size: .73rem; color: #a3e4d4; }.tower-result-footer a { min-height: 44px; text-decoration: none; }
         .tower-run-summary { position: sticky; top: 72px; z-index: 8; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 10px; padding: 8px 10px; border-bottom: 1px solid #35445a; background: #0b1421; }
         .tower-run-copy { min-width: 0; display: grid; align-content: center; gap: 2px; }
         .tower-run-copy > span { color: #73dbe8; font-size: .65rem; font-weight: 800; text-transform: uppercase; }
