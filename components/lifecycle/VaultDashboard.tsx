@@ -62,7 +62,6 @@ function DailyGameCard({ game, now, onDailyAction, dailyActionBusy }: { game: Ga
       </div>
       <p className={styles.secondary}>{game.facts?.goals?.length ? `${Math.max(0, (game.progress?.total ?? 10) - (game.progress?.current ?? 0))} more consecutive spins toward an Epic reward` : 'Build your streak with a daily spin.'}</p>
       </>}
-      {game.facts?.featuredReward && <p className={styles.secondary}>Featured ordinary reward: {game.facts.featuredReward.name}. Guarantees take priority.</p>}
       {game.facts?.rewardName && <div className={styles.inset}><Gift size={22} /><span>Today’s reward<br /><strong>{game.facts.rewardName}</strong></span></div>}
       {!available && <p className={styles.secondary}>{game.status === 'disabled' ? 'Daily spin is paused' : game.facts?.usedToday ? 'Your next spin unlocks at the daily reset.' : game.summary}</p>}
     </> : <>

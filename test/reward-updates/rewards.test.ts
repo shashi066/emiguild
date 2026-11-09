@@ -148,7 +148,8 @@ test('selected ordinary reward is shared, snapshotted, recoverable and disabled 
   const rid = randomUUID();
   const result = await performDailySpin(u.id, { requestId: rid }, day(16), () => { throw Error('Ordinary override must not roll'); });
   assert.equal(result.reward.id, selected.id); assert.equal(result.guaranteeReason, 'ADMIN_SELECTED');
-  assert.equal((await getSpinState(u.id, day(16))).featuredReward?.id, selected.id);
+  assert.equal('featuredReward' in await getSpinState(u.id, day(16)), false);
+  assert.equal((await readSpinSelection()).itemId, selected.id);
   await mutateSpinItem(admin.id, selected.id, { name: 'Edited later' });
   await configureSpinSelection(admin.id, { ...config, enabled: false });
   assert.equal((await recoverDailySpin(u.id, rid)).reward.name, 'Featured fixture');

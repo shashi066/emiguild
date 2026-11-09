@@ -77,7 +77,7 @@ export function AdminDailySpin() {
       const response = await fetch('/api/admin/daily-spin/selection', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: selectionConfirm, itemId: selectionItem || null, version: selection.version }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not save selection.');
-      setSelection(data); setSelectionConfirm(null); setSuccess(data.enabled ? 'Selected reward is active. Guarantees take priority.' : 'Ordinary weighted rewards restored.');
+      setSelection(data); setSelectionConfirm(null); setSuccess(data.enabled ? 'Reward override is active. Guarantees take priority.' : 'Ordinary weighted rewards restored.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save selection.'); }
     finally { selectionFlight.current = false; setSelectionBusy(false); }
   };
@@ -308,9 +308,9 @@ export function AdminDailySpin() {
           </div>
 
           <section className="card" aria-labelledby="spin-selection-title">
-            <h2 id="spin-selection-title" style={{ fontSize: '1.05rem', marginBottom: 12 }}>Selected reward <span className="badge">{selection?.enabled ? 'Active' : 'Off'}</span></h2>
+            <h2 id="spin-selection-title" style={{ fontSize: '1.05rem', marginBottom: 12 }}>Reward override <span className="badge">{selection?.enabled ? 'Active' : 'Off'}</span></h2>
             <div style={{ display: 'flex', alignItems: 'end', flexWrap: 'wrap', gap: 12 }}>
-              <label className="form-label" style={{ flex: '1 1 200px', margin: 0 }}>Ordinary spin reward
+              <label className="form-label" style={{ flex: '1 1 200px', margin: 0 }}>Override reward
                 <select className="form-input" value={selectionItem} disabled={selectionBusy} onChange={event => setSelectionItem(event.target.value)}>
                   <option value="">Choose reward</option>
                   {items.filter(item => item.enabled && item.weight > 0).map(item => <option key={item.id} value={item.id}>{item.name} - {item.rarity}</option>)}
@@ -450,7 +450,7 @@ export function AdminDailySpin() {
       )}
 
       {selectionConfirm !== null && <AdminModalShell labelledBy="spin-selection-confirm" onClose={() => { if (!selectionBusy) setSelectionConfirm(null); }}>
-        <h2 id="spin-selection-confirm">{selectionConfirm ? 'Activate selected reward?' : 'Restore ordinary rewards?'}</h2>
+        <h2 id="spin-selection-confirm">{selectionConfirm ? 'Activate reward override?' : 'Restore ordinary rewards?'}</h2>
         <p>{selectionConfirm ? `${items.find(item => item.id === selectionItem)?.name ?? 'This reward'} will be used for ordinary spins. Guarantees still take priority.` : 'Ordinary spins will use the configured weights.'}</p>
         <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
           <button type="button" className="btn btn-secondary" disabled={selectionBusy} onClick={() => setSelectionConfirm(null)}>Back</button>

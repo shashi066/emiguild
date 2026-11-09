@@ -1,22 +1,19 @@
 import { auth } from '@/auth';
 import { z } from 'zod';
-import { encryptNumber } from '@/lib/crypto';
 import { getEffectiveSpinDate, getSpinSettings, getSpinState } from '@/lib/daily-spin';
 import { performDailySpin } from '@/lib/spin-rewards';
+import { publicSpinFailure, serializeSpinResult, serializeSpinStatus } from '@/lib/spin-public';
 import { verifyActionToken } from '@/lib/assistant/tokens';
 import { lifecycleJson } from '@/lib/lifecycle/http';
-import { requestIdSchema, requireOrigin, RewardError, rewardFailure } from '@/lib/november';
+import { requestIdSchema, requireOrigin, RewardError } from '@/lib/november';
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return lifecycleJson({ error: 'Unauthorized' }, 401);
   try {
     const state = await getSpinState(session.user.id);
-    return lifecycleJson({ enabled: state.settings.enabled, canSpin: state.canSpin,
-      spinDate: state.spinDate, spin: state.spin, streak: state.streak, legendary: state.legendary, featuredReward: state.featuredReward,
-      remainingRetries: 0, nextReset: state.nextReset.toISOString(),
-      lootItems: state.items.map(item => ({ ...item, weight: encryptNumber(item.weight) })) });
-  } catch (error) { return rewardFailure(error); }
+    return lifecycleJson(serializeSpinStatus(state));
+  } catch (error) { return publicSpinFailure(error); }
 }
 const inputSchema = z.object({ requestId: requestIdSchema.optional(), spinDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict();
 export async function POST(request: Request) {
@@ -34,6 +31,6 @@ export async function POST(request: Request) {
         throw new RewardError('CONFIRMATION_EXPIRED', 'Spin confirmation expired. Refresh Daily Spin.', 409);
       }
     }
-    return lifecycleJson(await performDailySpin(session.user.id, input));
-  } catch (error) { return rewardFailure(error); }
+    return lifecycleJson(serializeSpinResult(await performDailySpin(session.user.id, input)));
+  } catch (error) { return publicSpinFailure(error); }
 }

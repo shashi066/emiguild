@@ -49,7 +49,7 @@ export async function spinProgress(userId: string, now: Date): Promise<GameResul
   return { items: available ? [item] : [], game: game('spin', {
     status: !state.settings.enabled ? 'disabled' : state.spin ? 'completed' : available ? 'available' : 'empty',
     summary, details, action: 'Open Guild Spin',
-    facts: { dailyAvailable: available, usedToday: !!state.spin, rewardName: state.spin?.lootItem?.name, legendary: state.legendary, featuredReward: state.featuredReward,
+    facts: { dailyAvailable: available, usedToday: !!state.spin, rewardName: state.spin?.lootItem?.name, legendary: state.legendary,
       goals: state.settings.enabled && state.items.some((item) => item.weight > 0 && (item.rarity ?? '').toUpperCase() === rarity)
         ? [state.legendary.enabled
           ? { id: 'spin-legendary', title: 'Legendary spin reward', current: state.legendary.current, total: 30, reward: 'A Legendary reward on the guarantee spin' }
