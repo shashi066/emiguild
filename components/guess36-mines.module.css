@@ -23,7 +23,6 @@
 .navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; margin-bottom: 8px; }
 .navigation :global(.guess-36-back) { margin-bottom: 0; }
 .chatDock { display: none; }
-.loading { min-height: 160px; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--color-text-secondary); }
 
 .game, .ticketsPanel { position: relative; min-width: 0; padding: 16px; border: 1px solid var(--g36-line); border-radius: 12px; background: #0c1220; color: var(--color-text-primary, #f0f4ff); }
 

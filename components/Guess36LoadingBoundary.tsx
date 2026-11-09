@@ -2,7 +2,6 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import Guess36Loader, { GUESS36_LOADING_DURATION_MS } from './Guess36Loader';
-import styles from './guess36-mines.module.css';
 
 const CompleteEntry = createContext<() => void>(() => {});
 export function useCompleteGuess36Entry() { return useContext(CompleteEntry); }
@@ -24,5 +23,5 @@ export function Guess36LoadingBoundary({ children, skipInitial = false }: { chil
 }
 
 export function Guess36RouteLoader() {
-  return <div className={styles.loading} role="status"><span className="spinner" aria-hidden="true" />Loading Guild Expedition...</div>;
+  return <Guess36Loader complete />;
 }

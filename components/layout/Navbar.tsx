@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { SideQuestsMenu } from './SideQuestsMenu';
 import HomeVaultButton from '@/components/HomeVaultButton';
+import { warmServer } from '@/lib/warm-server';
 import {
   Calendar, BookOpen, User, LogOut,
   LayoutDashboard, LogIn, UserPlus, Menu, X, Award, RotateCw,
@@ -158,7 +159,7 @@ export function Navbar() {
           {/* Hamburger button (mobile only) */}
           <button
             className="mobile-menu-btn"
-            onClick={() => setMobileOpen((v) => !v)}
+            onClick={() => { if (!mobileOpen) warmServer(); setMobileOpen((v) => !v); }}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
             id="mobile-menu-toggle"
           >

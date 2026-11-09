@@ -5,6 +5,7 @@ import SideQuestShowcase from '@/components/SideQuestShowcase';
 import HomeVaultButton from '@/components/HomeVaultButton';
 import vaultButtonStyles from '@/components/home-vault-button.module.css';
 import HomepageVisitTracker from '@/components/HomepageVisitTracker';
+import WarmServer from '@/components/WarmServer';
 import { StationAvailabilityBoard } from '@/components/StationAvailabilityBoard';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
@@ -182,6 +183,7 @@ export default async function HomePage() {
             <HeroActions ps5RentalStatus={ps5RentalStatus} />
 
             <SideQuestShowcase />
+            <WarmServer />
 
             <div className="hero-stats">
               <div>
