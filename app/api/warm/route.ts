@@ -2,8 +2,8 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-// Wakes this server instance, Prisma and the database before a player reaches a game, so the first
-// game action does not pay the cold-start cost. Returns no data.
+// Best-effort database wake-up before a game. Vercel may serve the game in another instance,
+// so this does not guarantee removal of its application cold start. Returns no data.
 export async function GET() {
   const headers = { 'Cache-Control': 'private, no-store' };
   try {

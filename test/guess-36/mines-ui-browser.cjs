@@ -54,23 +54,23 @@ const json = value => ({ status: 200, contentType: 'application/json', json: val
       const page = await context.newPage();
       page.on('pageerror', error => errors.push(error.message));
       page.on('request', request => { if (request.isNavigationRequest() && request.resourceType() === 'document') documentRequests++; });
-      await page.goto(base + '/guess-36'); await page.getByRole('button', { name: 'Start free daily run', exact: true }).waitFor({ timeout: 30000 });
+      await page.goto(base + '/guess-36'); await page.getByRole('button', { name: 'Play free daily run', exact: true }).waitFor({ timeout: 30000 });
       const opener = page.getByRole('button', { name: 'Open Emiily chat and help', exact: true });
-      await opener.waitFor();
-      await page.waitForFunction(mobile => mobile ? !!document.querySelector('#guess36-chat-dock .emi-launcher') : !!document.querySelector('.emi-assistant > .emi-launcher'), width <= 640);
+      assert.equal(await opener.count(), 0, 'Emiily is limited to the homepage');
       const bounds = await tile(page, 0).boundingBox();
       assert.ok(bounds.width >= 44 && bounds.height >= 44, JSON.stringify(bounds));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       if (width === 375) {
-        await opener.click(); const dialog = page.getByRole('dialog', { name: 'Emiily, the EmiGuild assistant' }); await dialog.waitFor();
+        const info = page.getByRole('button', { name: 'Guild Expedition rules', exact: true });
+        await info.click(); const dialog = page.getByRole('dialog'); await dialog.waitFor();
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'hidden' });
-        await opener.waitFor(); assert.equal(await opener.evaluate(el => el === document.activeElement), true);
-        ok('mobile EMIILY dock opens, closes and restores keyboard focus');
+        assert.equal(await info.evaluate(el => el === document.activeElement), true);
+        ok('mobile Info closes and restores keyboard focus without an assistant overlay');
       }
       await page.screenshot({ path: path.join(out, `ready-${width}.png`), fullPage: true });
       const beforeDocuments = documentRequests;
       const root = await page.locator('[aria-label="Guess 36 Guild Expedition"]').elementHandle();
-      await page.getByRole('button', { name: 'Start free daily run', exact: true }).click();
+      await page.getByRole('button', { name: 'Play free daily run', exact: true }).click();
       if (width === 375) {
         block = true; wait = new Promise(resolve => { release = resolve; });
         await page.waitForFunction(() => {
@@ -82,15 +82,32 @@ const json = value => ({ status: 200, contentType: 'application/json', json: val
         assert.equal(await tile(page, 1).locator('> span:first-child').evaluate(el => getComputedStyle(el).opacity), opacity);
         assert.equal(await tile(page, 0).getAttribute('aria-busy'), 'true');
         assert.equal(await tile(page, 1).isEnabled(), false);
+        const reel = tile(page, 0).locator('[data-k]'); assert.equal(await reel.count(), 3);
+        assert.equal(await reel.first().evaluate(el => getComputedStyle(el).animationIterationCount), '4');
+        await page.getByRole('status').filter({ hasText: 'Checking tile.' }).waitFor();
+        await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')); });
+        await page.waitForFunction(() => document.querySelector('[data-background]'));
+        assert.equal(await reel.first().evaluate(el => getComputedStyle(el).animationPlayState), 'paused');
+        await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange')); });
+        await page.waitForTimeout(5100);
+        assert.ok(await reel.first().evaluate(el => el.getAnimations().every(animation => animation.playState === 'finished')));
         release(); block = false;
-        ok('slow first reveal keeps the board steady and accepts only one pending action');
+        ok('slow first reveal locks duplicate picks, announces pending and bounds motion; simulated background pauses it');
       } else await tile(page, 0).click();
       const collect = page.getByRole('button', { name: 'Collect 15 min', exact: true }); await collect.waitFor();
+      const reward = page.locator('strong[data-bump]'); await reward.waitFor();
+      assert.ok(await reward.evaluate(el => new Promise(resolve => {
+        let frames = 0, contained = true;
+        const sample = () => {
+          contained &&= el.getBoundingClientRect().left >= el.parentElement.getBoundingClientRect().left - 0.5;
+          if (++frames < 30) requestAnimationFrame(sample); else resolve(contained);
+        };
+        sample();
+      })), 'reward reveal must stay inside the HUD');
       await page.evaluate(() => scrollTo(0, 0));
-      const action = await collect.boundingBox(), chat = await opener.boundingBox();
+      const action = await collect.boundingBox();
       if (width <= 430) {
         assert.ok(action.y + action.height <= 796, JSON.stringify(action));
-        assert.ok(chat.y + chat.height <= action.y || chat.x >= action.x + action.width || chat.x + chat.width <= action.x);
       }
       assert.ok(await collect.evaluate(el => getComputedStyle(el).animationIterationCount !== 'infinite'), 'action feedback is bounded');
       const ladder = page.getByRole('list', { name: '1 of 5 rewards found', exact: true });
@@ -129,11 +146,23 @@ const json = value => ({ status: 200, contentType: 'application/json', json: val
       ok(`${width}px: 44px tiles, readable first reward segment, no overflow and clear Collect area`);
       if (width === 430) {
         await page.emulateMedia({ reducedMotion: 'reduce' });
-        await tile(page, 2).click(); await page.getByRole('button', { name: 'Collect 30 min', exact: true }).waitFor();
+        block = true; wait = new Promise(resolve => { release = resolve; });
+        await tile(page, 2).click();
+        const layers = tile(page, 2).locator('[data-k]'); await layers.first().waitFor({ state: 'attached' });
+        assert.equal(await layers.first().evaluate(el => getComputedStyle(el).animationName), 'none');
+        assert.equal(await layers.first().evaluate(el => getComputedStyle(el).opacity), '0');
+        release(); block = false;
+        await page.getByRole('button', { name: 'Collect 30 min', exact: true }).waitFor();
         assert.equal(await tile(page, 2, 'loot').locator('> span:first-child').evaluate(el => getComputedStyle(el).animationName), 'none');
         await page.goto(base + '/'); await opener.waitFor();
         await page.waitForFunction(() => !!document.querySelector('.emi-assistant > .emi-launcher'));
-        ok('reduced motion stays static and other pages retain the floating assistant');
+        await opener.click(); const assistant = page.getByRole('dialog', { name: 'Emiily, the EmiGuild assistant' }); await assistant.waitFor();
+        await assistant.getByRole('link', { name: 'Games', exact: true }).click(); await page.waitForURL(base + '/games');
+        assert.equal(await opener.count(), 0); assert.equal(await assistant.count(), 0);
+        await page.goBack(); await opener.waitFor(); assert.equal(await assistant.count(), 0);
+        await opener.click(); await assistant.waitFor(); await page.keyboard.press('Escape');
+        assert.equal(await opener.evaluate(el => el === document.activeElement), true);
+        ok('reduced motion stays static; Emiily is homepage-only and closes cleanly on navigation');
       }
       await context.close();
     }

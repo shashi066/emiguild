@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const { randomUUID } = require('node:crypto');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -55,7 +55,7 @@ async function member(seed,viewport={width:375,height:812},reduced=false) {
   entry=await prisma.guess36Entry.create({data:{roundId:round.id,userId:user.id,gameMode:'MINES',selectionType:null,mineBoard:JSON.stringify(board),mineRevealed:JSON.stringify(revealed),mineStatus:status,mineRules:JSON.stringify(rules),mineStartedAt:new Date(),mineExpiresAt:new Date(Date.now()+(seed.seconds??90)*1000),mineVersion:revealed.length,mineReward:reward?JSON.stringify(reward):null,mineSettledAt:status==='ACTIVE'?null:new Date()}});
   if(seed.ticket)await prisma.armoryTicket.create({data:{userId:user.id,source:'GUESS_36',sourceRefId:entry.id,code:`UI-${randomUUID()}`,rewardSnapshot:JSON.stringify({reward}),expiresAt:new Date(Date.now()+(seed.expired?-1000:86400000)),status:seed.ticket,claimDate:today()}});
  }
- const context=await browser.newContext({viewport,reducedMotion:reduced?'reduce':'no-preference'});await context.addInitScript(()=>{window.__brandLoaderSeen=false;new MutationObserver(()=>{if([...document.querySelectorAll('p[role="status"]')].some(el=>el.textContent.includes('Loading Guess 36')))window.__brandLoaderSeen=true;}).observe(document,{childList:true,subtree:true});});await login(context,user);
+ const context=await browser.newContext({viewport,reducedMotion:reduced?'reduce':'no-preference'});await context.addInitScript(()=>{window.__brandLoaderSeen=false;new MutationObserver(()=>{if(document.querySelector('[data-guess36-loader="entry"]'))window.__brandLoaderSeen=true;}).observe(document,{childList:true,subtree:true});});await login(context,user);
  const page=await context.newPage();const saveTrace=await traceExpedition(page,dir,`game-${++tracedPages}`);traceSaves.push(saveTrace);page.on('pageerror',e=>errors.push(e.message));page.on('console',message=>{if(message.type()==='error'&&/element type is invalid|lazy element type|ChunkLoadError/i.test(message.text()))errors.push(message.text());});
  // Terminal fixtures exercise explicit recovery, matching the production contract.
  if(entry && entry.mineStatus!=='ACTIVE') await page.route('**/api/guess-36/current',route=>route.continue({url:base+'/api/guess-36/current?recover='+entry.id}));
@@ -63,7 +63,7 @@ async function member(seed,viewport={width:375,height:812},reduced=false) {
  page.on('request',r=>{if(r.isNavigationRequest()&&r.resourceType()==='document')documents++;if(r.url().includes('/api/guess-36/current'))reads++;if(r.method()==='POST'&&/guess-36\/(reveal|collect)/.test(r.url()))posts++;});
  const entryCheck=page.waitForResponse(response=>response.url().includes('/api/guess-36/current'));
  await page.goto(base+'/guess-36');await page.getByRole('heading',{name:'Guild Expedition',exact:true}).waitFor({state:'visible',timeout:30000});await entryCheck;await page.waitForFunction(()=>!document.querySelector('[aria-label="Refresh Guild Expedition"]').disabled);
- if(seed)assert.equal(await page.evaluate(()=>window.__brandLoaderSeen),false,'recovery must skip the branded loader');
+ assert.equal(await page.evaluate(()=>window.__brandLoaderSeen),!seed,seed?'recovery must skip the five-second intro':'a fresh account must retain the five-second intro');
  const close=context.close.bind(context);context.close=async()=>{await saveTrace();await close();};
  return {user,entry,context,page,counts:()=>({documents,reads,posts})};
 }
@@ -219,6 +219,19 @@ async function finishWithInfo(game,endpoint,action,result) {
   }
   browser=await chromium.launch({channel:'chrome',headless:true});
   const anonymous=await browser.newContext();const anon=await anonymous.newPage();anon.on('pageerror',e=>errors.push(e.message));await anon.goto(base+'/guess-36');await anon.getByRole('link',{name:'Sign in to play'}).waitFor({state:'visible'});assert.equal(await anon.getByRole('button',{name:/^Tile /}).count(),0);rules=await(await anonymous.request.get(base+'/api/guess-36/current')).json().then(s=>s.rules);await anonymous.close();ok('actual signed-out page hides board');
+  const warm=await fetch(base+'/api/warm');assert.equal(warm.status,204);assert.equal(await warm.text(),'');assert.match(warm.headers.get('cache-control'),/no-store/);ok('actual public warm-up returns no data and cannot be cached');
+  if(process.env.GUESS36_UI_ONLY==='true') {
+   const user=await prisma.user.create({data:{name:'UI review fixture',email:`expedition-ui-${randomUUID()}@example.test`,password:await bcrypt.hash(password,4)}});
+   const assistant=await prisma.setting.findUnique({where:{key:'assistant_release_mode'}});
+   await prisma.setting.upsert({where:{key:'assistant_release_mode'},create:{key:'assistant_release_mode',value:'ON'},update:{value:'ON'}});
+   try {
+    const ui=spawnSync(process.execPath,['test/guess-36/mines-ui-browser.cjs'],{env:{...process.env,GUESS36_UI_BASE_URL:base,GUESS36_REVIEW_EMAIL:user.email,GUESS36_REVIEW_PASSWORD:password},encoding:'utf8',timeout:240000,windowsHide:true});
+    process.stdout.write(ui.stdout||'');process.stderr.write(ui.stderr||'');assert.equal(ui.status,0,'isolated UI checks must pass');return;
+   } finally {
+    if(assistant)await prisma.setting.update({where:{key:'assistant_release_mode'},data:{value:assistant.value}});
+    else await prisma.setting.deleteMany({where:{key:'assistant_release_mode'}});
+   }
+  }
   if(process.env.POST_MERGE_REVIEW_ONLY==='true') {
    await reviewChecks(process.env.POST_MERGE_ACCOUNT_ONLY==='true');assert.deepEqual(errors,[]);
    console.log(JSON.stringify({checks:checks.length,errors,output:dir,realAuthenticated:true,disposableDatabase:true}));return;

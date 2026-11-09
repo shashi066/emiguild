@@ -1,4 +1,4 @@
-// Browser-only. Wakes the server and database ahead of a side quest, at most once every 2 minutes per
+// Browser-only. Requests a database warm-up ahead of a side quest, at most once every 2 minutes per
 // tab. Never throws and never blocks the UI.
 const INTERVAL_MS = 2 * 60_000;
 const STORAGE_KEY = 'emiguild:warm-at';
