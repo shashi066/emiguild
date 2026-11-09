@@ -3,7 +3,7 @@
 import { useId } from 'react';
 import styles from './vault-loader.module.css';
 
-export const VAULT_LOADING_DURATION_MS = 8000;
+export const VAULT_LOADING_DURATION_MS = 5000;
 const stages = ['Powering up…', 'Unlocking…', 'Opening vault…', 'Preparing your inventory…'];
 
 export default function VaultLoader({ complete = false, compact = false }: { complete?: boolean; compact?: boolean }) {
@@ -57,7 +57,7 @@ export default function VaultLoader({ complete = false, compact = false }: { com
       <div className={styles.caption} aria-hidden="true">
         <div className={styles.title}>Your Vault</div>
         <div className={styles.status}>
-          {stages.map((stage, index) => <span key={stage} className={styles.stage} style={{ animationDelay: `${index * 2000}ms` }}>{stage}</span>)}
+          {stages.map((stage, index) => <span key={stage} className={styles.stage} style={{ animationDelay: `${index * VAULT_LOADING_DURATION_MS / 4}ms` }}>{stage}</span>)}
           <span className={styles.waiting}>Loading your inventory…</span>
         </div>
       </div>

@@ -1,39 +1,53 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { auth } from '@/auth';
-import { Guess36Client } from '@/components/Guess36Client';
-import { getGuess36Current } from '@/lib/guess-36';
+import Guess36MinesClient from '@/components/Guess36MinesClient';
+import { Guess36LoadingBoundary } from '@/components/Guess36LoadingBoundary';
+import { getMineState } from '@/lib/guess-36-mines';
+import { skipMineEntry } from '@/lib/guess-36-client';
+import styles from '@/components/guess36-mines.module.css';
 
 export const metadata = {
-  title: 'Guess 36 — Changes Coming Soon | EMI Guild',
-  description: 'Guess 36 is changing. Coming soon: 36 spots per round, one unique number per player, first come, first served.',
+  title: 'Guess 36 - Guild Expedition | EMI Guild',
+  description: 'Find five treasures, avoid five traps and collect your reward. One free 90-second Guild Expedition daily.',
 };
 
 export const dynamic = 'force-dynamic';
 
+function GameNavigation() {
+  return <div className={styles.navigation}>
+    <Link href="/" className="btn btn-ghost btn-sm guess-36-back"><ArrowLeft size={16} /> Back to Home</Link>
+    <div id="guess36-chat-dock" className={styles.chatDock} />
+  </div>;
+}
+
 export default async function Guess36Page() {
   const session = await auth();
-  const viewer = session?.user?.id ? { id: session.user.id, role: session.user.role } : null;
+  const userId = session?.user?.id ?? null;
 
   try {
-    const state = await getGuess36Current(viewer);
+    const state = await getMineState(userId);
     return (
+      <Guess36LoadingBoundary skipInitial={skipMineEntry(state)}>
       <main className="guess-36-page">
         <div className="guess-36-shell">
-          <Link href="/" className="btn btn-ghost btn-sm guess-36-back"><ArrowLeft size={16} /> Back to Home</Link>
-          <Guess36Client initialState={state} />
+          <GameNavigation />
+          <Guess36MinesClient initialState={state} />
         </div>
       </main>
+      </Guess36LoadingBoundary>
     );
   } catch (error) {
     console.error('Guess 36 page failed:', error);
     return (
+      <Guess36LoadingBoundary skipInitial>
       <main className="guess-36-page">
         <div className="guess-36-shell">
-          <Link href="/" className="btn btn-ghost btn-sm guess-36-back"><ArrowLeft size={16} /> Back to Home</Link>
-          <Guess36Client initialError="Guess 36 could not load. Please refresh once." />
+          <GameNavigation />
+          <Guess36MinesClient initialError="Guess 36 could not load. Please refresh once." />
         </div>
       </main>
+      </Guess36LoadingBoundary>
     );
   }
 }

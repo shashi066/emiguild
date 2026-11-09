@@ -109,53 +109,53 @@ test('re-entry after disposal starts a new sequence, including retained route se
   t.mock.timers.tick(16); assert.equal(c.getPhase(), 'ready');
 });
 
-test('ready homepage waits seven seconds then reveals on the next frame', t => {
-  const c = setup(t, false, 7000);
+test('ready homepage waits five seconds then reveals on the next frame', t => {
+  const c = setup(t, false, 5000);
   c.mark('page'); c.mark('hero');
-  t.mock.timers.tick(6999); assert.equal(c.getPhase(), 'loading');
+  t.mock.timers.tick(4999); assert.equal(c.getPhase(), 'loading');
   assert.equal(c.getSnapshot().value, 99);
   t.mock.timers.tick(1); assert.equal(c.getPhase(), 'loading');
   t.mock.timers.tick(16); assert.equal(c.getPhase(), 'ready');
 });
-test('late readiness holds the completed estimate without adding another seven seconds', t => {
-  const c = setup(t, false, 7000);
+test('late readiness holds the completed estimate without adding another five seconds', t => {
+  const c = setup(t, false, 5000);
   t.mock.timers.tick(12000); assert.equal(c.getSnapshot().value, 99);
   c.mark('page'); c.mark('hero'); t.mock.timers.tick(16);
   assert.equal(c.getPhase(), 'ready');
 });
 test('leaving during the minimum cancels its completion callback', t => {
-  const c = setup(t, false, 7000);
+  const c = setup(t, false, 5000);
   c.mark('page'); c.mark('hero'); t.mock.timers.tick(1000); c.dispose();
   t.mock.timers.tick(10000); assert.equal(c.getPhase(), 'loading');
   assert.equal(c.getSnapshot().value, 0);
 });
-test('reduced motion retains the seven-second entry minimum', t => {
-  const c = setup(t, true, 7000);
+test('reduced motion retains the five-second entry minimum', t => {
+  const c = setup(t, true, 5000);
   c.mark('page'); c.mark('hero'); t.mock.timers.tick(2100);
   assert.equal(c.getSnapshot().value, 90); assert.equal(c.getPhase(), 'loading');
-  t.mock.timers.tick(4900); t.mock.timers.tick(16); assert.equal(c.getPhase(), 'ready');
+  t.mock.timers.tick(2900); t.mock.timers.tick(16); assert.equal(c.getPhase(), 'ready');
 });
 
 test('the last stretch visits each integer from 90 to 99 and never invents 100', t => {
-  const c = setup(t, false, 7000);
+  const c = setup(t, false, 5000);
   t.mock.timers.tick(2100);
   for (let value = 90; value <= 99; value++) {
     assert.equal(c.getSnapshot().value, value);
     assert.equal(c.getPhase(), 'loading');
-    t.mock.timers.tick(500);
+    t.mock.timers.tick(300);
   }
   t.mock.timers.tick(20000);
   assert.equal(c.getSnapshot().value, 99);
 });
 
 test('progress starts independently of image loading, with no image readiness signal', t => {
-  const c = setup(t, false, 7000);
+  const c = setup(t, false, 5000);
   assert.equal(c.getSnapshot().value, 0);
   t.mock.timers.tick(100);
   assert.ok(c.getSnapshot().value > 0);
   assert.equal(c.getPhase(), 'loading');
   // A missing logo never prevents the page/hero signals from completing entry.
   c.mark('page'); c.mark('hero');
-  t.mock.timers.tick(6900); t.mock.timers.tick(16);
+  t.mock.timers.tick(4900); t.mock.timers.tick(16);
   assert.equal(c.getSnapshot().value, 100);
 });

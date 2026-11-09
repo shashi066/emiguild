@@ -1,0 +1,15 @@
+ALTER TABLE "guess_36_rounds" ADD COLUMN "minesSnapshot" TEXT;
+ALTER TABLE "guess_36_entries" ALTER COLUMN "selectionType" DROP NOT NULL;
+ALTER TABLE "guess_36_entries" ADD COLUMN "gameMode" TEXT NOT NULL DEFAULT 'LEGACY';
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineBoard" TEXT;
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineRevealed" TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineStatus" TEXT;
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineStartedAt" TIMESTAMP(3);
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineExpiresAt" TIMESTAMP(3);
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineSettledAt" TIMESTAMP(3);
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineVersion" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineRules" TEXT;
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineReward" TEXT;
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineRateAt" TIMESTAMP(3);
+ALTER TABLE "guess_36_entries" ADD COLUMN "mineRateCount" INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX "guess_36_entries_userId_gameMode_mineStatus_idx" ON "guess_36_entries"("userId", "gameMode", "mineStatus");

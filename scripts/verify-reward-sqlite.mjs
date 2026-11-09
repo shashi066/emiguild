@@ -4,8 +4,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const database = path.resolve('prisma/november-test-clean.db');
 const directory = mkdtempSync(path.join(tmpdir(), 'emiguild-reward-sqlite-'));
+const database = path.join(directory, 'november-test-clean.db');
 const baseline = path.join(directory, 'baseline.prisma');
 writeFileSync(baseline, execFileSync('git', ['show', '4f71e06:prisma/schema.prisma'], { encoding: 'utf8', windowsHide: true }));
 const env = { ...process.env, DATABASE_URL: 'file:' + database.replaceAll('\\', '/') };
@@ -15,7 +15,7 @@ writeFileSync(baselineSql, sql);
 execFileSync('python', ['-X', 'utf8', '-c', `
 import sqlite3,pathlib,sys
 database=pathlib.Path(sys.argv[1]).resolve()
-assert database.name=='november-test-clean.db' and database.parent.name=='prisma'
+assert database.name=='november-test-clean.db' and database.parent.name.startswith('emiguild-reward-sqlite-')
 con=sqlite3.connect(database)
 # This exact disposable test database may be recreated. No other file is opened.
 con.close()
@@ -36,6 +36,8 @@ con.executescript(pathlib.Path('prisma/migrations/20261029000000_personal_happy_
 con.execute('INSERT INTO happy_pool(id,version,config,updatedAt) VALUES(?,?,?,?)',('main',7,'{"stationIds":["baseline-station"],"days":[1,2],"startTime":"16:00","endTime":"23:00"}',123456789))
 con.commit()
 con.executescript(pathlib.Path('prisma/migrations/20261029010000_happy_settings/migration.sqlite.sql').read_text(encoding='utf-8'))
+con.executescript(pathlib.Path('prisma/migrations/20261106000000_guess36_mines/migration.sqlite.sql').read_text(encoding='utf-8'))
+con.executescript(pathlib.Path('prisma/migrations/20261109000000_reward_updates/migration.sqlite.sql').read_text(encoding='utf-8'))
 import json
 saved=json.loads(con.execute("select value from settings where key='happy_ticket_config'").fetchone()[0])
 assert saved['version']==7 and saved['config']['stationIds']==['baseline-station']
@@ -58,3 +60,7 @@ print('SQLite: baseline plus reward and personal-balance migrations; five tables
 const drift = execFileSync(process.execPath, ['node_modules/prisma/build/index.js', 'migrate', 'diff', '--from-url', env.DATABASE_URL, '--to-schema-datamodel', 'prisma/schema.prisma', '--script'], { env, encoding: 'utf8', windowsHide: true });
 if (drift.includes('CREATE TABLE') || drift.includes('ALTER TABLE') || drift.includes('DROP ')) throw new Error('SQLite migration differs from schema.');
 console.log('SQLite: no Prisma schema drift. Test database: ' + database);
+
+const run = (file,args) => execFileSync(process.execPath,[file,...args],{env:{...env,NOVEMBER_TEST_DATABASE_URL:env.DATABASE_URL},stdio:'inherit',windowsHide:true});
+run('node_modules/tsx/dist/cli.mjs',['--test','--test-concurrency=1','test/november/rules.test.ts','test/november/integration.test.ts','test/november/admin-booking-edit.test.ts','test/november/request-client.test.ts','test/november/admin-page-render.test.cjs','test/november/happy-read.test.cjs']);
+run('test/november/booking-http.test.cjs',[]);

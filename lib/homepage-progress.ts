@@ -1,10 +1,10 @@
-export const HOMEPAGE_MINIMUM_MS = 7000;
+export const HOMEPAGE_MINIMUM_MS = 5000;
 export type HomepageProgress = { value: number; phase: 'loading' | 'ready' | 'error'; slow: boolean };
 export function estimateHomepageProgress(elapsed: number, reducedMotion = false) {
-  if (reducedMotion) return elapsed >= 6600 ? 99 : elapsed >= 2100 ? 90 : elapsed >= 900 ? 70 : 0;
+  if (reducedMotion) return elapsed >= 4800 ? 99 : elapsed >= 2100 ? 90 : elapsed >= 900 ? 70 : 0;
   if (elapsed < 900) return Math.round(Math.max(0, elapsed) / 900 * 70);
   if (elapsed < 2100) return 70 + Math.round((elapsed - 900) / 1200 * 20);
-  return Math.min(99, 90 + Math.floor((elapsed - 2100) / 500));
+  return Math.min(99, 90 + Math.floor((elapsed - 2100) / 300));
 }
 
 /** Owns one entry sequence. Resource completion, never elapsed time, unlocks 100%. */

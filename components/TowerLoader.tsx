@@ -1,6 +1,6 @@
 import styles from './tower-loader.module.css';
 
-export const TOWER_LOADING_DURATION_MS = 8000;
+export const TOWER_LOADING_DURATION_MS = 5000;
 
 export default function TowerLoader({ complete = false }: { complete?: boolean }) {
   return (

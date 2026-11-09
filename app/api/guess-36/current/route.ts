@@ -1,20 +1,16 @@
-import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { friendlyGuess36Error, getGuess36Current } from '@/lib/guess-36';
-
+import { getMineState } from '@/lib/guess-36-mines';
+import { lifecycleJson } from '@/lib/lifecycle/http';
+import { rewardFailure } from '@/lib/november';
+import { z } from 'zod';
+const query = z.object({ inspect: z.string().min(1).max(100).optional(), recover: z.string().min(1).max(100).optional(), startRequest: z.string().regex(/^[a-zA-Z0-9_-]{16,80}$/).optional() }).strict().refine(value => [value.inspect, value.recover, value.startRequest].filter(Boolean).length <= 1, 'Choose recovery or board inspection.');
 export const dynamic = 'force-dynamic';
-
-export async function GET() {
-  const session = await auth();
-  const viewer = session?.user?.id
-    ? { id: session.user.id, role: session.user.role }
-    : null;
-  try {
-    const state = await getGuess36Current(viewer);
-    return NextResponse.json(state, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) {
-    console.error('Guess 36 current state failed:', error);
-    const friendly = friendlyGuess36Error(error);
-    return NextResponse.json({ error: friendly.error }, { status: friendly.status });
-  }
+export async function GET(request: Request) {
+ const session = await auth();
+ try {
+  const params = new URL(request.url).searchParams;
+  if (params.getAll('inspect').length > 1 || params.getAll('recover').length > 1 || params.getAll('startRequest').length > 1) return lifecycleJson({ error: 'Choose one run.' }, 400);
+  const { inspect, recover, startRequest } = query.parse(Object.fromEntries(params));
+  return lifecycleJson(await getMineState(session?.user?.id ?? null, undefined, inspect, recover, startRequest));
+ } catch (error) { return rewardFailure(error); }
 }

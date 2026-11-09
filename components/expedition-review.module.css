@@ -1,0 +1,6 @@
+.row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .8rem; }
+.action { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--vault-accent, #67e8f9); text-decoration: underline; text-underline-offset: 4px; }
+.action:focus-visible { outline: 2px solid #67e8f9; outline-offset: 3px; border-radius: 3px; }
+.action[aria-disabled=true] { opacity: .6; }
+.row p { flex-basis: 100%; margin: 0; }
+.spinner { width: 14px; height: 14px; }

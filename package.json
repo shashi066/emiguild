@@ -33,9 +33,10 @@
     "test:analytics": "tsx --test test/analytics/*.test.ts",
     "test:assistant": "tsx --test test/assistant/*.test.ts",
     "test:tower": "tsx --env-file=.env.local --test test/tower/*.test.ts",
-    "test:guess-36": "tsx --env-file=.env.local --test test/guess-36/*.test.ts",
+    "test:guess-36": "node scripts/verify-guess36-mines.mjs",
     "test:lifecycle": "tsx --test --test-concurrency=1 test/lifecycle/*.test.ts",
-    "test:november": "tsx --test --test-concurrency=1 test/november/rules.test.ts test/november/integration.test.ts test/november/admin-booking-edit.test.ts test/november/request-client.test.ts test/november/admin-page-render.test.cjs test/november/happy-read.test.cjs"
+    "test:november": "tsx --test --test-concurrency=1 test/november/rules.test.ts test/november/integration.test.ts test/november/admin-booking-edit.test.ts test/november/request-client.test.ts test/november/admin-page-render.test.cjs test/november/happy-read.test.cjs",
+    "test:guess-36:postgres": "node scripts/verify-guess36-mines.mjs --postgres"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -86,6 +86,24 @@ test('known rejection is reported without inventing a result', async () => {
   await assert.rejects(executeDailyReward('spin', 'rejected', { fetcher, storage: storage() }), /Already used/);
   assert.equal(calls.length, 2);
 });
+test('Spin restores the original five-second sequence and settles on the server reward', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let finished = false;
+  let last: number | null = null;
+  const result = animateDailySpin([{ id: 'other' }, reward], Promise.resolve({ reward }), value => { last = value; }, new AbortController().signal);
+  void result.then(() => { finished = true; });
+  await Promise.resolve();
+  // Twenty quick steps, then eight slower steps: the winner locks at 4.4s.
+  for (let step = 0; step < 20; step++) t.mock.timers.tick(60);
+  for (let delay = 120; delay <= 680; delay += 80) t.mock.timers.tick(delay);
+  assert.equal(last, 1);
+  t.mock.timers.tick(599);
+  await Promise.resolve();
+  assert.equal(finished, false);
+  t.mock.timers.tick(1);
+  assert.equal((await result).reward.id, reward.id);
+});
+
 test('slow Spin never finishes before its server reward', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let accept!: (data: { reward: typeof reward }) => void;

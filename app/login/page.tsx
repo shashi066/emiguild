@@ -2,12 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { Gamepad2, Mail, Lock, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,8 +14,10 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
     setLoading(true);
+    let navigating = false;
 
     try {
       const result = await signIn('credentials', {
@@ -33,13 +33,16 @@ export default function LoginPage() {
         const callbackUrl = requestedUrl?.startsWith('/') && !requestedUrl.startsWith('//')
           ? requestedUrl
           : '/';
-        router.push(callbackUrl);
-        router.refresh();
+        const destination = new URL(callbackUrl, window.location.origin);
+        // Authentication changes the entire server-rendered tree. Start one
+        // fresh navigation instead of racing a push against a route refresh.
+        navigating = true;
+        window.location.assign(destination.origin === window.location.origin ? destination.href : '/');
       }
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
-      setLoading(false);
+      if (!navigating) setLoading(false);
     }
   };
 

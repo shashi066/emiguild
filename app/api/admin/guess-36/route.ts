@@ -1,3 +1,4 @@
+import { requireCurrentUser, rewardFailure, RewardError } from '@/lib/november';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { friendlyGuess36Error, getGuess36AdminData } from '@/lib/guess-36';
@@ -9,6 +10,7 @@ export async function GET(req: NextRequest) {
   if (session?.user?.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const params = req.nextUrl.searchParams;
   try {
+    await requireCurrentUser(session.user.id, undefined, true);
     const data = await getGuess36AdminData({
       roundDate: params.get('roundDate') || undefined,
       view: params.get('view') || undefined,
@@ -17,6 +19,7 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
+    if (error instanceof RewardError) return rewardFailure(error);
     const friendly = friendlyGuess36Error(error);
     return NextResponse.json({ error: friendly.error }, { status: friendly.status });
   }

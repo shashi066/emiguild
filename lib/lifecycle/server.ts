@@ -23,13 +23,12 @@ async function getRewardItems(userId: string, now: Date): Promise<VaultItem[]> {
 
 // Each domain read is isolated; unavailable data never becomes a fake empty game.
 export async function getVaultState(userId: string, now: Date = new Date()): Promise<AccountState> {
-  const [rewards, sections] = await Promise.all([
-    getRewardItems(userId, now).then((items) => ({ items, unavailable: false })).catch((error) => {
+  // Expedition reads may settle an expired run. Read tickets after settlement.
+  const sections = await loadGameSections(userId, now);
+  const rewards = await getRewardItems(userId, now).then((items) => ({ items, unavailable: false })).catch((error) => {
       console.error('Vault rewards failed', error);
       return { items: [] as VaultItem[], unavailable: true };
-    }),
-    loadGameSections(userId, now),
-  ]);
+    });
   return { userId, evaluatedAt: now.toISOString(), rewardsUnavailable: rewards.unavailable,
     items: orderVaultItems([...rewards.items, ...sections.flatMap((section) => section.items)], now),
     games: sections.map((section) => section.game),

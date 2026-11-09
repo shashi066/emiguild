@@ -1,11 +1,11 @@
 # Reward release guide
 
-Current source of truth: 30 October 2026. See [ticket rules](happy-ticket-rules.md), [artwork](happy-ticket-artwork.md), and [verification](november-test-results.md). No production deployment or activation is claimed by this document.
+Current source of truth: 9 November 2026. Latest additions: [reward updates](reward-updates-release.md). See [ticket rules](happy-ticket-rules.md), [artwork](happy-ticket-artwork.md), and [verification](november-test-results.md). No production deployment or activation is claimed by this document.
 
 ## Approved behavior
 
-- Happy Tickets: five claimable tickets per account, one claim every 24 hours, same-day IST expiry. Banked resets belong to each existing recipient; later signups do not inherit old grants. Members activate their own reset, even with stock remaining. Resets preserve cooldowns and issued tickets.
-- Spin: independent Epic/Legendary counters; missing a daily spin resets both. Epic awards preserve Legendary progress. Legendary takes precedence and resets progress. Preserve ordinary weights, immutable results and receipt recovery.
+- Happy Tickets: five claimable tickets per account, one claim every 24 hours, same-day IST claimed-ticket expiry. Daily stock is reduced once through either claiming or midnight expiry, including offline days. Banked resets belong to each existing recipient; later signups do not inherit old grants. Members activate their own reset, even with stock remaining. Resets preserve cooldowns and issued tickets.
+- Spin: independent Epic/Legendary counters; missing a daily spin resets both. Epic awards preserve Legendary progress. Legendary takes precedence and resets progress. Preserve ordinary weights, immutable results and receipt recovery. An optional admin-selected ordinary reward applies after due Legendary/Epic guarantees; it is off until explicitly activated.
 - Tower: valid protected losses award only the last cleared floor's reward; floor-one losses award nothing. Legacy runs/timeouts retain their policy. No new reward caps.
 - Vault retains its compact cyan Epic/Legendary trackers and existing reward popups. No Happy Tickets in Vault. Keep the wheel unchanged.
 - All approved features launch together after verification. Announcements stay in Excel; there is no website campaign/calendar, automatic activation schedule or restored Artifact collection showcase.
@@ -18,6 +18,8 @@ The migration chain is **not entirely additive**:
 1. `20261028000000_reward_features`: initial reward fields/tables.
 2. `20261029000000_personal_happy_tickets`: personal balances and reset ownership; archives ownerless legacy resets.
 3. `20261029010000_happy_settings`: preserves eligibility/version in Settings and removes HappyPool.
+4. `20261106000000_guess36_mines`: preserves legacy data while extending the existing game tables.
+5. `20261109000000_reward_updates`: adds attempt/bonus references and the User stock-day checkpoint; preserves balances and existing FREE attempts.
 
 Do not rewrite applied migration history. Verify the full chain on disposable SQLite/PostgreSQL and a non-production copy of the actual deployed schema. For production, use PostgreSQL migration.sql files; SQLite companions are verification/local tooling.
 

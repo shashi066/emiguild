@@ -1,3 +1,4 @@
+import { readSpinSelection } from './spin-selection';
 import { randomInt } from 'node:crypto';
 import { prisma } from './prisma';
 import { calculateLegendaryProgress, getEffectiveSpinDate, getSpinSettings, getUserStreakSnapshot } from './daily-spin';
@@ -54,8 +55,12 @@ export async function performDailySpin(userId: string, input: { requestId?: stri
     const epicPool = items.filter(i => i.rarity?.toUpperCase() === 'EPIC');
     const guaranteedLegendary = enabled && progress >= 29;
     if (guaranteedLegendary && !legendaryPool.length) throw new RewardError('LEGENDARY_UNAVAILABLE', 'Legendary rewards are temporarily unavailable. Your spin is unused.', 503);
-    const reason = guaranteedLegendary ? 'LEGENDARY' : streak.guaranteedToday && epicPool.length ? 'EPIC' : 'NATURAL';
-    const selected = selectWeighted(reason === 'LEGENDARY' ? legendaryPool : reason === 'EPIC' ? epicPool : items, roll);
+    if (!guaranteedLegendary && streak.guaranteedToday && !epicPool.length) throw new RewardError('EPIC_UNAVAILABLE', 'Epic rewards are temporarily unavailable. Your spin is unused.', 503);
+    const selection = await readSpinSelection(tx);
+    const featured = selection.enabled ? items.find(item => item.id === selection.itemId) : undefined;
+    if (selection.enabled && !featured) throw new RewardError('SELECTED_REWARD_UNAVAILABLE', 'The featured reward is temporarily unavailable. Your spin is unused.', 503);
+    const reason = guaranteedLegendary ? 'LEGENDARY' : streak.guaranteedToday ? 'EPIC' : selection.enabled ? 'ADMIN_SELECTED' : 'NATURAL';
+    const selected = reason === 'ADMIN_SELECTED' ? featured! : selectWeighted(reason === 'LEGENDARY' ? legendaryPool : reason === 'EPIC' ? epicPool : items, roll);
     const reward = { id: selected.id, name: selected.name, description: selected.description, iconUrl: selected.iconUrl, rarity: selected.rarity };
     const rarity = selected.rarity?.toUpperCase() ?? 'COMMON';
     const current = epoch ? rarity === 'LEGENDARY' ? 0 : progress + 1 : progress;

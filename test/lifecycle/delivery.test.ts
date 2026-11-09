@@ -55,7 +55,7 @@ test('admin test email uses its own durable daily cap and never sends player det
   let calls = 0;
   try {
     const options = { now: new Date('2026-10-06T12:00:00Z'), testMode: true, secret: 's'.repeat(32),
-      transport: async (mail: { to: string; text: string }) => { calls++; assert.equal(mail.to, admin.email); assert.ok(mail.text.includes('No player account details')); return { status: 'ACCEPTED' as const }; } };
+      transport: async (mail: { to: string; text: string }) => { calls++; assert.equal(mail.to, admin.email); assert.ok(mail.text.includes('These examples do not reflect your account')); assert.ok(!mail.text.includes(admin.name)); return { status: 'ACCEPTED' as const }; } };
     for (let count = 0; count < 3; count++) assert.equal((await sendAdminTest(admin.id, options)).status, 'ACCEPTED');
     assert.equal((await sendAdminTest(admin.id, options)).status, 'LIMIT_REACHED');
     assert.equal(calls, 3);
