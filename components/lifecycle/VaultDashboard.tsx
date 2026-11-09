@@ -77,7 +77,7 @@ function DailyGameCard({ game, now, onDailyAction, dailyActionBusy }: { game: Ga
 }
 function ExpeditionReview({ game, refresh }: { game: GameProgress; refresh?: () => void }) {
   const eligibility = game.facts?.expedition;
-  return game.id === 'guess36' && eligibility?.enabled && !['disabled', 'error'].includes(game.status) ? <ExpeditionReviewButton review={eligibility.review} recoveryKey={eligibility.recoveryKey} onGranted={() => refresh?.()} /> : null;
+  return game.id === 'guess36' && eligibility?.enabled && !['disabled', 'error'].includes(game.status) ? <ExpeditionReviewButton key={eligibility.recoveryKey} review={eligibility.review} recoveryKey={eligibility.recoveryKey} onGranted={() => refresh?.()} /> : null;
 }
 function OverviewCard({ game, now, refresh }: { game: GameProgress; now: Date; refresh?: () => void }) {
   const tower = game.id === 'tower';

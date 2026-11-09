@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GOOGLE_REVIEW_URL } from '@/lib/tower-review';
 import type { ExpeditionEligibility } from '@/lib/guess-36-bonuses';
 import styles from './expedition-review.module.css';
@@ -9,19 +9,32 @@ export function ExpeditionReviewButton({ review, recoveryKey, disabled, onGrante
 }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [claimed, setClaimed] = useState('');
   const flight = useRef(false);
+  const mounted = useRef(true);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; controller.current?.abort(); };
+  }, []);
   const claim = async () => {
     if (flight.current || disabled || !recoveryKey) return;
     flight.current = true; setBusy(true); setError('');
+    const abort = new AbortController(); controller.current = abort;
+    const timeout = setTimeout(() => abort.abort(), 20_000);
     const key = `emiguild:guess36:${recoveryKey}:review`;
     try {
       const date = localStorage.getItem(key) ?? review.date;
       localStorage.setItem(key, date);
-      const response = await fetch('/api/guess-36/review-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date }) });
+      const response = await fetch('/api/guess-36/review-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date }), signal: abort.signal });
       const result = await response.json();
+      if (!mounted.current || abort.signal.aborted) return;
       if (!response.ok) { if (response.status === 409) localStorage.removeItem(key); throw new Error(result.error || 'Could not confirm your bonus.'); }
       localStorage.removeItem(key); setClaimed(date); onGranted();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not confirm your bonus.'); }
-    finally { flight.current = false; setBusy(false); }
+    } catch (cause) {
+      if (mounted.current) setError(abort.signal.aborted ? 'Connection slow. Check your bonus before trying again.' : cause instanceof Error ? cause.message : 'Could not confirm your bonus.');
+    } finally {
+      clearTimeout(timeout); controller.current = null; flight.current = false;
+      if (mounted.current) setBusy(false);
+    }
   };
   const received = review.claimed || claimed === review.date;
   return <section className={styles.row} aria-label="Daily Expedition review bonus">

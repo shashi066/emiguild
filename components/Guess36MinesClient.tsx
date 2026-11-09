@@ -350,7 +350,7 @@ export function Guess36MinesClient({ initialState, initialError }: { initialStat
 
    {state.authenticated && <div className={styles.footer}>
     {state.eligibility && <p className={styles.caption}>{state.eligibility.freeAvailable ? '1 free run available' : 'Free daily run used'} · {state.eligibility.bonuses.length} bonus {state.eligibility.bonuses.length === 1 ? 'run' : 'runs'}{state.eligibility.bonuses[0] ? ` · Next bonus expires ${time(new Date(Date.parse(state.eligibility.bonuses[0].expiresAt) - 1).toISOString())} IST` : ''}</p>}
-    {state.enabled && state.eligibility && <ExpeditionReviewButton review={state.eligibility.review} recoveryKey={state.recoveryKey} disabled={busy || uncertain} onGranted={() => void refresh()} />}
+    {state.enabled && state.eligibility && <ExpeditionReviewButton key={state.recoveryKey} review={state.eligibility.review} recoveryKey={state.recoveryKey} disabled={busy || uncertain} onGranted={() => void refresh()} />}
     {used && <p className={styles.caption}>Next run: {time(state.nextDayAt)} IST</p>}
     {!active && !ended && <p className={styles.warning}>A K.O. loses any reward you have not collected. Your first pick can be a K.O.</p>}
    </div>}

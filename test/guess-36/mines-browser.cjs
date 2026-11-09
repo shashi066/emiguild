@@ -77,6 +77,107 @@ async function commitThenDrop(route, context) {
  } catch(error) { errors.push(`Interrupted-response fixture failed: ${error.message}`); }
  finally { await route.abort('failed').catch(()=>{}); }
 }
+async function reviewChecks(accountOnly = false) {
+  const accountA=await member({revealed:[0]});
+  const accountB=await member(null);const nextUser=accountB.user;await accountB.context.close();
+  const pendingId=randomUUID();
+  const restored=await accountA.context.request.post(base+'/api/guess-36/reveal',{data:{date:today(),index:10,requestId:pendingId},headers:{origin:base}});
+  assert.equal(restored.status(),200);
+  const owned=await(await accountA.context.request.get(base+'/api/guess-36/current?recover='+accountA.entry.id)).json();
+  const pendingKey=`emiguild:guess36:${owned.recoveryKey}:start`;
+  await accountA.page.evaluate(({key,requestId,date})=>localStorage.setItem(key,JSON.stringify({requestId,date,index:10})),{key:pendingKey,requestId:pendingId,date:today()});
+  const documents=accountA.counts().documents;
+  async function switchAccount(user) {
+    await login(accountA.context,user);
+    const session=accountA.page.waitForResponse(response=>response.url().endsWith('/api/auth/session'));
+    // Real account cookies; only the browser's return signal is simulated.
+    await accountA.page.evaluate(()=>{
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});
+      Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    assert.equal((await(await session).json()).user.id,user.id);
+  }
+  await switchAccount(nextUser);
+  await accountA.page.getByRole('button',{name:'Start free daily run',exact:true}).waitFor({timeout:6000});
+  assert.equal(await tile(accountA.page,0,'loot').count(),0,'another account must not see the previous board');
+  assert.ok(await accountA.page.evaluate(key=>!!localStorage.getItem(key),pendingKey),'preserve the old account recovery ID');
+  await accountA.page.getByRole('button',{name:'Start free daily run',exact:true}).click();await tile(accountA.page,0).click();
+  await accountA.page.getByRole('button',{name:/^Tile 1:/}).waitFor();
+  assert.equal(await prisma.guess36Entry.count({where:{userId:nextUser.id}}),1);
+  await switchAccount(accountA.user);await tile(accountA.page,0,'loot').waitFor({timeout:6000});
+  await accountA.page.waitForFunction(key=>localStorage.getItem(key)===null,pendingKey);
+  assert.equal((await prisma.guess36Entry.findUniqueOrThrow({where:{id:accountA.entry.id}})).mineVersion,1);
+  assert.equal(accountA.counts().documents,documents);
+  await accountA.context.close();ok('real account changes clear private game state, preserve old recovery and never replay an action');
+  if(accountOnly)return;
+
+  const corrupted=await member(null);
+  const original=await(await corrupted.context.request.get(base+'/api/guess-36/current')).json();
+  const startKey=`emiguild:guess36:${original.recoveryKey}:start`;
+  await corrupted.page.route('**/api/guess-36/reveal',route=>commitThenDrop(route,corrupted.context));
+  await corrupted.page.getByRole('button',{name:'Start free daily run',exact:true}).click();await tile(corrupted.page,0).click();
+  await corrupted.page.getByRole('button',{name:'Retry first tile',exact:true}).waitFor();
+  const saved=await corrupted.page.evaluate(key=>{const saved=localStorage.getItem(key);localStorage.setItem(key,'{');return saved;},startKey);
+  await corrupted.page.getByRole('button',{name:'Retry first tile',exact:true}).click();
+  await corrupted.page.getByText('Saved first reveal could not be read. Check result before continuing.',{exact:false}).waitFor();
+  await corrupted.page.evaluate(({key,value})=>localStorage.setItem(key,value),{key:startKey,value:saved});
+  await corrupted.page.getByRole('button',{name:'Check result',exact:true}).click();
+  await corrupted.page.getByRole('button',{name:/^Tile 1:/}).waitFor();
+  assert.equal(corrupted.counts().posts,1);assert.equal(await prisma.guess36Entry.count({where:{userId:corrupted.user.id}}),1);
+  await corrupted.context.close();ok('corrupted saved-start retry stays read-only and recovers without a runtime error or duplicate pick');
+
+  const forbidden=await member({revealed:[0]});
+  await forbidden.page.route('**/api/guess-36/current*',route=>route.fulfill({status:403,contentType:'application/json',json:{code:'FORBIDDEN',error:'Forbidden'}}));
+  await forbidden.page.getByRole('button',{name:'Refresh Guild Expedition',exact:true}).click();
+  await forbidden.page.getByRole('link',{name:'Sign in to play',exact:true}).waitFor();
+  assert.equal(await forbidden.page.getByRole('button',{name:/^Tile /}).count(),0);
+  await forbidden.context.close();ok('mocked forbidden refresh removes the private board instead of retaining stale account data');
+
+  const exhausted=await member({revealed:[5],status:'LOST'});
+  await exhausted.page.goto(base+'/vault');await exhausted.page.getByRole('heading',{name:'Your Vault',exact:true}).waitFor({timeout:30000});
+  const card=exhausted.page.locator('article[data-game="guess36"]').first();
+  await card.getByText('Used today',{exact:true}).waitFor();
+  await card.getByRole('link',{name:'Leave a review',exact:true}).waitFor();
+  await exhausted.context.route('https://g.page/**',route=>route.fulfill({body:'Review destination stub'}));
+  const popupReady=exhausted.context.waitForEvent('page');
+  await card.getByRole('link',{name:'Leave a review',exact:true}).click();await(await popupReady).close();
+  await card.getByRole('link',{name:'Play Expedition',exact:true}).waitFor();
+  assert.equal((await(await exhausted.context.request.get(base+'/api/guess-36/current')).json()).eligibility.bonuses.length,1);
+  await exhausted.context.close();ok('exhausted Vault Expedition exposes its review bonus and becomes playable after the grant');
+
+  const stalled=await member({revealed:[5],status:'LOST'});
+  await stalled.context.route('https://g.page/**',route=>route.fulfill({body:'Review destination stub'}));
+  let release,committed;const hold=new Promise(resolve=>release=resolve),ready=new Promise(resolve=>committed=resolve);
+  await stalled.page.route('**/api/guess-36/review-token',async route=>{
+    const actual=await stalled.context.request.post(route.request().url(),{data:route.request().postDataJSON(),headers:{origin:base}});
+    assert.equal(actual.status(),200);committed();await hold;await route.fulfill({response:actual}).catch(()=>{});
+  });
+  const popup=stalled.context.waitForEvent('page');await stalled.page.getByRole('link',{name:'Leave a review',exact:true}).click();await(await popup).close();await ready;
+  await stalled.page.getByRole('button',{name:'Check bonus',exact:true}).waitFor({timeout:25000});
+  release();await stalled.page.unroute('**/api/guess-36/review-token');
+  await stalled.page.getByRole('button',{name:'Check bonus',exact:true}).click();
+  await stalled.page.getByText('Today\u2019s review bonus claimed',{exact:true}).waitFor();
+  assert.equal(await prisma.rewardReceipt.count({where:{actorId:stalled.user.id,operation:'GUESS36_REVIEW'}}),1);
+  await stalled.context.close();ok('a timed-out review response recovers the single committed grant without a second bonus');
+
+  const leaving=await member({revealed:[5],status:'LOST'});
+  await leaving.context.route('https://g.page/**',route=>route.fulfill({body:'Review destination stub'}));
+  let finish,granted;const parked=new Promise(resolve=>finish=resolve),grantReady=new Promise(resolve=>granted=resolve);
+  await leaving.page.route('**/api/guess-36/review-token',async route=>{
+    const response=await leaving.context.request.post(route.request().url(),{data:route.request().postDataJSON(),headers:{origin:base}});
+    assert.equal(response.status(),200);granted();await parked;await route.fulfill({response}).catch(()=>{});
+  });
+  const opened=leaving.context.waitForEvent('page');await leaving.page.getByRole('link',{name:'Leave a review',exact:true}).click();await(await opened).close();await grantReady;
+  const beforeLeave=leaving.counts().documents;
+  const cancelled=leaving.page.waitForEvent('requestfailed',{predicate:request=>request.url().endsWith('/api/guess-36/review-token'),timeout:6000});
+  await leaving.page.getByRole('link',{name:'Back to Home',exact:true}).click();await cancelled;
+  assert.equal(leaving.counts().documents,beforeLeave,'client navigation must not reload the document');
+  finish();await leaving.page.unroute('**/api/guess-36/review-token');
+  await leaving.page.goto(base+'/guess-36');await leaving.page.getByText('Today\u2019s review bonus claimed',{exact:true}).waitFor({timeout:30000});
+  assert.equal(await prisma.rewardReceipt.count({where:{actorId:leaving.user.id,operation:'GUESS36_REVIEW'}}),1);
+  await leaving.context.close();ok('client navigation cancels review UI work while the committed bonus remains recoverable');
+}
 async function noReload(game,action) {
  const before=game.counts();
  await game.page.evaluate(()=>window.__expeditionRoot=document.querySelector('[aria-label="Guess 36 Guild Expedition"]'));
@@ -118,6 +219,10 @@ async function finishWithInfo(game,endpoint,action,result) {
   }
   browser=await chromium.launch({channel:'chrome',headless:true});
   const anonymous=await browser.newContext();const anon=await anonymous.newPage();anon.on('pageerror',e=>errors.push(e.message));await anon.goto(base+'/guess-36');await anon.getByRole('link',{name:'Sign in to play'}).waitFor({state:'visible'});assert.equal(await anon.getByRole('button',{name:/^Tile /}).count(),0);rules=await(await anonymous.request.get(base+'/api/guess-36/current')).json().then(s=>s.rules);await anonymous.close();ok('actual signed-out page hides board');
+  if(process.env.POST_MERGE_REVIEW_ONLY==='true') {
+   await reviewChecks(process.env.POST_MERGE_ACCOUNT_ONLY==='true');assert.deepEqual(errors,[]);
+   console.log(JSON.stringify({checks:checks.length,errors,output:dir,realAuthenticated:true,disposableDatabase:true}));return;
+  }
   if(process.env.REWARD_UPDATES_BROWSER_ONLY!=='true') {
   if(process.env.MINES_BROWSER_RECOVERY_ONLY!=='true') {
   for(let index=0;index<3;index++) {
@@ -314,6 +419,7 @@ async function finishWithInfo(game,endpoint,action,result) {
   assert.equal(await tile(recoveredLoss.page,1).isEnabled(),false);assert.equal(recoveredLoss.counts().posts,1);
   await recoveredLoss.page.getByRole('button',{name:/Play again.*bonus run/}).waitFor();
   await recoveredLoss.context.close();ok('mocked first-pick red recovery preserves the loss and requires explicit Play before the spare bonus');
+  await reviewChecks();
   assert.deepEqual(errors,[]);console.log(JSON.stringify({checks:checks.length,errors,output:dir,database:'disposable SQLite',realAuthenticated:true},null,2));
  }finally {
   await Promise.allSettled(traceSaves.map(save=>save()));if(browser)await browser.close();await prisma.$disconnect();
