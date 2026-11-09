@@ -12,7 +12,7 @@ import { PendingRewardError, submitRewardRequest } from '@/lib/reward-request-cl
 import styles from './HappyTickets.module.css';
 
 type TicketRecord = { id: string; status: string; expiresAt: string; redemptions: { bookingId: string }[] };
-type State = { pool: { available: number; capacity: number; version: number; banked?: { count: number; next: { id: string; expiresAt: string } | null; enabled: boolean }; enabled: boolean; noEligibleWindow: boolean; serverNow: string; lastRefill?: { id: string; createdAt: string } | null; rules: { days: number[]; startTime: string; endTime: string } }; wallet: { tickets: TicketRecord[]; nextClaimAt: string | null } | null };
+type State = { pool: { nextStockChangeAt?: string | null; available: number; capacity: number; version: number; banked?: { count: number; next: { id: string; expiresAt: string } | null; enabled: boolean }; enabled: boolean; noEligibleWindow: boolean; serverNow: string; lastRefill?: { id: string; createdAt: string } | null; rules: { days: number[]; startTime: string; endTime: string } }; wallet: { tickets: TicketRecord[]; nextClaimAt: string | null } | null };
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const expiryLabel = (value: string) => new Date(Date.parse(value) - 1).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
@@ -91,6 +91,13 @@ export function HappyTicketPanel() {
       window.removeEventListener('focus', onResume); document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [session?.user?.id, sessionStatus, refresh, cancelRead]);
+  useEffect(() => {
+    const at = state?.pool.nextStockChangeAt;
+    if (!at || hidden) return;
+    const delay = Date.parse(at) - Date.parse(state.pool.serverNow);
+    const timer = setTimeout(() => { void refresh(); }, Math.max(0, delay) + 30);
+    return () => clearTimeout(timer);
+  }, [state, hidden, refresh]);
   useEffect(() => {
     if (!state) return;
     const epoch = Date.parse(state.pool.serverNow); const anchor = performance.now();

@@ -36,7 +36,7 @@
   stroke: var(--color-accent-secondary);
   stroke-width: 1.5;
   opacity: 0;
-  animation: illuminate 800ms ease-out forwards;
+  animation: illuminate 500ms ease-out forwards;
 }
 
 .number {

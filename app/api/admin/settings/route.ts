@@ -1,3 +1,5 @@
+import { SPIN_SELECTION_KEY } from '@/lib/spin-selection';
+import { requireCurrentUser, requireOrigin, rewardFailure } from '@/lib/november';
 import { HAPPY_CONFIG_KEY } from '@/lib/happy-config';
 import { NOVEMBER_FLAGS } from '@/lib/november';
 import { MESSAGING_SETTING_KEYS, RETIRED_SPIN_SETTING_KEYS } from '@/lib/lifecycle/settings-keys';
@@ -9,8 +11,7 @@ import { PS5_RENTAL_STATUSES } from '@/lib/ps5-rental';
 import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
 
 const INTERNAL_SETTING_KEYS = new Set([
-  HAPPY_CONFIG_KEY,
-  ...NOVEMBER_FLAGS, 'legendary_pity_launched_at',
+  HAPPY_CONFIG_KEY, SPIN_SELECTION_KEY,
   ...NOVEMBER_FLAGS, 'legendary_pity_launched_at',
   ...MESSAGING_SETTING_KEYS, ...RETIRED_SPIN_SETTING_KEYS,
   'watch_party_economy_version',
@@ -20,6 +21,7 @@ const INTERNAL_SETTING_KEYS = new Set([
   'tower_run_duration_seconds',
   'tower_red_cards_per_floor',
   'guess_36_enabled',
+  'guess_36_mines_enabled',
   'guess_36_rewards',
   'guess_36_modes',
   'emic_rewards_catalog',
@@ -39,6 +41,7 @@ export async function GET() {
   if (!session || session.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  try { await requireCurrentUser(session.user.id, prisma, true); } catch (error) { return rewardFailure(error); }
   const settings = await prisma.setting.findMany({
     where: { OR: [{ key: { not: { startsWith: 'assistant_' } } }, { key: 'assistant_release_mode' }], key: { notIn: Array.from(INTERNAL_SETTING_KEYS) } },
     orderBy: { key: 'asc' },
@@ -53,6 +56,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  try { requireOrigin(req); await requireCurrentUser(session.user.id, prisma, true); } catch (error) { return rewardFailure(error); }
   const body = await req.json();
   const result = updateSchema.safeParse(body);
   if (!result.success) {

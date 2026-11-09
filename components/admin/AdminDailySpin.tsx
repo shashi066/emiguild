@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Gift, Save, Plus, Trash2, Edit, CheckCircle, AlertCircle, RefreshCw, History, X } from 'lucide-react';
 import { AdminModalShell } from '@/components/admin/AdminModalShell';
+import type { SpinSelection } from '@/lib/spin-selection';
 import { decryptNumber } from '@/lib/crypto';
 
 type LootItem = {
@@ -19,6 +20,7 @@ type SpinRecord = {
   id: string;
   spinDate: string;
   attempts: number;
+  guaranteeReason?: string | null;
   createdAt: string;
   user:     { name: string | null; email: string | null };
   lootItem: { name: string; rarity: string | null; description: string | null } | null;
@@ -63,6 +65,23 @@ export function AdminDailySpin() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
+  const [selection, setSelection] = useState<SpinSelection | null>(null);
+  const [selectionItem, setSelectionItem] = useState('');
+  const [selectionConfirm, setSelectionConfirm] = useState<boolean | null>(null);
+  const [selectionBusy, setSelectionBusy] = useState(false);
+  const selectionFlight = useRef(false);
+  const saveSelection = async () => {
+    if (!selection || selectionConfirm === null || selectionFlight.current) return;
+    selectionFlight.current = true; setSelectionBusy(true); setError('');
+    try {
+      const response = await fetch('/api/admin/daily-spin/selection', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: selectionConfirm, itemId: selectionItem || null, version: selection.version }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save selection.');
+      setSelection(data); setSelectionConfirm(null); setSuccess(data.enabled ? 'Selected reward is active. Guarantees take priority.' : 'Ordinary weighted rewards restored.');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save selection.'); }
+    finally { selectionFlight.current = false; setSelectionBusy(false); }
+  };
+
   // Spin history state
   const [history, setHistory] = useState<SpinRecord[]>([]);
   const [historyDate, setHistoryDate] = useState(getTodayIST());
@@ -91,10 +110,14 @@ export function AdminDailySpin() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [itemsRes, settingsRes] = await Promise.all([
+      const [itemsRes, settingsRes, selectionRes] = await Promise.all([
         fetch('/api/admin/daily-spin/items'),
-        fetch('/api/admin/settings')
+        fetch('/api/admin/settings'),
+        fetch('/api/admin/daily-spin/selection')
       ]);
+      if (![itemsRes, settingsRes, selectionRes].every(response => response.ok)) throw new Error('Failed to load data.');
+      const selected = await selectionRes.json();
+      setSelection(selected); setSelectionItem(selected.itemId ?? '');
       const itemsData = await itemsRes.json();
       const settingsData = await settingsRes.json();
       
@@ -158,7 +181,7 @@ export function AdminDailySpin() {
         body: JSON.stringify(itemDraft),
       });
       
-      if (!res.ok) throw new Error('Failed to save item');
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to save item');
       
       setSuccess('Item saved successfully!');
       setTimeout(() => setSuccess(''), 3000);
@@ -167,7 +190,7 @@ export function AdminDailySpin() {
       setItemError('');
       await loadData();
     } catch (err) {
-      setItemError('Error saving item.');
+      setItemError(err instanceof Error ? err.message : 'Error saving item.');
     } finally {
       savingItemRef.current = false;
       setSavingItem(false);
@@ -177,12 +200,13 @@ export function AdminDailySpin() {
   const handleDeleteItem = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
     try {
-      await fetch(`/api/admin/daily-spin/items/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/admin/daily-spin/items/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error((await response.json()).error || 'Could not delete item.');
       setSuccess('Item deleted.');
       setTimeout(() => setSuccess(''), 3000);
       loadData();
     } catch (err) {
-      setError('Error deleting item.');
+      setError(err instanceof Error ? err.message : 'Error deleting item.');
     }
   };
 
@@ -240,7 +264,7 @@ export function AdminDailySpin() {
         </div>
       )}
 
-      {loading ? (
+      {loading && !selection ? (
         <div className="loading-state"><div className="spinner" />Loading...</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)' }}>
@@ -282,6 +306,21 @@ export function AdminDailySpin() {
               </button>
             </div>
           </div>
+
+          <section className="card" aria-labelledby="spin-selection-title">
+            <h2 id="spin-selection-title" style={{ fontSize: '1.05rem', marginBottom: 12 }}>Selected reward <span className="badge">{selection?.enabled ? 'Active' : 'Off'}</span></h2>
+            <div style={{ display: 'flex', alignItems: 'end', flexWrap: 'wrap', gap: 12 }}>
+              <label className="form-label" style={{ flex: '1 1 200px', margin: 0 }}>Ordinary spin reward
+                <select className="form-input" value={selectionItem} disabled={selectionBusy} onChange={event => setSelectionItem(event.target.value)}>
+                  <option value="">Choose reward</option>
+                  {items.filter(item => item.enabled && item.weight > 0).map(item => <option key={item.id} value={item.id}>{item.name} - {item.rarity}</option>)}
+                </select>
+              </label>
+              <button type="button" className="btn btn-primary" disabled={!selection || !selectionItem || selectionBusy} onClick={() => setSelectionConfirm(true)}>{selection?.enabled ? 'Change selection' : 'Activate'}</button>
+              {selection?.enabled && <button type="button" className="btn btn-secondary" disabled={selectionBusy} onClick={() => setSelectionConfirm(false)}>Disable</button>}
+            </div>
+            <p className="page-subtitle" style={{ marginTop: 10 }}>Applies to all ordinary spins until disabled. Legendary and Epic guarantees take priority.</p>
+          </section>
 
           {/* Items Management */}
           <div className="card">
@@ -366,7 +405,7 @@ export function AdminDailySpin() {
                       <th style={{ padding: 'var(--space-sm)' }}>User</th>
                       <th style={{ padding: 'var(--space-sm)' }}>Reward Won</th>
                       <th style={{ padding: 'var(--space-sm)' }}>Rarity</th>
-                      <th style={{ padding: 'var(--space-sm)' }}>Attempts</th>
+                      <th style={{ padding: 'var(--space-sm)' }}>Source</th>
                       <th style={{ padding: 'var(--space-sm)' }}>Time (IST)</th>
                     </tr>
                   </thead>
@@ -392,7 +431,7 @@ export function AdminDailySpin() {
                             </span>
                           ) : '—'}
                         </td>
-                        <td style={{ padding: 'var(--space-sm)' }}>{spin.attempts}</td>
+                        <td style={{ padding: 'var(--space-sm)' }}>{spin.guaranteeReason === 'ADMIN_SELECTED' ? 'Selected reward' : spin.guaranteeReason === 'EPIC' ? 'Epic guarantee' : spin.guaranteeReason === 'LEGENDARY' ? 'Legendary guarantee' : 'Ordinary spin'}</td>
                         <td style={{ padding: 'var(--space-sm)', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
                           {new Date(spin.createdAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
                         </td>
@@ -410,6 +449,14 @@ export function AdminDailySpin() {
         </div>
       )}
 
+      {selectionConfirm !== null && <AdminModalShell labelledBy="spin-selection-confirm" onClose={() => { if (!selectionBusy) setSelectionConfirm(null); }}>
+        <h2 id="spin-selection-confirm">{selectionConfirm ? 'Activate selected reward?' : 'Restore ordinary rewards?'}</h2>
+        <p>{selectionConfirm ? `${items.find(item => item.id === selectionItem)?.name ?? 'This reward'} will be used for ordinary spins. Guarantees still take priority.` : 'Ordinary spins will use the configured weights.'}</p>
+        <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+          <button type="button" className="btn btn-secondary" disabled={selectionBusy} onClick={() => setSelectionConfirm(null)}>Back</button>
+          <button type="button" className="btn btn-primary" disabled={selectionBusy} onClick={() => void saveSelection()}>{selectionBusy ? 'Saving...' : 'Confirm'}</button>
+        </div>
+      </AdminModalShell>}
       {itemModal && (
         <AdminModalShell onClose={closeItemModal} labelledBy="daily-spin-item-modal-title">
           <div className="daily-spin-item-modal-header">

@@ -21,6 +21,8 @@ export type GameProgress = {
   id: GameId;
   title: string;
   facts?: {
+    expedition?: import('../guess-36-bonuses').ExpeditionEligibility & { enabled: boolean; recoveryKey: string | null };
+    featuredReward?: { id: string; name: string } | null;
     guessPicks?: { today: string | null; yesterday: string | null; result: number | null };
     review?: { claimed: boolean; nextResetAt: string; serverNow: string };
     tokenCount?: number;

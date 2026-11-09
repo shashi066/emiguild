@@ -1,11 +1,9 @@
 import { prisma } from '@/lib/prisma';
 import { detectCompleteSet, getForgeAvailability } from '@/lib/armory';
 import { getSpinState } from '@/lib/daily-spin';
-import { getGuess36Current } from '@/lib/guess-36';
-import { guess36SelectionLabel } from '@/lib/guess-36-rules';
-import { GUESS_36_COMING_SOON_COPY, GUESS_36_COMING_SOON_TITLE } from '@/lib/guess-36-announcement';
+import { getMineState } from '@/lib/guess-36-mines';
 import { getTowerProgressSnapshot } from '@/lib/tower';
-import { GameId, GameProgress, VaultItem } from './rules';
+import { GameId, GameProgress, VaultItem, formatEndOfDay } from './rules';
 
 export type GameResult = { game: GameProgress; items: VaultItem[] };
 export const GAME_LINKS: Record<GameId, { title: string; href: string }> = {
@@ -19,27 +17,19 @@ function game(id: GameId, data: Partial<GameProgress>): GameProgress {
   return { id, ...GAME_LINKS[id], status: 'empty', summary: 'No current activity', details: [], action: 'View game', ...data };
 }
 export async function guess36Progress(userId: string, now: Date): Promise<GameResult> {
-  const state = await getGuess36Current({ id: userId, role: 'USER' }, now, { readOnly: true });
-  const { today, previous } = state;
-  const details = state.enabled ? [] : [
-    GUESS_36_COMING_SOON_COPY,
-    'Existing picks will still settle. Your results and rewards remain available.',
-  ];
-  if (today.entry) details.push(`Today’s pick: ${guess36SelectionLabel(today.entry.selection)}. Awaiting the draw.`);
-  if (previous.status === 'DRAWN') {
-    details.push(`Previous result (${previous.date}): ${previous.winningNumber}. ${previous.outcome === 'WIN' ? 'Your pick won.' : previous.outcome === 'LOSS' ? 'Your pick did not match.' : 'You did not enter.'}`);
-    if (previous.reward) details.push(`Earned: ${previous.reward.name}.`);
-  } else if (state.enabled || previous.myPick) details.push(`The result for ${previous.date} is being finalized.`);
+  const state = await getMineState(userId, now);
+  const run = state.run;
+  const active = run?.status === 'ACTIVE';
+  const eligibility = state.eligibility;
+  const available = state.enabled && (eligibility.freeAvailable || eligibility.bonuses.length > 0);
+  const nextBonus = eligibility.bonuses[0];
   return { items: [], game: game('guess36', {
-    status: !state.enabled ? 'disabled' : today.entry ? 'active' : today.status === 'OPEN' ? 'available' : 'completed',
-    summary: !state.enabled ? GUESS_36_COMING_SOON_TITLE : today.entry ? 'Today’s pick confirmed' : today.status === 'OPEN' ? 'Choose today’s pick' : 'Today’s entries are closed',
-    details,
-    facts: { guessPicks: { today: today.entry ? guess36SelectionLabel(today.entry.selection) : null,
-      yesterday: previous.myPick ? guess36SelectionLabel(previous.myPick) : null,
-      result: previous.winningNumber } },
-    deadline: !state.enabled ? undefined : Date.parse(today.entryClosesAt) > now.getTime() && today.status === 'OPEN'
-      ? { at: today.entryClosesAt, label: 'Entries close' } : { at: today.nextRoundAt, label: 'Next round' },
-    action: state.enabled ? 'Open Guess 36' : 'View updates & rewards',
+    status: active ? 'active' : available ? 'available' : run || state.legacyUsedToday ? 'completed' : 'disabled',
+    summary: active ? `${run.greens}/5 rewards found` : available ? 'Your Guild Expedition is ready' : run?.reward ? `${run.reward.name} secured` : state.enabled ? 'No runs available' : 'New runs are paused',
+    details: [eligibility.freeAvailable ? '1 free daily run available.' : 'Free daily run used.', `${eligibility.bonuses.length} bonus run${eligibility.bonuses.length === 1 ? '' : 's'} available.${nextBonus ? ` Next expires ${formatEndOfDay(nextBonus.expiresAt)} IST.` : ''}`, 'Collect before red. Redeem rewards by the end of the following IST day.'],
+    facts: { dailyAvailable: state.enabled && eligibility.freeAvailable, usedToday: !available && !active, expedition: { ...eligibility, enabled: state.enabled, recoveryKey: state.recoveryKey } },
+    deadline: { at: active ? run.expiresAt : nextBonus?.expiresAt ?? state.nextDayAt, label: active ? 'Run ends' : nextBonus ? 'Next bonus expires' : 'Daily reset' },
+    action: active ? 'Resume Expedition' : available ? 'Play Expedition' : 'Open Guess 36',
   }) };
 }
 
@@ -59,7 +49,7 @@ export async function spinProgress(userId: string, now: Date): Promise<GameResul
   return { items: available ? [item] : [], game: game('spin', {
     status: !state.settings.enabled ? 'disabled' : state.spin ? 'completed' : available ? 'available' : 'empty',
     summary, details, action: 'Open Guild Spin',
-    facts: { dailyAvailable: available, usedToday: !!state.spin, rewardName: state.spin?.lootItem?.name, legendary: state.legendary,
+    facts: { dailyAvailable: available, usedToday: !!state.spin, rewardName: state.spin?.lootItem?.name, legendary: state.legendary, featuredReward: state.featuredReward,
       goals: state.settings.enabled && state.items.some((item) => item.weight > 0 && (item.rarity ?? '').toUpperCase() === rarity)
         ? [state.legendary.enabled
           ? { id: 'spin-legendary', title: 'Legendary spin reward', current: state.legendary.current, total: 30, reward: 'A Legendary reward on the guarantee spin' }

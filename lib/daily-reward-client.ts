@@ -146,6 +146,7 @@ export function animateDailySpin<T extends { reward: { id: string } }>(
     const abort = () => { done = true; stop(); reject(new Error('Animation closed')); };
     const tick = () => {
       if (done) return;
+      steps++;
       if (result && (reducedMotion || steps >= 28)) {
         const winner = items.findIndex(item => item.id === result!.reward.id);
         highlight(winner < 0 ? null : winner);
@@ -153,13 +154,12 @@ export function animateDailySpin<T extends { reward: { id: string } }>(
         return;
       }
       if (!reducedMotion && items.length) highlight(Math.floor(Math.random() * items.length));
-      steps++;
       timer = setTimeout(tick, reducedMotion ? 100 : steps < 20 ? 60 : Math.min(760, 120 + (steps - 20) * 80));
     };
     operation.then(value => { result = value; }, error => { if (!done) { done = true; stop(); reject(error); } });
     if (signal.aborted) { abort(); return; }
     signal.addEventListener('abort', abort, { once: true });
-    tick();
+    timer = setTimeout(tick, reducedMotion ? 0 : 60);
   });
 }
 

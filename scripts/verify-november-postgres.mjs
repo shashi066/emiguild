@@ -6,21 +6,26 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import net from 'node:net';
 
 if (!process.env.NOVEMBER_PG_MODULE) throw new Error('Set NOVEMBER_PG_MODULE to the disposable embedded-postgres module.');
 const { default: EmbeddedPostgres } = await import(pathToFileURL(process.env.NOVEMBER_PG_MODULE).href);
 const dir = mkdtempSync(path.join(tmpdir(), 'emiguild-november-pg-'));
 const password = randomBytes(18).toString('hex');
-const port = 55439;
+const port = await new Promise((resolve, reject) => {
+  const probe = net.createServer();
+  probe.once('error', reject);
+  probe.listen(0, '127.0.0.1', () => { const port = probe.address().port; probe.close(() => resolve(port)); });
+});
 const database = `emiguild_november_${randomBytes(5).toString('hex')}`;
 const pg = new EmbeddedPostgres({ databaseDir: path.join(dir, 'data'), user: 'postgres', password, port, persistent: true,
   postgresFlags: ['-h', '127.0.0.1'], onLog: () => {}, onError: message => { if (String(message).includes('FATAL')) console.error('PostgreSQL startup failure'); } });
 const url = `postgresql://postgres:${password}@127.0.0.1:${port}/${database}`;
 const env = { ...process.env, DATABASE_URL: url, DIRECT_URL: url, NOVEMBER_TEST_DATABASE_URL: url };
 const node = (file, args, options = {}) => execFileSync(process.execPath, [file, ...args], { cwd: process.cwd(), env, stdio: 'inherit', windowsHide: true, ...options });
-let client;
+let client, serverStarted = false;
 try {
-  await pg.initialise(); await pg.start(); await pg.createDatabase(database);
+  await pg.initialise(); await pg.start(); serverStarted = true; await pg.createDatabase(database);
   client = pg.getPgClient(database); await client.connect();
   const baseline = path.join(dir, 'before.prisma');
   writeFileSync(baseline, execFileSync('git', ['show', '4f71e06:prisma/schema.production.prisma'], { encoding: 'utf8', windowsHide: true }));
@@ -39,6 +44,8 @@ try {
   await client.query(readFileSync('prisma/migrations/20261029000000_personal_happy_tickets/migration.sql', 'utf8'));
   await client.query(`INSERT INTO happy_pool(id,version,config,"updatedAt") VALUES ('main',7,'{"stationIds":["baseline-station"],"days":[1,2],"startTime":"16:00","endTime":"23:00"}',NOW())`);
   await client.query(readFileSync('prisma/migrations/20261029010000_happy_settings/migration.sql', 'utf8'));
+  await client.query(readFileSync('prisma/migrations/20261106000000_guess36_mines/migration.sql', 'utf8'));
+  await client.query(readFileSync('prisma/migrations/20261109000000_reward_updates/migration.sql', 'utf8'));
   const settings = JSON.parse((await client.query("SELECT value FROM settings WHERE key='happy_ticket_config'")).rows[0].value);
   if (settings.version !== 7 || settings.config.stationIds[0] !== 'baseline-station') throw new Error('Configuration preservation failed.');
   const personal = (await client.query(`SELECT "happyAvailable", to_char("happyLastClaimedAt", 'YYYY-MM-DD HH24:MI:SS') AS cooldown FROM users WHERE id='baseline-user'`)).rows[0];
@@ -58,6 +65,16 @@ try {
   console.log('Disposable PostgreSQL verification passed.');
 } finally {
   if (client) await client.end().catch(() => {});
-  await pg.stop().catch(() => {});
+  if (serverStarted) {
+    const child = pg.process;
+    let stopTimer;
+    await Promise.race([pg.stop().catch(() => {}), new Promise(resolve => { stopTimer = setTimeout(resolve, 3000); })]);
+    clearTimeout(stopTimer);
+    if (process.platform === 'win32') {
+      const ctl = path.resolve(path.dirname(process.env.NOVEMBER_PG_MODULE), '../../@embedded-postgres/windows-x64/native/bin/pg_ctl.exe');
+      try { execFileSync(ctl, ['-D', path.join(dir, 'data'), '-m', 'fast', '-w', 'stop'], { stdio: 'ignore', windowsHide: true, timeout: 15000 }); } catch { /* Already stopped. */ }
+    }
+    child?.stdin?.destroy(); child?.stdout?.destroy(); child?.stderr?.destroy(); child?.unref();
+  }
   node('node_modules/prisma/build/index.js', ['generate', '--schema=prisma/schema.prisma'], { env: { ...process.env, DATABASE_URL: 'file:./november-test.db' } });
 }

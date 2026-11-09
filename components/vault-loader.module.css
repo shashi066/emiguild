@@ -17,23 +17,23 @@
 .panel { fill: none; stroke: #304658; }
 .seam { fill: none; stroke: #406278; }
 .rivet { fill: #7595a6; stroke: none; }
-.lights { fill: none; stroke: var(--color-accent-secondary); stroke-width: 3; opacity: .15; animation: power 2s ease-out forwards; }
-.lock { transform-origin: 160px 150px; animation: unlock 1.4s 2s ease-in-out forwards; }
+.lights { fill: none; stroke: var(--color-accent-secondary); stroke-width: 3; opacity: .15; animation: power 1.25s ease-out forwards; }
+.lock { transform-origin: 160px 150px; animation: unlock .875s 1.25s ease-in-out forwards; }
 .lockRing { fill: none; stroke: var(--color-accent-secondary); }
 .bolt { stroke: #a6d5e0; stroke-width: 5; }
-.leftBolts { animation: retractLeft .6s 3.4s ease-in-out forwards; }
-.rightBolts { animation: retractRight .6s 3.4s ease-in-out forwards; }
-.leftDoor { animation: openLeft 2s 4s cubic-bezier(.65,0,.35,1) forwards; }
-.rightDoor { animation: openRight 2s 4s cubic-bezier(.65,0,.35,1) forwards; }
-.loot { opacity: 0; animation: reveal 2s 6s ease-out forwards; }
+.leftBolts { animation: retractLeft .375s 2.125s ease-in-out forwards; }
+.rightBolts { animation: retractRight .375s 2.125s ease-in-out forwards; }
+.leftDoor { animation: openLeft 1.25s 2.5s cubic-bezier(.65,0,.35,1) forwards; }
+.rightDoor { animation: openRight 1.25s 2.5s cubic-bezier(.65,0,.35,1) forwards; }
+.loot { opacity: 0; animation: reveal 1.25s 3.75s ease-out forwards; }
 .icons { fill: none; stroke: var(--color-accent-secondary); }
 .inventoryLines { fill: none; stroke: #163342; }
 .caption { text-align: center; }
 .title { font-family: Orbitron, sans-serif; font-size: 1rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
 .status { position: relative; margin-top: 12px; width: 260px; max-width: 100%; height: 24px; color: var(--color-text-secondary); font-size: .85rem; }
 .stage, .waiting { position: absolute; inset: 0; opacity: 0; }
-.stage { animation: statusStage 2s linear; }
-.waiting { animation: showWaiting 1ms 8s forwards; }
+.stage { animation: statusStage 1.25s linear; }
+.waiting { animation: showWaiting 1ms 5s forwards; }
 @keyframes power { to { opacity: 1; } }
 @keyframes unlock { to { transform: rotate(90deg); } }
 @keyframes retractLeft { to { transform: translateX(-12px); } }

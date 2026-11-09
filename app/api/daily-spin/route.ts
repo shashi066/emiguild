@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const state = await getSpinState(session.user.id);
     return lifecycleJson({ enabled: state.settings.enabled, canSpin: state.canSpin,
-      spinDate: state.spinDate, spin: state.spin, streak: state.streak, legendary: state.legendary,
+      spinDate: state.spinDate, spin: state.spin, streak: state.streak, legendary: state.legendary, featuredReward: state.featuredReward,
       remainingRetries: 0, nextReset: state.nextReset.toISOString(),
       lootItems: state.items.map(item => ({ ...item, weight: encryptNumber(item.weight) })) });
   } catch (error) { return rewardFailure(error); }

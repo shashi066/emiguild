@@ -1,3 +1,4 @@
+import { requireCurrentUser, requireOrigin, rewardFailure, RewardError } from '@/lib/november';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/auth';
@@ -17,19 +18,25 @@ function forbidden() {
 export async function GET() {
   const session = await auth();
   if (session?.user?.role !== 'ADMIN') return forbidden();
-  const config = await getGuess36Config();
-  return NextResponse.json(config, { headers: { 'Cache-Control': 'no-store' } });
+  try {
+    await requireCurrentUser(session.user.id, undefined, true);
+    const config = await getGuess36Config();
+    return NextResponse.json(config, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) { return rewardFailure(error); }
 }
 
 export async function PUT(req: NextRequest) {
   const session = await auth();
   if (session?.user?.role !== 'ADMIN') return forbidden();
   try {
+    await requireCurrentUser(session.user.id, undefined, true);
+    requireOrigin(req);
     const parsed = configSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: 'Choose availability, pick types, or configure all three rewards.' }, { status: 400 });
     const config = await updateGuess36Config(parsed.data);
     return NextResponse.json(config, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
+    if (error instanceof RewardError) return rewardFailure(error);
     const friendly = friendlyGuess36Error(error);
     return NextResponse.json({ error: friendly.error }, { status: friendly.status });
   }

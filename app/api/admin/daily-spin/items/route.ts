@@ -1,61 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { prisma } from '@/lib/prisma';
 import { encryptNumber } from '@/lib/crypto';
-
-// GET /api/admin/daily-spin/items
+import { lifecycleJson } from '@/lib/lifecycle/http';
+import { requireCurrentUser, requireOrigin, rewardFailure } from '@/lib/november';
+import { mutateSpinItem } from '@/lib/spin-selection';
 export async function GET() {
-  const session = await auth();
-  if (!session || session.user.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  try {
-    const items = await prisma.lootItem.findMany({
-      orderBy: { weight: 'desc' },
-    });
-    const encryptedItems = items.map((item) => ({
-      ...item,
-      weight: encryptNumber(item.weight),
-    }));
-    return NextResponse.json({ items: encryptedItems });
-  } catch (error) {
-    console.error('Error fetching loot items:', error);
-    return NextResponse.json({ error: 'Failed to fetch items' }, { status: 500 });
-  }
+ const session = await auth();
+ if (!session?.user?.id) return lifecycleJson({ error: 'Forbidden' }, 403);
+ try {
+  await requireCurrentUser(session.user.id, prisma, true);
+  const items = await prisma.lootItem.findMany({ orderBy: { weight: 'desc' } });
+  return lifecycleJson({ items: items.map(item => ({ ...item, weight: encryptNumber(item.weight) })) });
+ } catch (error) { return rewardFailure(error); }
 }
-
-// POST /api/admin/daily-spin/items
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session || session.user.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  try {
-    const body = await req.json();
-    const { name, description, iconUrl, weight, enabled, rarity } = body;
-
-    if (!name || weight === undefined) {
-      return NextResponse.json({ error: 'Name and weight are required' }, { status: 400 });
-    }
-
-    const item = await prisma.lootItem.create({
-      data: {
-        name,
-        description: description || null,
-        iconUrl: iconUrl || null,
-        weight: Number(weight),
-        enabled: enabled ?? true,
-        rarity: rarity || 'COMMON',
-      },
-    });
-
-    return NextResponse.json({
-      item: { ...item, weight: encryptNumber(item.weight) },
-    }, { status: 201 });
-  } catch (error) {
-    console.error('Error creating loot item:', error);
-    return NextResponse.json({ error: 'Failed to create item' }, { status: 500 });
-  }
+export async function POST(request: Request) {
+ const session = await auth();
+ if (!session?.user?.id) return lifecycleJson({ error: 'Forbidden' }, 403);
+ try { requireOrigin(request); const item = await mutateSpinItem(session.user.id, null, await request.json()); return lifecycleJson({ item: { ...item, weight: encryptNumber(item.weight) } }, 201); }
+ catch (error) { return rewardFailure(error); }
 }

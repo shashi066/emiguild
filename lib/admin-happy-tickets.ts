@@ -1,3 +1,4 @@
+import { happyBalance, happyBalanceSelect } from "./happy-balance";
 import { z } from "zod";
 import { prisma } from "./prisma";
 import { readHappySettings } from "./happy-config";
@@ -34,7 +35,7 @@ export async function getAdminHappyTicketsReport(
         select: { id: true, name: true },
       }),
       prisma.user.count(),
-      prisma.user.aggregate({ _sum: { happyAvailable: true } }),
+      prisma.user.findMany({ select: happyBalanceSelect }),
       prisma.guildReset.count({ where: { ...pending, userId: { not: null } } }),
       prisma.happyTicket.count(),
       prisma.happyTicket.count({ where: { status: "REDEEMED" } }),
@@ -55,7 +56,7 @@ export async function getAdminHappyTicketsReport(
     stations,
     counts: {
       accounts,
-      available: balance._sum.happyAvailable ?? 0,
+      available: balance.reduce((sum, user) => sum + happyBalance(user, now).available, 0),
       banked,
       issued,
       redeemed,
@@ -102,8 +103,7 @@ export async function getAdminHappyTicketsReport(
         id: true,
         name: true,
         email: true,
-        happyAvailable: true,
-        happyLastClaimedAt: true,
+        ...happyBalanceSelect,
         _count: { select: { happyResets: { where: pending } } },
       },
     });
@@ -111,7 +111,8 @@ export async function getAdminHappyTicketsReport(
     result.members = rows
       .slice(0, 20)
       .map((row) => ({
-        ...row,
+        id: row.id, name: row.name, email: row.email, _count: row._count,
+        happyAvailable: happyBalance(row, now).available,
         happyLastClaimedAt: row.happyLastClaimedAt?.toISOString() ?? null,
       }));
     if (userId) {
@@ -121,8 +122,7 @@ export async function getAdminHappyTicketsReport(
           id: true,
           name: true,
           email: true,
-          happyAvailable: true,
-          happyLastClaimedAt: true,
+          ...happyBalanceSelect,
         },
       });
       if (!user) throw new RewardError("NOT_FOUND", "Member not found.", 404);
@@ -140,7 +140,7 @@ export async function getAdminHappyTicketsReport(
       });
       result.member = {
         user: { id: user.id, name: user.name, email: user.email },
-        available: user.happyAvailable,
+        available: happyBalance(user, now).available,
         nextClaimAt: user.happyLastClaimedAt
           ? new Date(
               user.happyLastClaimedAt.getTime() + HAPPY_COOLDOWN_MS,

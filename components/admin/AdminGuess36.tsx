@@ -21,6 +21,7 @@ import { DEFAULT_GUESS_36_MODES, DEFAULT_GUESS_36_REWARDS, GUESS_36_TIERS, guess
 import type { Guess36AdminData, Guess36AdminItem, Guess36Config, Guess36Mode, Guess36Reward, Guess36Rewards, Guess36Tier } from '@/lib/guess-36-types';
 
 type Props = {
+  legacyOnly?: boolean;
   initialConfig?: Guess36Config;
   initialData?: Guess36AdminData;
   initialError?: string;
@@ -66,7 +67,7 @@ async function responseJson(response: Response) {
   return data;
 }
 
-export function AdminGuess36({ initialConfig, initialData, initialError }: Props) {
+export function AdminGuess36({ initialConfig, initialData, initialError, legacyOnly = false }: Props) {
   const [config, setConfig] = useState<Guess36Config>(initialConfig ?? {
     enabled: false, enabledModes: DEFAULT_GUESS_36_MODES, rewards: DEFAULT_GUESS_36_REWARDS, todayRewards: DEFAULT_GUESS_36_REWARDS, effectiveFrom: '',
   });
@@ -187,20 +188,21 @@ export function AdminGuess36({ initialConfig, initialData, initialError }: Props
 
   return (
     <div className="guess-36-admin">
-      <header className="guess-36-admin-heading">
+      {!legacyOnly && <header className="guess-36-admin-heading">
         <div>
           <span>Daily Side Quest</span>
           <h1>Guess 36</h1>
           <p>Manage daily picks, tier rewards, and counter tickets.</p>
         </div>
         <Target size={34} aria-hidden="true" />
-      </header>
+      </header>}
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {success && <div className="alert alert-success" role="status">{success}</div>}
 
       {data ? (
         <>
+          {!legacyOnly && <>
           <section className="guess-36-admin-stats" aria-label="Guess 36 overview">
             <article><Users size={18} /><span>Today</span><strong>{data.summary.today.participants}</strong><small>participants</small></article>
             <article><Clock3 size={18} /><span>Status</span><strong className="word">{data.summary.today.status}</strong><small>{data.summary.today.date}</small></article>
@@ -231,6 +233,7 @@ export function AdminGuess36({ initialConfig, initialData, initialError }: Props
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => { setModalError(''); setModesDraft(config.enabledModes); setModesOpen(true); }}><Edit3 size={15} /> Edit Types</button>
           </section>
 
+          </>}
           {data.summary.previous.status === 'PENDING' && (
             <section className="guess-36-draw-reminder">
               <div><Target size={20} /><span><strong>{data.summary.previous.date} needs a result</strong><small>Use this only if the automatic midnight draw was missed.</small></span></div>

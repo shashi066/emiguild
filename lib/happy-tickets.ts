@@ -1,3 +1,5 @@
+import { getNextIstMidnight } from './guess-36-clock';
+import { happyBalance, happyBalanceSelect } from './happy-balance';
 import { readHappySettings, writeHappySettings } from './happy-config';
 import { prisma } from './prisma';
 import { HAPPY_COOLDOWN_MS, happyConfigSchema, happyExpiry, readHappyConfig, hasHappyWindow, happyBookingProblem, type HappyConfig } from './happy-ticket-rules';
@@ -8,13 +10,14 @@ export async function happyPoolState(userId?: string, now = new Date()) {
   const [pool, flags, account, bankedCount, nextReset] = await Promise.all([
     readHappySettings(),
     getFeatureFlags(['happy_tickets_enabled', 'guild_resets_enabled']),
-    userId ? prisma.user.findUnique({ where: { id: userId }, select: { happyAvailable: true, happyVersion: true, happyLastRefillId: true, happyLastRefillAt: true } }) : Promise.resolve(null),
+    userId ? prisma.user.findUnique({ where: { id: userId }, select: { ...happyBalanceSelect, happyLastRefillId: true, happyLastRefillAt: true } }) : Promise.resolve(null),
     userId ? prisma.guildReset.count({ where: { ...owner, kind: 'BANKED', status: 'PENDING', expiresAt: { gt: now } } }) : Promise.resolve(0),
     userId ? prisma.guildReset.findFirst({ where: { ...owner, kind: 'BANKED', status: 'PENDING', expiresAt: { gt: now } }, orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }], select: { id: true, expiresAt: true } }) : Promise.resolve(null),
   ]);
   if (userId && !account) throw new RewardError('FORBIDDEN', 'Forbidden', 403);
   const rules = pool.config;
-  return { available: account?.happyAvailable ?? 0, capacity: 5, version: account?.happyVersion ?? 0,
+  const balance = account ? happyBalance(account, now) : null;
+  return { available: balance?.available ?? 0, capacity: 5, version: balance?.version ?? 0, nextStockChangeAt: account ? getNextIstMidnight(now).toISOString() : null,
     banked: { count: bankedCount, next: nextReset, enabled: flags.guild_resets_enabled },
     lastRefill: account?.happyLastRefillId && account.happyLastRefillAt ? { id: account.happyLastRefillId, createdAt: account.happyLastRefillAt } : null,
     enabled: flags.happy_tickets_enabled && rules.stationIds.length > 0, rules, noEligibleWindow: !hasHappyWindow(rules, now), serverNow: now.toISOString() };
@@ -49,12 +52,14 @@ export async function claimHappyTicket(userId: string, requestId: string, now = 
     if (!await featureEnabled('happy_tickets_enabled', tx)) throw new RewardError('CLAIMS_PAUSED', 'Happy Ticket claims are paused.', 403);
     const { config: rules } = await readHappySettings(tx);
     if (!rules.stationIds.length) throw new RewardError('NOT_CONFIGURED', 'Happy Tickets will be available after station setup.', 409);
-    const account = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { happyLastClaimedAt: true, happyAvailable: true, happyVersion: true } });
+    const account = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: happyBalanceSelect });
     if (account.happyLastClaimedAt && now.getTime() < account.happyLastClaimedAt.getTime() + HAPPY_COOLDOWN_MS) throw new RewardError('CLAIM_COOLDOWN', 'Wait 24 hours between claims.', 409);
-    const updated = await tx.user.updateMany({ where: { id: userId, happyVersion: account.happyVersion, happyAvailable: { gt: 0 } }, data: { happyAvailable: { decrement: 1 }, happyVersion: { increment: 1 }, happyLastClaimedAt: now } });
+    const balance = happyBalance(account, now);
+    if (!balance.available) throw new RewardError('POOL_EMPTY', 'You have no tickets left. Use one of your banked resets.', 409);
+    const updated = await tx.user.updateMany({ where: { id: userId, happyVersion: account.happyVersion }, data: { happyAvailable: balance.available - 1, happyBalanceDay: balance.day, happyVersion: balance.version + 1, happyLastClaimedAt: now } });
     if (!updated.count) throw new RewardError('POOL_EMPTY', 'You have no tickets left. Use one of your banked resets.', 409);
     const ticket = await tx.happyTicket.create({ data: { userId, rulesSnapshot: JSON.stringify(rules), claimedAt: now, expiresAt: happyExpiry(now) } });
-    const result = { ticket, available: account.happyAvailable - 1, version: account.happyVersion + 1, nextClaimAt: new Date(now.getTime() + HAPPY_COOLDOWN_MS).toISOString() };
+    const result = { ticket, available: balance.available - 1, version: balance.version + 1, nextClaimAt: new Date(now.getTime() + HAPPY_COOLDOWN_MS).toISOString() };
     await saveReceipt(tx, userId, 'HAPPY_CLAIM', requestId, {}, result);
     return result;
   });

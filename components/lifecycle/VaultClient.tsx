@@ -37,12 +37,11 @@ export function VaultClient() {
     const requests = requestId.current;
     setState(null);
     void refresh(false);
-    const onReturn = () => { if (document.visibilityState === 'visible') void refresh(false); };
+    const onReturn = () => { if (document.visibilityState === 'visible') void refresh(true); };
     window.addEventListener('focus', onReturn);
     window.addEventListener('pageshow', onReturn);
     document.addEventListener('visibilitychange', onReturn);
-    const timer = window.setInterval(onReturn, 60_000);
-    return () => { requests.value++; window.clearInterval(timer); window.removeEventListener('focus', onReturn); window.removeEventListener('pageshow', onReturn); document.removeEventListener('visibilitychange', onReturn); };
+    return () => { requests.value++; window.removeEventListener('focus', onReturn); window.removeEventListener('pageshow', onReturn); document.removeEventListener('visibilitychange', onReturn); };
   }, [refresh]);
   useEffect(() => {
     if (!state) return;
@@ -50,6 +49,7 @@ export function VaultClient() {
       ...state.items.map((item) => Date.parse(item.validUntil)),
       ...state.games.flatMap((game) => [
         ...(game.facts?.review ? [Date.parse(game.facts.review.nextResetAt)] : []),
+        ...(game.facts?.expedition ? [Date.parse(game.facts.expedition.review.nextResetAt), ...game.facts.expedition.bonuses.map(bonus => Date.parse(bonus.expiresAt))] : []),
         ...(game.deadline ? [Date.parse(game.deadline.at)] : []),
         ...(game.facts?.tokenExpiries ?? []).map(Date.parse),
         ...(game.facts?.events ?? []).flatMap((event) => event.at ? [Date.parse(event.at)] : []),

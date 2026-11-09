@@ -13,10 +13,12 @@ export function selectVaultAction(games: GameProgress[], now: Date) {
   const claim = eligible.find((game) => game.id === 'tower' && game.facts?.canClaim)
     ?? eligible.find((game) => game.id === 'artifacts' && game.facts?.canClaim);
   if (claim) return { game: claim, label: claim.id === 'tower' ? 'Claim secured reward' : 'Exchange completed set' };
+  const expedition = eligible.find(game => game.id === 'guess36' && game.status === 'active');
+  if (expedition) return { game: expedition, label: 'Resume Expedition' };
   const order = ['guess36', 'spin', 'artifacts'];
   const daily = eligible.filter((game) => order.includes(game.id) && (game.id === 'guess36' ? game.status === 'available' : game.facts?.dailyAvailable))
     .sort((a, b) => (a.deadline ? Date.parse(a.deadline.at) : Infinity) - (b.deadline ? Date.parse(b.deadline.at) : Infinity) || order.indexOf(a.id) - order.indexOf(b.id))[0];
-  if (daily) return { game: daily, label: daily.id === 'guess36' ? 'Make today’s guess' : daily.id === 'spin' ? 'Take your daily spin' : 'Forge today’s artifact' };
+  if (daily) return { game: daily, label: daily.id === 'guess36' ? 'Play Expedition' : daily.id === 'spin' ? 'Take your daily spin' : 'Forge today’s artifact' };
   const tower = eligible.find((game) => game.id === 'tower' && (game.status === 'active' || (game.facts?.tokenExpiries ?? []).some((at) => Date.parse(at) > now.getTime())));
   return tower ? { game: tower, label: tower.status === 'active' ? 'Continue Tower' : 'Start Tower' } : null;
 }

@@ -18,6 +18,7 @@ type LootItem = {
 };
 
 type SpinStatus = {
+  featuredReward?: { id: string; name: string } | null;
   enabled: boolean;
   canSpin: boolean;
   spin: any;
@@ -201,6 +202,7 @@ export function DailySpinWidget() {
             ? 'Daily spin available — one spin each day.'
             : 'Today’s spin used. Come back after the daily reset.'}
         </p>
+        {spinStatus?.featuredReward && <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', marginBlock: 8 }}>Featured ordinary reward: {spinStatus.featuredReward.name}. Guarantees take priority.</p>}
         <SpinGuarantees streak={streak} legendary={spinStatus?.legendary} canSpin={spinStatus?.canSpin}/>
         <details className={progressStyles.rules}>
           <summary>Spin rules</summary>

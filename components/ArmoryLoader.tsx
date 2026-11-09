@@ -1,6 +1,6 @@
 import styles from './armory-loader.module.css';
 
-export const ARMORY_LOADING_DURATION_MS = 8000;
+export const ARMORY_LOADING_DURATION_MS = 5000;
 
 export default function ArmoryLoader({ complete = false }: { complete?: boolean }) {
   return <div className={`${styles.loader} ${complete ? styles.complete : ''}`}>

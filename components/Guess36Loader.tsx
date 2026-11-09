@@ -1,6 +1,6 @@
 import styles from './guess36-loader.module.css';
 
-export const GUESS36_LOADING_DURATION_MS = 8000;
+export const GUESS36_LOADING_DURATION_MS = 5000;
 
 export default function Guess36Loader({ complete = false }: { complete?: boolean }) {
   return <div className={`${styles.loader} ${complete ? styles.complete : ''}`}>

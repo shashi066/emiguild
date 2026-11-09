@@ -15,6 +15,7 @@ model User {
   legendaryPity Int @default(0)
   happyTickets HappyTicket[]
   happyAvailable Int @default(5)
+  happyBalanceDay String?
   happyVersion Int @default(0)
   happyLastRefillId String?
   happyLastRefillAt DateTime?
@@ -281,6 +282,8 @@ model Guess36Round {
   entries Guess36Entry[]
 
   @@index([status, roundDate])
+  minesSnapshot String?
+
   @@map("guess_36_rounds")
 }
 
@@ -288,16 +291,34 @@ model Guess36Entry {
   id             String   @id @default(cuid())
   roundId        String
   userId         String
-  selectionType  String   @default("NUMBER")
+  selectionType  String?  @default("NUMBER")
   selectionValue Int?     @map("selectedNumber")
   createdAt      DateTime @default(now())
 
   round Guess36Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
   user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([roundId, userId])
+  attemptKey String @default("FREE")
+  reviewReceiptId String? @unique
+  reviewReceipt RewardReceipt? @relation(fields: [reviewReceiptId], references: [id], onDelete: Restrict)
+
+  @@unique([roundId, userId, attemptKey])
   @@index([roundId, selectionType, selectionValue])
   @@index([userId, createdAt])
+  gameMode       String    @default("LEGACY")
+  mineBoard      String?
+  mineRevealed   String    @default("[]")
+  mineStatus     String?
+  mineStartedAt  DateTime?
+  mineExpiresAt  DateTime?
+  mineSettledAt  DateTime?
+  mineVersion    Int       @default(0)
+  mineRules      String?
+  mineReward     String?
+  mineRateAt     DateTime?
+  mineRateCount  Int       @default(0)
+
+  @@index([userId, gameMode, mineStatus])
   @@map("guess_36_entries")
 }
 
@@ -857,6 +878,7 @@ model ArmoryFusionReceipt {
 
 
 model RewardReceipt {
+  guessEntry Guess36Entry?
   id String @id @default(cuid())
   actorId String
   operation String

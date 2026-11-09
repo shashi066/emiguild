@@ -138,10 +138,10 @@ function serializeTicket(ticket: {
   return { ...serializeGuess36RewardTicket(ticket), code: ticket.code, status };
 }
 
-const entrySelect = { selectionType: true, selectionValue: true, createdAt: true } as const;
+const entrySelect = { gameMode: true, selectionType: true, selectionValue: true, createdAt: true } as const;
 const ticketSelect = { id: true, code: true, status: true, expiresAt: true, rewardSnapshot: true } as const;
 
-function entrySelection(entry: { selectionType: string; selectionValue: number | null }): Guess36Selection {
+function entrySelection(entry: { selectionType: string | null; selectionValue: number | null }): Guess36Selection {
   const selection = parseGuess36Selection(entry.selectionType === 'EVEN' || entry.selectionType === 'ODD'
     ? { type: entry.selectionType }
     : { type: entry.selectionType, value: entry.selectionValue });
@@ -149,13 +149,14 @@ function entrySelection(entry: { selectionType: string; selectionValue: number |
   return selection;
 }
 
-function serializeEntry(entry: { selectionType: string; selectionValue: number | null; createdAt: Date }): Guess36PublicEntry {
+function serializeEntry(entry: { selectionType: string | null; selectionValue: number | null; createdAt: Date }): Guess36PublicEntry {
   return { selection: entrySelection(entry), createdAt: entry.createdAt.toISOString() };
 }
 
 function winningEntries(roundId: string, winningNumber: number): Prisma.Guess36EntryWhereInput {
   return {
     roundId,
+    gameMode: 'LEGACY',
     OR: guess36WinningSelections(winningNumber).map((selection) => ({
       selectionType: selection.type, selectionValue: 'value' in selection ? selection.value : null,
     })),
@@ -309,15 +310,15 @@ export async function getGuess36Current(
 
   const todayEntryPromise = viewer
     ? prisma.guess36Entry.findUnique({
-      where: { roundId_userId: { roundId: todayRound.id, userId: viewer.id } },
+      where: { roundId_userId_attemptKey: { roundId: todayRound.id, userId: viewer.id, attemptKey: 'FREE' } },
       select: entrySelect,
-    })
+    }).then(entry => entry?.gameMode === 'LEGACY' ? entry : null)
     : Promise.resolve(null);
   const previousEntryPromise = viewer && previousRound
     ? prisma.guess36Entry.findUnique({
-      where: { roundId_userId: { roundId: previousRound.id, userId: viewer.id } },
+      where: { roundId_userId_attemptKey: { roundId: previousRound.id, userId: viewer.id, attemptKey: 'FREE' } },
       select: { id: true, ...entrySelect },
-    })
+    }).then(entry => entry?.gameMode === 'LEGACY' ? entry : null)
     : Promise.resolve(null);
   const [todayEntry, previousEntry] = await Promise.all([todayEntryPromise, previousEntryPromise]);
   const previousSelection = previousEntry ? entrySelection(previousEntry) : null;
@@ -385,7 +386,7 @@ export async function createGuess36Entry(userId: string, input: { roundDate: str
       const round = await getOrCreateRound(tx, roundDate);
       if (round.roundDate !== roundDate || round.status !== 'OPEN') throw new Guess36Error('ROUND_CLOSED', 409);
       const existing = await tx.guess36Entry.findUnique({
-        where: { roundId_userId: { roundId: round.id, userId } },
+        where: { roundId_userId_attemptKey: { roundId: round.id, userId, attemptKey: 'FREE' } },
         select: entrySelect,
       });
       if (existing) throw new Guess36Error('ALREADY_ENTERED', 409, serializeEntry(existing));
@@ -399,7 +400,7 @@ export async function createGuess36Entry(userId: string, input: { roundDate: str
     if (!isUniqueConstraintError(error)) throw error;
     const round = await prisma.guess36Round.findUnique({ where: { roundDate } });
     const existing = round && await prisma.guess36Entry.findUnique({
-      where: { roundId_userId: { roundId: round.id, userId } },
+      where: { roundId_userId_attemptKey: { roundId: round.id, userId, attemptKey: 'FREE' } },
       select: entrySelect,
     });
     if (existing) throw new Guess36Error('ALREADY_ENTERED', 409, serializeEntry(existing));
@@ -440,6 +441,7 @@ export async function drawGuess36Round(
       return await runSerializableTransaction(async (tx) => {
         const round = await getOrCreateRound(tx, roundDate);
         if (round.status === 'DRAWN' && round.winningNumber !== null) return getDrawResult(tx, roundDate);
+        if (round.minesSnapshot && !await tx.guess36Entry.count({ where: { roundId: round.id, gameMode: 'LEGACY' } })) return getDrawResult(tx, roundDate);
 
         const winners = await tx.guess36Entry.findMany({
           where: winningEntries(round.id, winningNumber),
@@ -509,7 +511,7 @@ async function getAdminSummary(enabled: boolean, now: Date) {
     prisma.guess36Round.findUnique({ where: { roundDate: previousDate }, select: { id: true, status: true, winningNumber: true } }),
   ]);
   const [participants, winnerCount] = await Promise.all([
-    todayRound ? prisma.guess36Entry.count({ where: { roundId: todayRound.id } }) : 0,
+    todayRound ? prisma.guess36Entry.count({ where: { roundId: todayRound.id, gameMode: 'LEGACY' } }) : 0,
     previousRound?.winningNumber !== null && previousRound?.winningNumber !== undefined
       ? prisma.guess36Entry.count({ where: winningEntries(previousRound.id, previousRound.winningNumber) })
       : 0,
@@ -549,12 +551,12 @@ export async function getGuess36AdminData(options: {
     getAdminSummary(enabled, now),
     prisma.guess36Round.findUnique({ where: { roundDate } }),
   ]);
-  const participantCount = round ? await prisma.guess36Entry.count({ where: { roundId: round.id } }) : 0;
+  const participantCount = round ? await prisma.guess36Entry.count({ where: { roundId: round.id, gameMode: 'LEGACY' } }) : 0;
   const winnerCount = round?.winningNumber !== null && round?.winningNumber !== undefined
     ? await prisma.guess36Entry.count({ where: winningEntries(round.id, round.winningNumber) })
     : 0;
   const where: Prisma.Guess36EntryWhereInput = round ? {
-    roundId: round.id,
+    roundId: round.id, gameMode: 'LEGACY',
     ...(view === 'winners'
       ? round.status !== 'DRAWN' || round.winningNumber === null ? { id: '__none__' } : winningEntries(round.id, round.winningNumber)
       : {}),

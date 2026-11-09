@@ -96,7 +96,7 @@ export function createAdminTestCandidate(now: Date): MessageCandidate {
       cards: [
         { title: 'Daily Spin · Sample', description: 'Give the wheel a spin and see what lands.' },
         { title: 'Daily Forge · Sample', description: 'Discover an artifact for your collection.' },
-        { title: 'Guess 36 · Sample', description: 'Pick your number. See how it plays out.' },
+        { title: 'Guess 36 · Sample', description: 'Find treasure. Collect before you hit a trap.' },
       ], deadlineNotes: ['Sample content only. Live emails show the availability dates for each player.'],
     },
     href: '/vault', sourceRefs: [], validUntil: new Date(now.getTime() + DAY).toISOString(),

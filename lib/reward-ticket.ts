@@ -97,3 +97,14 @@ export function getTowerRewardTicketDisplay(ticket: NormalizedRewardTicket): Rew
 export function getGuess36RewardTicketDisplay(ticket: NormalizedRewardTicket): RewardTicketDisplay {
   return getNormalizedRewardTicketDisplay(ticket, 'Guess 36');
 }
+
+// Expedition uses the existing ticket card; only its display labels differ.
+export function getExpeditionRewardTicketDisplay(ticket: NormalizedRewardTicket): RewardTicketDisplay {
+  const display = getGuess36RewardTicketDisplay(ticket);
+  const bronze = ticket.reward.type === 'PASS' && /^Bronze Pass(?: \(10 Hours\))?$/.test(ticket.reward.name);
+  return {
+    ...display,
+    ...(bronze ? { label: 'Bronze Pass', value: '10 hours' } : {}),
+    expiry: `Redeem by ${formatRewardTicketExpiry(new Date(Date.parse(ticket.expiresAt) - 1).toISOString())} IST`,
+  };
+}

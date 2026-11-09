@@ -1,7 +1,7 @@
 import { Gift } from 'lucide-react';
 import styles from './guild-spin-loader.module.css';
 
-export const GUILD_SPIN_LOADING_DURATION_MS = 8000;
+export const GUILD_SPIN_LOADING_DURATION_MS = 5000;
 const TILE_DURATION_MS = GUILD_SPIN_LOADING_DURATION_MS / 9;
 
 export default function GuildSpinLoader({ complete = false }: { complete?: boolean }) {
