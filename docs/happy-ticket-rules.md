@@ -4,6 +4,8 @@
 
 - Each existing or new account starts with five claimable tickets. Balances are independent.
 - One successful claim consumes one personal balance unit and starts a 24-hour cooldown. Other accounts are unaffected.
+- Each IST day consumes one stock unit through claiming or midnight expiry, never both. Offline days and weekends count, clamped at zero. A refill restores five; a claim earlier that same day still counts.
+- Daily stock expiry is projected on reads and materialized during claims/refills, with no cron or daily history rows. Existing balances start this rule from the forward migration date; no retroactive depletion.
 - A claimed ticket belongs only to its account and grants one base PS5 screen-hour. Extra time, controllers and food remain payable. Benefits cannot be stacked.
 - New claims expire at the exclusive start of the next IST day: displayed as 11:59 PM on the claim day. The whole booking must finish before expiry.
 - Eligible PS5 stations, weekdays and hours remain globally configurable. Issued tickets retain their rule snapshots.

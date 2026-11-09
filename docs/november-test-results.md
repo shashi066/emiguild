@@ -21,3 +21,8 @@ Chrome was disconnected for this cleanup, so no fresh browser/device performance
 - Browser runner requires a disposable November database and matching local server via NOVEMBER_BROWSER_URL. It is not a production smoke test.
 
 Deployment must follow the coordinated migration/code order in [the release guide](november-release-checklist.md). No production migration, deployment or activation was performed during this cleanup.
+
+
+## 9 November reward updates
+
+See [reward updates verification](reward-updates-test-results.md) for the new Guess bonuses, Spin selection, daily personal stock expiry, forward migration checks and final Chrome evidence. Production remains undeployed.
