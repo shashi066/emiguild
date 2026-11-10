@@ -39,6 +39,10 @@ const board = [...Array(5).fill('GREEN'),...Array(5).fill('RED'),...Array(26).fi
 let browser, server, rules;let tracedPages=0;const traceSaves=[];
 const checks=[];const errors=[];
 function ok(name) {checks.push(name);console.log('PASS '+name);}
+function traceLoader() {
+ window.__brandLoaderMounts=0;const seen=new WeakSet();
+ new MutationObserver(()=>{for(const node of document.querySelectorAll('[data-guess36-loader="entry"]'))if(!seen.has(node)){seen.add(node);window.__brandLoaderMounts++;}}).observe(document,{childList:true,subtree:true});
+}
 const serverCode = `const next=require('next');const http=require('node:http');(async()=>{const config=(await import('./next.config.mjs')).default;const app=next({dev:true,webpack:true,dir:process.cwd(),hostname:'127.0.0.1',port:${port},conf:config});await app.prepare();const handle=app.getRequestHandler();const server=http.createServer((req,res)=>handle(req,res));server.on('upgrade',app.getUpgradeHandler());server.listen(${port},'127.0.0.1',()=>process.send('ready'));let closing=false;process.on('message',async message=>{if(message==='close'&&!closing){closing=true;server.closeAllConnections();await app.close();server.close(()=>process.exit(0));}});})().catch(e=>{console.error(e);process.exit(1)});`;
 async function login(context,user) {
  const csrf=await(await context.request.get(base+'/api/auth/csrf')).json();
@@ -55,19 +59,75 @@ async function member(seed,viewport={width:375,height:812},reduced=false) {
   entry=await prisma.guess36Entry.create({data:{roundId:round.id,userId:user.id,gameMode:'MINES',selectionType:null,mineBoard:JSON.stringify(board),mineRevealed:JSON.stringify(revealed),mineStatus:status,mineRules:JSON.stringify(rules),mineStartedAt:new Date(),mineExpiresAt:new Date(Date.now()+(seed.seconds??90)*1000),mineVersion:revealed.length,mineReward:reward?JSON.stringify(reward):null,mineSettledAt:status==='ACTIVE'?null:new Date()}});
   if(seed.ticket)await prisma.armoryTicket.create({data:{userId:user.id,source:'GUESS_36',sourceRefId:entry.id,code:`UI-${randomUUID()}`,rewardSnapshot:JSON.stringify({reward}),expiresAt:new Date(Date.now()+(seed.expired?-1000:86400000)),status:seed.ticket,claimDate:today()}});
  }
- const context=await browser.newContext({viewport,reducedMotion:reduced?'reduce':'no-preference'});await context.addInitScript(()=>{window.__brandLoaderSeen=false;new MutationObserver(()=>{if(document.querySelector('[data-guess36-loader="entry"]'))window.__brandLoaderSeen=true;}).observe(document,{childList:true,subtree:true});});await login(context,user);
+ const context=await browser.newContext({viewport,reducedMotion:reduced?'reduce':'no-preference'});await context.addInitScript(traceLoader);await login(context,user);
  const page=await context.newPage();const saveTrace=await traceExpedition(page,dir,`game-${++tracedPages}`);traceSaves.push(saveTrace);page.on('pageerror',e=>errors.push(e.message));page.on('console',message=>{if(message.type()==='error'&&/element type is invalid|lazy element type|ChunkLoadError/i.test(message.text()))errors.push(message.text());});
  // Terminal fixtures exercise explicit recovery, matching the production contract.
  if(entry && entry.mineStatus!=='ACTIVE') await page.route('**/api/guess-36/current',route=>route.continue({url:base+'/api/guess-36/current?recover='+entry.id}));
  let documents=0,reads=0,posts=0;
  page.on('request',r=>{if(r.isNavigationRequest()&&r.resourceType()==='document')documents++;if(r.url().includes('/api/guess-36/current'))reads++;if(r.method()==='POST'&&/guess-36\/(reveal|collect)/.test(r.url()))posts++;});
- const entryCheck=page.waitForResponse(response=>response.url().includes('/api/guess-36/current'));
- await page.goto(base+'/guess-36');await page.getByRole('heading',{name:'Guild Expedition',exact:true}).waitFor({state:'visible',timeout:30000});await entryCheck;await page.waitForFunction(()=>!document.querySelector('[aria-label="Refresh Guild Expedition"]').disabled);
- assert.equal(await page.evaluate(()=>window.__brandLoaderSeen),!seed,seed?'recovery must skip the five-second intro':'a fresh account must retain the five-second intro');
+ const entryCheck=page.waitForResponse(response=>response.url().includes('/api/guess-36/current')).then(()=>Date.now());
+ await page.goto(base+'/guess-36');await page.getByRole('heading',{name:'Guild Expedition',exact:true}).waitFor({state:'visible',timeout:30000});const checkedAt=await entryCheck;await page.waitForFunction(()=>!document.querySelector('[aria-label="Refresh Guild Expedition"]').disabled);
+ const intros=await page.evaluate(()=>window.__brandLoaderMounts);
+ assert.ok(intros<=1,'route fetching and the game must share one intro');
+ if(seed)assert.ok(Date.now()-checkedAt<1500,'known run recovery must not wait for the five-second intro');
+ else assert.equal(intros,1,'a fresh account must retain the five-second intro');
  const close=context.close.bind(context);context.close=async()=>{await saveTrace();await close();};
  return {user,entry,context,page,counts:()=>({documents,reads,posts})};
 }
 const tile=(page,index,label='hidden')=>page.getByRole('button',{name:`Tile ${index+1}${label==='hidden'?', hidden':': '+label}`,exact:true});
+async function loadingChecks() {
+ const context=await browser.newContext({viewport:{width:375,height:812},reducedMotion:'no-preference'});await context.addInitScript(traceLoader);
+ let release;const scripts=new Promise(resolve=>release=resolve);
+ await context.route(/\/_next\/.*\.js(?:\?|$)/,async route=>{await scripts;await route.continue();});
+ const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(base+'/guess-36',{waitUntil:'commit'});
+ const intro=page.locator('[data-guess36-loader="entry"]');await intro.waitFor();
+ const ticket=intro.locator('text').filter({hasText:'GUESS'}).locator('..');
+ await page.waitForTimeout(3000);
+ assert.equal(await intro.getAttribute('data-animation-paused'),'true');
+ assert.equal(await ticket.evaluate(el=>getComputedStyle(el).opacity),'0');
+ assert.equal(await intro.locator('svg g').first().evaluate(el=>getComputedStyle(el).animationPlayState),'paused');
+ await page.screenshot({path:path.join(dir,'loader-before-hydration.png')});
+ release();await page.locator('[data-guess36-loader="entry"]:not([data-animation-paused])').waitFor();
+ const started=Date.now();assert.equal(await ticket.evaluate(el=>getComputedStyle(el).opacity),'0');
+ await page.waitForTimeout(2900);assert.ok(Number(await ticket.evaluate(el=>getComputedStyle(el).opacity))>0);
+ assert.equal(await intro.locator('svg > path').last().evaluate(el=>getComputedStyle(el).opacity),'0');
+ await page.screenshot({path:path.join(dir,'loader-ticket-stage.png')});
+ await page.getByRole('link',{name:'Sign in to play',exact:true}).waitFor();
+ assert.ok(Date.now()-started>=4700,'slow hydration must not skip the start of the five-second sequence');
+ assert.equal(await page.evaluate(()=>window.__brandLoaderMounts),1);
+ await context.close();ok('delayed-JS production entry shows the complete sequence once, with no final-frame flash');
+
+ const exhausted=await member(null);
+ const round=await prisma.guess36Round.upsert({where:{roundDate:today()},create:{roundDate:today(),minesSnapshot:JSON.stringify(rules)},update:{}});
+ await prisma.guess36Entry.create({data:{roundId:round.id,userId:exhausted.user.id,gameMode:'MINES',selectionType:null,mineBoard:JSON.stringify(board),mineRevealed:'[5]',mineStatus:'LOST',mineRules:JSON.stringify(rules),mineStartedAt:new Date(),mineExpiresAt:new Date(Date.now()+90000),mineSettledAt:new Date(),mineVersion:1}});
+ const opened=Date.now();await exhausted.page.reload();await exhausted.page.getByText('No runs available. Claim a review bonus or return tomorrow.',{exact:true}).waitFor();
+ assert.ok(Date.now()-opened>=4900,'ordinary entry still animates after the daily run is used');
+ assert.equal(await exhausted.page.evaluate(()=>window.__brandLoaderMounts),1);
+ await exhausted.context.close();ok('fresh and exhausted signed-in accounts both receive one complete page-entry animation');
+
+ const active=await member({revealed:[0]});
+ await noReload(active,async()=>{await active.page.getByRole('button',{name:'Collect 15 min',exact:true}).click();await active.page.getByRole('article',{name:'Gaming Time: 15 min',exact:true}).waitFor();});
+ await active.page.getByRole('button',{name:'Refresh Guild Expedition',exact:true}).click();await active.page.waitForFunction(()=>!document.querySelector('[aria-label="Refresh Guild Expedition"]').disabled);
+ assert.equal(await active.page.evaluate(()=>window.__brandLoaderMounts),1);
+ assert.equal(await active.page.locator('[data-guess36-loader="entry"]').count(),0);
+ await active.context.close();ok('active recovery opens promptly; collection and result refresh never restart the intro');
+
+ const pending=await member(null);await pending.page.getByRole('button',{name:'Start free daily run',exact:true}).click();
+ await pending.page.route('**/api/guess-36/reveal',route=>commitThenDrop(route,pending.context));
+ await tile(pending.page,0).click();await pending.page.getByRole('button',{name:'Check result',exact:true}).waitFor();
+ const recovered=pending.page.waitForResponse(response=>response.url().includes('/api/guess-36/current')).then(()=>Date.now());
+ await pending.page.reload();await pending.page.getByRole('button',{name:/^Tile 1:/}).waitFor();
+ assert.ok(Date.now()-await recovered<1500,'interrupted first reveals must bypass the remaining intro');
+ assert.equal(await prisma.guess36Entry.count({where:{userId:pending.user.id}}),1);
+ await pending.context.close();ok('committed first-reveal recovery bypasses the intro without spending another attempt');
+
+ const reduced=await browser.newContext({viewport:{width:320,height:812},reducedMotion:'reduce'});const reducedPage=await reduced.newPage();
+ const at=Date.now();await reducedPage.goto(base+'/guess-36',{waitUntil:'commit'});const staticIntro=reducedPage.locator('[data-guess36-loader="entry"]');await staticIntro.waitFor();
+ assert.equal(await staticIntro.locator('svg g').first().evaluate(el=>getComputedStyle(el).animationName),'none');
+ await reducedPage.getByRole('link',{name:'Sign in to play',exact:true}).waitFor();assert.ok(Date.now()-at>=4900);
+ await reduced.close();ok('reduced motion retains a labeled static five-second entry at 320px');
+}
 async function commitThenDrop(route, context) {
  // Forward once with this device's real session, then drop only the browser response.
  // A separate request context avoids route.fetch keep-alive resets in Chrome.
@@ -220,6 +280,7 @@ async function finishWithInfo(game,endpoint,action,result) {
   browser=await chromium.launch({channel:'chrome',headless:true});
   const anonymous=await browser.newContext();const anon=await anonymous.newPage();anon.on('pageerror',e=>errors.push(e.message));await anon.goto(base+'/guess-36');await anon.getByRole('link',{name:'Sign in to play'}).waitFor({state:'visible'});assert.equal(await anon.getByRole('button',{name:/^Tile /}).count(),0);rules=await(await anonymous.request.get(base+'/api/guess-36/current')).json().then(s=>s.rules);await anonymous.close();ok('actual signed-out page hides board');
   const warm=await fetch(base+'/api/warm');assert.equal(warm.status,204);assert.equal(await warm.text(),'');assert.match(warm.headers.get('cache-control'),/no-store/);ok('actual public warm-up returns no data and cannot be cached');
+  if(process.env.GUESS36_LOADING_ONLY==='true') {await loadingChecks();assert.deepEqual(errors,[]);console.log(JSON.stringify({checks:checks.length,errors,output:dir,realAuthenticated:true,disposableDatabase:true}));return;}
   if(process.env.GUESS36_UI_ONLY==='true') {
    const user=await prisma.user.create({data:{name:'UI review fixture',email:`expedition-ui-${randomUUID()}@example.test`,password:await bcrypt.hash(password,4)}});
    const assistant=await prisma.setting.findUnique({where:{key:'assistant_release_mode'}});

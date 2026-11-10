@@ -56,7 +56,7 @@ export function hasMineAttempt(state: MineState) {
   return state.eligibility ? state.eligibility.freeAvailable || state.eligibility.bonuses.length > 0 : !state.legacyUsedToday && !state.run;
 }
 export function skipMineEntry(state: MineState) {
-  return !!state.run || state.legacyUsedToday || !state.enabled || (state.authenticated && !hasMineAttempt(state));
+  return !!state.run || !state.enabled;
 }
 export type PendingMineStart = { requestId: string; date: string; index: number };
 export function mineStartKey(state: MineState) { return state.recoveryKey ? `emiguild:guess36:${state.recoveryKey}:start` : null; }

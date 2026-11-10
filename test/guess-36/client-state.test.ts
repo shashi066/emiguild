@@ -8,9 +8,10 @@ const reward = MINE_RULES.rewards[0];
 const run: MineRun = { id: 'run', date: '2026-11-08', status: 'ACTIVE', version: 1, startedAt: now, expiresAt: '2026-11-08T12:01:30.000Z', settledAt: null, tiles: [{ index: 0, color: 'GREEN' }], greens: 1, reward, nextReward: MINE_RULES.rewards[1], ticketId: null };
 const state: MineState = { recoveryKey: 'fixture-key', eligibility: { freeAvailable: false, bonuses: [], review: { claimed: false, date: run.date, nextResetAt: '2026-11-08T18:30:00.000Z', serverNow: now } }, mode: 'MINES', enabled: true, authenticated: true, serverNow: now, date: run.date, nextDayAt: '2026-11-08T18:30:00.000Z', legacyUsedToday: false, rules: MINE_RULES, run, rewardTickets: [] };
 
-test('the branded entry runs only for a fresh available board, not a depleted account or recovered run', () => {
+test('page entry animates for fresh and depleted accounts while recovered runs and pauses open promptly', () => {
   assert.equal(skipMineEntry(state), true);
-  assert.equal(skipMineEntry({ ...state, run: null }), true);
+  assert.equal(skipMineEntry({ ...state, run: null }), false);
+  assert.equal(skipMineEntry({ ...state, run: null, legacyUsedToday: true }), false);
   const fresh = { ...state, run: null, eligibility: { ...state.eligibility, freeAvailable: true } };
   assert.equal(skipMineEntry(fresh), false);
   assert.equal(skipMineEntry({ ...fresh, enabled: false }), true);
