@@ -116,3 +116,5 @@
 .stats [data-game] strong { color: var(--vault-accent); }
 .card[data-game] .strong svg { color: var(--vault-accent); }
 .reward { --vault-accent: #f4c958; --vault-tint: rgba(244, 201, 88, .08); --vault-border: #66562a; }
+.reward[data-game] { border-color: var(--vault-border); background: linear-gradient(115deg, var(--vault-tint), transparent 80%), #0b1220; }
+.reward[data-game] > svg, .reward[data-game] .eyebrow { color: var(--vault-accent); }
