@@ -89,3 +89,38 @@ No production migration or deployment is part of this push. The original normal 
 - Client/lifecycle/assistant/loading regressions: **124 passed, 5 existing optional checks skipped**. TypeScript, targeted ESLint, whitespace checks and direct production compilation passed without running the migration-running build script.
 - Compiled Chrome: **8 focused scenarios passed with no runtime errors**, covering real admin activation/change/disable, player Spin/Vault responses, internal admin history, actual committed rewards and the preserved five-second page loader/Spin animation. Vault layouts were checked at 320/375/430/1280px; the main Spin result at 375px was visually inspected. Existing reward-popup styling remains unchanged. The final first-pick-red UI fixture remains explicitly mocked.
 - Artifacts: `%TEMP%/guild-expedition-ui-PdN49L`. Logs: `%TEMP%/spin-private-{sqlite,postgres,client,build,browser}.log`. No schema, migration, new endpoint, production deployment or real-account activation was introduced. Physical Android and the original Chrome profile remain unverified.
+
+## Post-merge review - 10 November 2026
+
+PR [#52](https://github.com/shashi066/emiguild/pull/52) was already merged into `main` at `a14857b`. The follow-up fixes are based on that merge. GitHub reports a successful Vercel deployment for the merged commit; that status does not establish production transaction or migration correctness.
+
+Confirmed findings and fixes:
+
+- **Competing first-pick recovery:** a new request returning an existing run lacked a recovery receipt. If its response was lost and the run subsequently ended, retrying could spend another owned bonus. Explicit request IDs now bind to the returned run; conflicting payloads reject, saved receipts replay, and new IDs share the run's existing rate limit. Legacy day-derived IDs retain their cross-midnight free-attempt behavior.
+- **Account changes:** the mounted Expedition could retain the previous account's board/tickets and keep requesting its old run. Session changes now invalidate old responses, abort pending UI work, clear personal state and fetch the new account's state. Each account retains its own interrupted-start recovery. Corrupt saved-start retries show an error rather than throwing or sending another pick.
+- **Vault review bonus:** an enabled but exhausted Expedition was marked disabled, hiding its review-bonus action. It now shows Used today and offers the unclaimed bonus; actual pauses remain disabled.
+- **Stalled review grants:** bonus requests had no deadline or unmount cleanup. They now abort after 20 seconds or navigation, retain recovery information and reconcile the single committed grant.
+
+Fresh verification:
+
+- Disposable SQLite: **109 checks passed**. Disposable PostgreSQL: **107 passed**, including actual serializable contention. Fresh migrations preserved legacy entries/tickets, added no game tables and matched both schemas without drift.
+- Booking/reward regressions: **26 passed on SQLite; 23 on PostgreSQL**. Lifecycle, assistant, Vault and client checks: **124 passed, 5 existing optional checks skipped**.
+- TypeScript, targeted ESLint, whitespace checks and direct production compilation passed. Compilation used `next build --webpack`; the migration-running npm build script was not used.
+- Compiled-app Chrome: **40 full-flow scenarios passed, no runtime errors**, including real Auth.js login, account changes, lost responses, grant recovery, concurrent devices, all reward levels, Vault and private admin override presentation. Seven focused scenarios also passed independently. Early-expiry, midnight, forbidden-response and first-pick-red UI fixtures are explicitly mocked; visibility events are simulated. Actual transaction paths use the disposable database.
+- Inspected the rendered Expedition and Vault screenshots at phone widths; layout assertions cover 320/375/430px and desktop. Keyboard Info, focus, touch targets, reduced motion and one 4x CPU-throttled Vault refresh were exercised. Full browser artifacts: `%TEMP%/guild-expedition-ui-gMT5ld`.
+
+Logs: `%TEMP%/reward-review-{sqlite,postgres,booking-sqlite,booking-postgres,client,build,browser-focused,browser-full}.log`. Focused browser traces: `%TEMP%/guild-expedition-ui-qmCZSt`. Server and browser reproductions failed before the corresponding fixes.
+
+No new schema, migration, reward value, probability, guarantee, artwork, CSS or production operation is included in this follow-up. Separate local request-timing and reveal-performance edits that appeared during review are excluded and are not covered by these results. Physical Android and the affected original Chrome profile remain unverified.
+
+## Final loading and presentation review - 10 November 2026
+
+- Reviewed the later `ded6a90` warm-up/loading commit and the local tile/Emiily changes. Guess 36 uses static artwork during route fetching and retains the five-second intro for fresh boards; recovery does not replay it. Browser assertions now distinguish static artwork from the actual intro and verify both fresh and recovered entries.
+- Pending tile feedback is bounded to 4.8 seconds, pauses in the background and is static with reduced motion. Its accessible status announces the pending action. Reward-number reveals stay anchored inside the HUD. No presentation effect controls or delays a transaction.
+- Emiily appears only on Home, closes on navigation and cleans up usage refreshes when hidden. Removed the unused portal/observer logic. Browser fixtures explicitly enable the assistant only in the disposable database and restore its setting afterwards; all assistant API responses in the UI check are mocked, with no AI calls.
+- Warm-up is best effort, returns no personal data and is not cacheable. Four unit checks verify offline/Data Saver suppression, shared two-minute throttling, tab persistence and blocked-storage/network failure. It is event/idle driven, not recurring polling, and cannot guarantee that Vercel routes the game to the warmed instance.
+- Fresh focused client/assistant/Home checks: **112 passed, one existing optional integration check skipped**. Shared game render checks: **3 passed**. TypeScript, targeted ESLint and whitespace checks passed.
+- Compiled-app transaction/recovery suite: **41 scenarios passed with no runtime errors**, including the real warm-up endpoint. Earlier disposable SQLite/PostgreSQL and booking results above cover the unchanged reward services; this presentation follow-up adds no schema or migrations.
+- Final direct production compilation passed without running migrations. **9 presentation-browser scenarios passed with no runtime errors** at 320/375/430px and desktop, including reward-text containment throughout its reveal. These mock game transactions; the separate 41-scenario suite uses actual authenticated transaction paths except the explicitly identified fixtures above. Screenshots were visually inspected. Logs: `%TEMP%/reward-final-{build,browser,ui}.log`. Full-flow browser artifacts: `%TEMP%/guild-expedition-ui-03GDDd`; final UI artifacts: `%TEMP%/g36-ui-polish-rJKgee`.
+
+Original Chrome-profile access and physical low-end Android performance remain unverified. The 4x CPU-throttled browser interaction is not a real-device performance result. No production deployment or activation is part of these checks.

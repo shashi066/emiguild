@@ -3,7 +3,7 @@ import styles from './guess36-loader.module.css';
 export const GUESS36_LOADING_DURATION_MS = 5000;
 
 export default function Guess36Loader({ complete = false }: { complete?: boolean }) {
-  return <div className={`${styles.loader} ${complete ? styles.complete : ''}`}>
+  return <div className={`${styles.loader} ${complete ? styles.complete : ''}`} data-guess36-loader={complete ? 'static' : 'entry'}>
     <svg className={styles.illustration} viewBox="0 0 300 280" width="300" height="280" aria-hidden="true" focusable="false">
       <path className={styles.frame} d="M46 20h208l16 16v136l-16 16H46l-16-16V36z" />
       {['03', '06', '12', '18', '24', '36'].map((number, i) => <g key={number} className={styles.tile} style={{ '--tile': i } as React.CSSProperties}>

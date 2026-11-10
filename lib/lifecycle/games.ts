@@ -24,7 +24,7 @@ export async function guess36Progress(userId: string, now: Date): Promise<GameRe
   const available = state.enabled && (eligibility.freeAvailable || eligibility.bonuses.length > 0);
   const nextBonus = eligibility.bonuses[0];
   return { items: [], game: game('guess36', {
-    status: active ? 'active' : available ? 'available' : run || state.legacyUsedToday ? 'completed' : 'disabled',
+    status: active ? 'active' : available ? 'available' : state.enabled ? 'completed' : 'disabled',
     summary: active ? `${run.greens}/5 rewards found` : available ? 'Your Guild Expedition is ready' : run?.reward ? `${run.reward.name} secured` : state.enabled ? 'No runs available' : 'New runs are paused',
     details: [eligibility.freeAvailable ? '1 free daily run available.' : 'Free daily run used.', `${eligibility.bonuses.length} bonus run${eligibility.bonuses.length === 1 ? '' : 's'} available.${nextBonus ? ` Next expires ${formatEndOfDay(nextBonus.expiresAt)} IST.` : ''}`, 'Collect before red. Redeem rewards by the end of the following IST day.'],
     facts: { dailyAvailable: state.enabled && eligibility.freeAvailable, usedToday: !available && !active, expedition: { ...eligibility, enabled: state.enabled, recoveryKey: state.recoveryKey } },

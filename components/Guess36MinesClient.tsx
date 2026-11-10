@@ -86,6 +86,7 @@ export function Guess36MinesClient({ initialState, initialError }: { initialStat
  const { state, error, busy, pending, armed, uncertain, inspecting, announcement, seconds, now, phase, play, act, refresh, retryFirst } = useGuess36Run(initialState, initialError);
  const [info, setInfo] = useState(false);
  const [flash, setFlash] = useState<Flash | null>(null);
+ const [background, setBackground] = useState(false);
  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
  const flying = useRef(new Set<Animation>());
  const ticketHeading = useRef<HTMLHeadingElement | null>(null);
@@ -98,19 +99,11 @@ export function Guess36MinesClient({ initialState, initialError }: { initialStat
  useEffect(() => {
   const effects = flying.current;
   const stop = () => { effects.forEach(effect => effect.cancel()); effects.clear(); };
-  const visibility = () => { if (document.hidden) { stop(); clearTimeout(flashTimer.current); setFlash(null); } };
+  const visibility = () => { setBackground(document.hidden); if (document.hidden) { stop(); clearTimeout(flashTimer.current); setFlash(null); } };
+  visibility();
   document.addEventListener('visibilitychange', visibility);
   return () => { clearTimeout(flashTimer.current); stop(); document.removeEventListener('visibilitychange', visibility); };
  }, []);
- // Slow-network feedback: 0 = normal, 1 = after 1.2s, 2 = after 3.5s. Presentation only.
- const [slow, setSlow] = useState<0 | 1 | 2>(0);
- const waiting = typeof pending === 'number' || pending === 'collect';
- useEffect(() => {
-  if (!waiting) { setSlow(0); return; }
-  const first = setTimeout(() => setSlow(1), 1200);
-  const second = setTimeout(() => setSlow(2), 3500);
-  return () => { clearTimeout(first); clearTimeout(second); };
- }, [waiting, pending]);
 
  const showFlash = (next: Flash) => {
   clearTimeout(flashTimer.current);
@@ -197,7 +190,7 @@ export function Guess36MinesClient({ initialState, initialError }: { initialStat
  // Unclickable board with no run on it: say why, instead of just fading the tiles.
  const seal = live || run ? null : available && state.enabled ? 'ready' : !state.enabled ? 'paused' : 'locked';
 
- return <div className={styles.shell}>
+ return <div className={styles.shell} data-background={background || undefined}>
   <section className={styles.game} aria-label="Guess 36 Guild Expedition" data-phase={phase} data-impact={impact}>
    <header className={styles.header}>
     <div><span className={styles.eyebrow}>GUESS 36</span><h1 className="font-orbitron">Guild Expedition</h1></div>
@@ -250,7 +243,11 @@ export function Guess36MinesClient({ initialState, initialError }: { initialStat
         aria-label={`Tile ${index + 1}${color ? `: ${label.toLowerCase()}` : ', hidden'}`}
         onClick={() => void pick(index)}>
         <span className={styles.inner}>
-         <span className={styles.front} aria-hidden="true"><span className={styles.rune} /></span>
+         <span className={styles.front} aria-hidden="true">
+          {/* Brief pending feedback only; the response supplies the actual outcome. */}
+          {pending === index && <span className={styles.reel}><i data-k="loot" /><i data-k="clear" /><i data-k="ko" /></span>}
+          <span className={styles.rune} />
+         </span>
          <span className={styles.back} aria-hidden="true">{color && <><Icon size={20} strokeWidth={2.4} /><small>{label}</small></>}</span>
         </span>
         {fresh && color === 'GREEN' && <span className={styles.sparks} aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <i key={i} style={{ '--a': `${i * 60 + 15}deg` } as CSSProperties} />)}</span>}
@@ -271,10 +268,6 @@ export function Guess36MinesClient({ initialState, initialError }: { initialStat
       </div>}
      </div>
      {armed && <p className={styles.armHint} aria-hidden="true">Pick any tile · the clock starts on your first tap</p>}
-     {waiting && (slow === 2 || (slow === 1 && !opening)) && <p className={styles.slowHint} data-level={slow} role="status">
-      {slow === 1 ? (pending === 'collect' ? 'Securing your reward…' : 'Checking tile…')
-       : 'Slow connection. Hang tight, your pick is being confirmed.'}
-     </p>}
     </div>
 
     <div className={styles.ladder} data-outcome={bronze ? 'bronze' : outcome}>
@@ -345,12 +338,12 @@ export function Guess36MinesClient({ initialState, initialError }: { initialStat
     : !state.enabled ? <p className={styles.caption}>New runs are paused. Existing rewards remain available.</p>
     : !available ? <p className={styles.caption}>No runs available. Claim a review bonus or return tomorrow.</p>
     : <button type="button" className={`btn ${styles.cta}`} data-ready={(!armed && !opening) || undefined} data-armed={(armed || opening) || undefined} onClick={start} disabled={armed || opening}>
-     {armed ? 'Pick a tile' : opening ? 'Opening tile…' : <><Sparkles size={18} aria-hidden="true" /> {state.eligibility?.freeAvailable === false ? 'Play bonus run' : 'Play free daily run'}</>}
+     {armed || opening ? 'Pick a tile' :<><Sparkles size={18} aria-hidden="true" /> {state.eligibility?.freeAvailable === false ? 'Play bonus run' : 'Play free daily run'}</>}
     </button>}
 
    {state.authenticated && <div className={styles.footer}>
     {state.eligibility && <p className={styles.caption}>{state.eligibility.freeAvailable ? '1 free run available' : 'Free daily run used'} · {state.eligibility.bonuses.length} bonus {state.eligibility.bonuses.length === 1 ? 'run' : 'runs'}{state.eligibility.bonuses[0] ? ` · Next bonus expires ${time(new Date(Date.parse(state.eligibility.bonuses[0].expiresAt) - 1).toISOString())} IST` : ''}</p>}
-    {state.enabled && state.eligibility && <ExpeditionReviewButton review={state.eligibility.review} recoveryKey={state.recoveryKey} disabled={busy || uncertain} onGranted={() => void refresh()} />}
+    {state.enabled && state.eligibility && <ExpeditionReviewButton key={state.recoveryKey} review={state.eligibility.review} recoveryKey={state.recoveryKey} disabled={busy || uncertain} onGranted={() => void refresh()} />}
     {used && <p className={styles.caption}>Next run: {time(state.nextDayAt)} IST</p>}
     {!active && !ended && <p className={styles.warning}>A K.O. loses any reward you have not collected. Your first pick can be a K.O.</p>}
    </div>}
@@ -362,7 +355,7 @@ export function Guess36MinesClient({ initialState, initialError }: { initialStat
     {availableTickets.map(ticket => <div key={ticket.id} className={styles.ticketItem}><RewardTicketCard ticket={getExpeditionRewardTicketDisplay(ticket)} /></div>)}
    </div> : <p className={styles.empty}>{run?.ticketId ? run.ticket?.status === 'REDEEMED' ? 'Reward already redeemed.' : 'Reward redemption deadline has passed.' : 'Collect a reward to get your first ticket.'}</p>}
   </section>}
-  <p className={styles.srOnly} role="status" aria-live="polite">{pending === 'refresh' ? 'Refreshing expedition.' : announcement}</p>
+  <p className={styles.srOnly} role="status" aria-live="polite">{pending === 'refresh' ? 'Refreshing expedition.' : typeof pending === 'number' ? 'Checking tile.' : pending === 'collect' ? 'Collecting reward.' : announcement}</p>
   {info && <InfoGuideModal eyebrow="Guess 36" title="Guild Expedition" subtitle="One free daily expedition." titleId="mine-guide" steps={guide} onClose={() => setInfo(false)} lightweight />}
  </div>;
 }

@@ -23,7 +23,6 @@
 .navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; margin-bottom: 8px; }
 .navigation :global(.guess-36-back) { margin-bottom: 0; }
 .chatDock { display: none; }
-.loading { min-height: 160px; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--color-text-secondary); }
 
 .game, .ticketsPanel { position: relative; min-width: 0; padding: 16px; border: 1px solid var(--g36-line); border-radius: 12px; background: #0c1220; color: var(--color-text-primary, #f0f4ff); }
 
@@ -53,7 +52,7 @@
 .rewardBox[data-empty] strong { color: #5d6b84; font-size: 1.1rem; }
 .rewardBox[data-outcome=empty] strong { text-decoration: none; }
 .rewardBox[data-outcome=lost] strong { color: #a5848c; text-decoration: line-through; text-decoration-thickness: 2px; }
-.rewardBox strong[data-bump] { animation: bump 420ms var(--g36-pop); }
+.rewardBox strong[data-bump] { transform-origin: left center; animation: bump 420ms var(--g36-pop); }
 .nextHint { display: inline-flex; align-items: center; gap: 5px; color: #94a2ba; font-size: .72rem; }
 .nextHint b { color: #9ff0cf; font-weight: 700; }
 .nextHint svg { color: var(--g36-green); }
@@ -86,8 +85,6 @@
 .board { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; padding: 8px; border: 1px solid #1c2738; border-radius: 12px; background: #080e19; }
 .board[data-live] { border-color: #2c4a66; }
 .board[data-impact=RED] { animation: shake 360ms ease-out; }
-.slowHint { margin: 8px 0 0; text-align: center; color: #94a2ba; font-size: .75rem; font-weight: 600; animation: popIn 220ms var(--g36-out); }
-.slowHint[data-level='2'] { color: var(--g36-amber); }
 .armHint { margin: 8px 0 0; text-align: center; color: var(--g36-cyan); font-size: .75rem; font-weight: 600; animation: popIn 300ms var(--g36-out) 300ms backwards; }
 
 /* Tile: a static base lip under a moving face (.inner). Only .inner moves. */
@@ -136,11 +133,17 @@
 /* Press: immediate squash before any network work. */
 .tile:enabled:active .inner { transform: translateY(3px) scale(.93); transition-duration: 40ms; }
 
-/* Pending = suspense: the one tile being confirmed trembles. */
-/* Tremble for ~1s, then settle into a calm pulse so a slow network never looks like a glitch. */
-.tile[data-pending] .inner { transform: translateY(3px); animation: tremble 180ms linear 6; }
-.tile[data-pending] .front { animation: pendingPulse 1s ease-in-out 1s 3; }
+/* Pending = slot reel: the tapped tile cross-fades loot -> clear -> K.O. for at most 4.8 seconds.
+   Only this one tile has the 3 layers, and only opacity/transform animate.
+   Reduced motion: the layers stay invisible and the static cyan face below shows instead. */
+.tile[data-pending] .inner { transform: translateY(3px); }
 .tile[data-pending] .front { border-color: var(--g36-cyan); background: #1b3346; }
+.reel { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; }
+.reel i { position: absolute; inset: 0; border-radius: inherit; opacity: 0; animation: reel 1.2s linear 4; }
+.reel i[data-k=loot] { background: radial-gradient(circle at 50% 50%, rgba(52, 211, 153, .5) 0, #10291f 72%); box-shadow: inset 0 0 0 1px var(--g36-green); }
+.reel i[data-k=clear] { background: radial-gradient(circle at 50% 50%, rgba(228, 207, 129, .42) 0, #17150f 72%); box-shadow: inset 0 0 0 1px #b49a5f; animation-delay: -.8s; }
+.reel i[data-k=ko] { background: radial-gradient(circle at 50% 50%, rgba(255, 93, 122, .45) 0, #2a1119 72%); box-shadow: inset 0 0 0 1px var(--g36-red); animation-delay: -.4s; }
+.tile[data-pending] .rune { position: relative; z-index: 1; border-color: #e8f6ff; animation: runeSpin 1.2s linear 4; }
 
 /* Revealed: flush with the base, face swapped. */
 .tile[data-color] .inner { transform: translateY(4px); }
@@ -274,12 +277,12 @@
 @keyframes popIn { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
 @keyframes shake { 0%, 100% { transform: none; } 15% { transform: translateX(-6px); } 30% { transform: translateX(5px); } 45% { transform: translateX(-4px); } 60% { transform: translateX(3px); } 80% { transform: translateX(-1px); } }
 @keyframes armWave { 0% { opacity: .55; transform: scale(.88); } 60% { opacity: 1; transform: translateY(-3px) scale(1.04); } 100% { opacity: 1; transform: none; } }
-@keyframes tremble { 0%, 100% { transform: translateY(3px) rotate(0); } 25% { transform: translateY(3px) rotate(-3deg); } 75% { transform: translateY(3px) rotate(3deg); } }
+@keyframes reel { 0% { opacity: 0; } 10% { opacity: 1; } 33.3% { opacity: 1; } 43.3% { opacity: 0; } 100% { opacity: 0; } }
+@keyframes runeSpin { from { transform: rotate(45deg); } to { transform: rotate(405deg); } }
 @keyframes flipOut { from { opacity: 1; transform: scaleX(1); } to { opacity: 1; transform: scaleX(0); } }
 @keyframes flipIn { from { opacity: 1; transform: scaleX(0) scaleY(.92); } 70% { transform: scaleX(1.08) scaleY(1.04); } to { opacity: 1; transform: none; } }
 @keyframes shock { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(1.45); } }
 @keyframes spark { 0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1); } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-34px) scale(.4); } }
-@keyframes pendingPulse { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
 @keyframes nextPulse { 0%, 100% { opacity: .65; } 50% { opacity: 1; } }
 @keyframes nodeLand { 0% { transform: scale(1); } 45% { transform: scale(1.3); } 100% { transform: scale(1); } }
 @keyframes resultIn { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
@@ -311,6 +314,7 @@
   .track::before, .trackFill { top: 14px; }
 }
 /* Reduced motion: keep every state change, drop decorative motion. */
+.shell[data-background] *, .shell[data-background] *::before, .shell[data-background] *::after { animation-play-state: paused !important; }
 @media (prefers-reduced-motion: reduce) {
   .inner, .cta, .timerFill, .trackFill { transition: none; }
   .shell *, .shell *::before, .shell *::after { animation: none !important; }

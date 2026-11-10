@@ -85,7 +85,12 @@ export async function revealMine(userId: string, input: { date: string; index: n
       // Another device or an older day may already have an active run. Never start two.
       const previous = await tx.guess36Entry.findFirst({ where: { userId, gameMode: 'MINES', mineStatus: 'ACTIVE' }, include: { round: { select: { roundDate: true } } } });
       if (previous) {
-        const recovered = await expire(tx, previous, now);
+        const recovered = await expire(tx, await rate(tx, previous, now), now);
+        // This first-pick request returned an existing run. Bind its recovery ID
+        // too, so a lost response cannot spend a bonus after that run finishes.
+        // Legacy day-derived IDs still address that day's FREE attempt, not
+        // an older run carried across midnight.
+        if (input.requestId) await saveReceipt(tx, userId, 'GUESS36_START', startId, startPayload, { runId: recovered.id });
         return publicMineRun(recovered, await ticketFor(tx, previous.id));
       }
       if ((await tx.setting.findUnique({ where: { key: MINES_ENABLED_KEY } }))?.value !== 'true') throw new RewardError('PAUSED', 'New runs are paused.', 403);

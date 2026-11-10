@@ -6,7 +6,7 @@ import emiilyPortrait from '@/public/images/emiily-avatar-v2.png';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal, flushSync } from 'react-dom';
+import { flushSync } from 'react-dom';
 import { MessageCircle, X, ArrowLeft, RotateCcw, Send } from 'lucide-react';
 import type { AssistantAllowance, AssistantCard, AssistantLink, AssistantMessage, BookingQuote, GuidedState, GuidedView } from '@/types/assistant';
 import { PUBLIC_HELP_LINKS } from '@/lib/assistant/public-help';
@@ -77,20 +77,6 @@ export function EmiAssistant() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [open, setOpen] = useState(false);
-  const [gameDock, setGameDock] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    if (pathname !== '/guess-36') { setGameDock(null); return; }
-    const mobile = window.matchMedia('(max-width: 640px)');
-    const sync = () => setGameDock(mobile.matches ? document.getElementById('guess36-chat-dock') : null);
-    sync();
-    // Client navigation may stream the destination after the pathname changes.
-    const observer = new MutationObserver(() => {
-      if (document.getElementById('guess36-chat-dock')) { sync(); observer.disconnect(); }
-    });
-    if (!document.getElementById('guess36-chat-dock')) observer.observe(document.body, { childList: true, subtree: true });
-    mobile.addEventListener('change', sync);
-    return () => { observer.disconnect(); mobile.removeEventListener('change', sync); };
-  }, [pathname]);
   const [view, setView] = useState<GuidedView>(HOME);
   const [busy, setBusy] = useState(false);
   const [mutating, setMutating] = useState(false);
@@ -122,7 +108,9 @@ export function EmiAssistant() {
   const chatInput = useRef<HTMLInputElement>(null);
   const chatInfo = useRef<HTMLDivElement>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
-  const hidden = ['/login', '/register', '/forgot-password'].includes(pathname);
+  // Emiily appears on the homepage only.
+  const hidden = pathname !== '/';
+  useEffect(() => { if (hidden) setOpen(false); }, [hidden]);
 
   const restoreLauncherFocus = useRef(false);
   const close = useCallback(() => { restoreLauncherFocus.current = true; setOpen(false); }, []);
@@ -131,7 +119,7 @@ export function EmiAssistant() {
       launcher.current.focus({ preventScroll: true });
       restoreLauncherFocus.current = false;
     }
-  }, [open, gameDock]);
+  }, [open]);
   useEffect(() => {
     if (!open || hidden) return;
     heading.current?.focus();
@@ -190,7 +178,7 @@ export function EmiAssistant() {
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => { if (open && messages.length) chatEnd.current?.scrollIntoView({ block: 'nearest' }); }, [messages, open]);
   useEffect(() => {
-    if (!open || chatBusy || sessionStatus !== 'authenticated' || !session?.user?.id) return;
+    if (!open || hidden || chatBusy || sessionStatus !== 'authenticated' || !session?.user?.id) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     let refreshSequence = 0;
@@ -221,7 +209,7 @@ export function EmiAssistant() {
     const focus = () => { if (Date.now() - (usageSnapshot.current?.at ?? 0) >= 30000) void refresh(); };
     window.addEventListener('focus', focus);
     return () => { controller.abort(); clearTimeout(timer); window.removeEventListener('focus', focus); };
-  }, [open, chatBusy, sessionStatus, session?.user?.id, usageRevision]);
+  }, [open, hidden, chatBusy, sessionStatus, session?.user?.id, usageRevision]);
 
   const navigate = useCallback(async (state: GuidedState, remember = true) => {
     if (actionLock.current) return;
@@ -444,6 +432,6 @@ export function EmiAssistant() {
       {typing && session?.user?.id && <form className="emi-composer" onSubmit={(event) => { event.preventDefault(); void send(input); }}><input ref={chatInput} aria-label="Message Emiily" value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder="Build tic-tac-toe in HTML" disabled={disabled || allowance?.remaining === 0} />{chatBusy ? <button type="button" aria-label="Stop response" onClick={() => { usageSnapshot.current = null; abort.current?.abort(); abort.current = null; sequence.current++; setBusy(false); setChatBusy(false); setNotice('Request stopped. Requests already sent still count.'); setUsageRevision((value) => value + 1); }}><X size={17} /></button> : <button aria-label="Send request" disabled={!input.trim() || disabled || allowance?.remaining === 0}><Send size={17} /></button>}</form>}
       <div className="emi-direct-links"><Link href="/book">Book</Link><Link href="/#live-station-availability">Availability</Link><Link href="/my-bookings">My bookings</Link><Link href="/games">Games</Link><Link href="/daily-spin">Daily Spin</Link></div>
     </div>}
-    {pathname === '/guess-36' && !open && gameDock?.isConnected ? createPortal(launcherButton, gameDock) : launcherButton}
+    {launcherButton}
   </div>;
 }

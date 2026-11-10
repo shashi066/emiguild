@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { applyMineAction, mineClock, mineNow, minePhase, mineSeconds, nextMineBoundary, olderMineResult, hasMineAttempt, skipMineEntry, readMineStart, mineStartKey } from '@/lib/guess-36-client';
 import type { MineActionResponse, MineRun, MineState } from '@/lib/guess-36-mines-rules';
 import { useCompleteGuess36Entry } from './Guess36LoadingBoundary';
@@ -22,6 +23,8 @@ async function request<T>(url: string, signal: AbortSignal, body?: unknown): Pro
 }
 
 export function useGuess36Run(initialState?: MineState, initialError?: string) {
+  const { data: session, status: sessionStatus } = useSession();
+  const account = useRef(session?.user?.id ?? null);
   const completeEntry = useCompleteGuess36Entry();
   const [state, setState] = useState(initialState);
   const [error, setError] = useState(initialError ?? '');
@@ -63,7 +66,9 @@ export function useGuess36Run(initialState?: MineState, initialError?: string) {
   const clearSession = useCallback(() => {
     prepared.current = false; setRetryStart(false);
     const previous = current.current;
-    if (previous) install({ ...previous, authenticated: false, recoveryKey: null, run: null, rewardTickets: [], legacyUsedToday: false, serverNow: new Date(mineNow(clock.current, performance.now())).toISOString() });
+    if (previous) install({ ...previous, authenticated: false, recoveryKey: null, run: null, rewardTickets: [], legacyUsedToday: false,
+      eligibility: { ...previous.eligibility, freeAvailable: false, bonuses: [], review: { ...previous.eligibility.review, claimed: false } },
+      serverNow: new Date(mineNow(clock.current, performance.now())).toISOString() });
   }, [install]);
 
   const finish = useCallback((sequence: number) => {
@@ -90,18 +95,37 @@ export function useGuess36Run(initialState?: MineState, initialError?: string) {
       if (saved) { query.delete('inspect'); query.delete('recover'); query.set('startRequest', saved.requestId); setUncertain(true); setRetryStart(true); }
       const next = await request<MineState>(`/api/guess-36/current${query.size ? `?${query}` : ''}`, abort.signal);
       if (mounted.current && sequence === generation.current) {
+        const accountStart = !saved && next.authenticated ? readMineStart(next) : null;
         if (saved && next.run) { const key = mineStartKey(current.current!); if (key) localStorage.removeItem(key); setRetryStart(false); }
         install(next, board && !saved);
+        if (accountStart) {
+          // An account restored after sign-in may have its own interrupted start.
+          // Reconcile it before enabling picks; never replay the transaction.
+          setUncertain(true); setRetryStart(true); queued.current = { reason: 'entry' };
+        }
       }
     } catch (cause) {
       if (mounted.current && sequence === generation.current) {
-        if (cause instanceof MineRequestError && cause.status === 401) clearSession();
+        if (cause instanceof MineRequestError && (cause.status === 401 || cause.code === 'FORBIDDEN')) clearSession();
         setError(cause instanceof Error && cause.name !== 'AbortError' ? cause.message : 'Connection slow. Check result to continue.');
       }
     } finally { clearTimeout(timeout); finish(sequence); }
   }, [install, finish, clearSession]);
 
   useEffect(() => { refreshRef.current = refresh; }, [refresh]);
+  useLayoutEffect(() => {
+    if (sessionStatus === 'loading') return;
+    const next = sessionStatus === 'authenticated' ? session?.user?.id ?? null : null;
+    if (next === account.current) return;
+    account.current = next;
+    // Invalidate old-account responses before they can install private state.
+    generation.current++; controller.current?.abort(); controller.current = null;
+    gate.current = false; queued.current = null; boardView.current = false;
+    expired.current = null; warned.current = null; boundaryAttempt.current = null;
+    setPending(null); setUncertain(false); setInspecting(false); setAnnouncement('');
+    clearSession();
+    if (next) void refreshRef.current({ view: 'current', reason: 'entry' });
+  }, [sessionStatus, session?.user?.id, clearSession]);
   useEffect(() => {
     mounted.current = true;
     const invalidate = () => { generation.current++; };
@@ -167,7 +191,9 @@ export function useGuess36Run(initialState?: MineState, initialError?: string) {
     const abort = new AbortController(); controller.current = abort;
     const timeout = setTimeout(() => abort.abort(), 20_000);
     try {
-      const activeRun = previous.run?.status === 'ACTIVE' ? previous.run : null;
+      // A first-pick retry always uses its saved request ID, even if another
+      // device's active board has since been restored. It must not add a pick.
+      const activeRun = !retry && previous.run?.status === 'ACTIVE' ? previous.run : null;
       let start = !activeRun ? readMineStart(previous) : null;
       if (!activeRun && index !== undefined && !start) {
         const key = mineStartKey(previous);
@@ -191,7 +217,7 @@ export function useGuess36Run(initialState?: MineState, initialError?: string) {
       if (mounted.current && sequence === generation.current) {
         if (cause instanceof MineRequestError && (cause.status === 401 || cause.code === 'FORBIDDEN')) clearSession();
         else {
-          if (previous.run?.status !== 'ACTIVE' && cause instanceof MineRequestError && cause.status < 500 && cause.code !== 'REQUEST_CONFLICT') {
+          if ((retry || previous.run?.status !== 'ACTIVE') && cause instanceof MineRequestError && cause.status < 500 && cause.code !== 'REQUEST_CONFLICT') {
             try { const key = mineStartKey(previous); if (key) localStorage.removeItem(key); } catch { /* Preserve recovery when storage is unavailable. */ }
           }
           setUncertain(true); try { setRetryStart(!!readMineStart(previous)); } catch { /* Keep uncertain state. */ }
@@ -202,10 +228,20 @@ export function useGuess36Run(initialState?: MineState, initialError?: string) {
     } finally { clearTimeout(timeout); finish(sequence); }
   };
 
+  const retryFirstAction = () => {
+    try {
+      const saved = current.current && readMineStart(current.current);
+      if (saved) void act(saved.index, true);
+      else { setRetryStart(false); void refresh(); }
+    } catch {
+      setUncertain(true); setError('Saved first reveal could not be read. Check result before continuing.');
+    }
+  };
+
   return {
     state, error, pending, busy: pending !== null, armed, uncertain, inspecting, announcement,
     seconds: mineSeconds(run, now), now, phase: minePhase(state),
-    retryFirst: retryStart ? () => void act(readMineStart(current.current!)?.index, true) : undefined,
+    retryFirst: retryStart ? retryFirstAction : undefined,
     play: () => { const value = current.current; if (!value || uncertain || gate.current || !value.enabled || !hasMineAttempt(value) || value.run?.status === 'ACTIVE') return; prepared.current = true; boardView.current = false; install({ ...value, run: null }); setArmed(true); }, act, refresh,
   };
 }
