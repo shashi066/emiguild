@@ -104,11 +104,12 @@ export function useGuess36Run(initialState?: MineState, initialError?: string) {
   useEffect(() => { refreshRef.current = refresh; }, [refresh]);
   useEffect(() => {
     mounted.current = true;
+    if (initialError || (current.current && skipMineEntry(current.current))) completeEntry();
     const invalidate = () => { generation.current++; };
     let resume: ReturnType<typeof setTimeout> | undefined;
     // App Router Back can restore old server props after a pending request.
     // Verify once on entry, retaining content and never repeating a mutation.
-    if (current.current?.authenticated) { try { if (readMineStart(current.current)) { setUncertain(true); setRetryStart(true); } } catch { setUncertain(true); setError('Saved first reveal could not be read. Check result before continuing.'); } }
+    if (current.current?.authenticated) { try { if (readMineStart(current.current)) { completeEntry(); setUncertain(true); setRetryStart(true); } } catch { completeEntry(); setUncertain(true); setError('Saved first reveal could not be read. Check result before continuing.'); } }
     if (current.current?.authenticated) resume = setTimeout(() => void refreshRef.current({ reason: 'entry' }), 0);
     let hidden = document.hidden;
     const onVisibility = () => {
@@ -125,7 +126,7 @@ export function useGuess36Run(initialState?: MineState, initialError?: string) {
       clearTimeout(resume); controller.current?.abort(); controller.current = null;
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, []);
+  }, [completeEntry, initialError]);
 
   const run = state?.run;
   useEffect(() => {
