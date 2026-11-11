@@ -16,7 +16,6 @@ import {
   Trophy,
   Tv,
 } from 'lucide-react';
-import { warmServer } from '@/lib/warm-server';
 
 const CLOSE_DELAY_MS = 125;
 
@@ -110,7 +109,6 @@ export function SideQuestsMenu({ pathname }: SideQuestsMenuProps) {
 
   const openMenu = useCallback(() => {
     clearCloseTimer();
-    warmServer();
     setIsOpen(true);
   }, [clearCloseTimer]);
 
@@ -136,7 +134,6 @@ export function SideQuestsMenu({ pathname }: SideQuestsMenuProps) {
       return;
     }
     openedByClickRef.current = true;
-    warmServer();
     setIsOpen(true);
   }, [clearCloseTimer, closeMenu]);
 

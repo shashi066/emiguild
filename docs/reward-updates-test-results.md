@@ -124,3 +124,7 @@ No new schema, migration, reward value, probability, guarantee, artwork, CSS or 
 - Final direct production compilation passed without running migrations. **9 presentation-browser scenarios passed with no runtime errors** at 320/375/430px and desktop, including reward-text containment throughout its reveal. These mock game transactions; the separate 41-scenario suite uses actual authenticated transaction paths except the explicitly identified fixtures above. Screenshots were visually inspected. Logs: `%TEMP%/reward-final-{build,browser,ui}.log`. Full-flow browser artifacts: `%TEMP%/guild-expedition-ui-03GDDd`; final UI artifacts: `%TEMP%/g36-ui-polish-rJKgee`.
 
 Original Chrome-profile access and physical low-end Android performance remain unverified. The 4x CPU-throttled browser interaction is not a real-device performance result. No production deployment or activation is part of these checks.
+
+## Warm-up removed - 11 November 2026
+
+- The production Vercel functions for emiguild.in moved from `iad1` (US East) to `sin1` (Singapore), the same region as the Neon database. The `/api/warm` endpoint, its client helper, its Home/menu triggers and its tests were removed. The warm-up results recorded above describe code that no longer exists.

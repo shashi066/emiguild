@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Castle, RotateCw, Hammer, Target, Gift, Trophy } from 'lucide-react';
-import { warmServer } from '@/lib/warm-server';
 import styles from './side-quest-showcase.module.css';
 
 const quests = [
@@ -39,7 +38,7 @@ export default function SideQuestShowcase() {
       <div className={styles.hub} aria-hidden="true"><span>EMI</span><strong>GUILD</strong></div>
       <nav className={styles.orbit} aria-label="Side quests">{quests.map((quest, i) => {
         const Icon = quest.icon;
-        return <Link href={quest.href} key={quest.href} className={styles.satellite} onPointerEnter={warmServer} onPointerDown={warmServer} onFocus={warmServer} style={{ '--angle': `${i * 60 - 90}deg`, '--counter-angle': `${90 - i * 60}deg` } as React.CSSProperties}>
+        return <Link href={quest.href} key={quest.href} className={styles.satellite} style={{ '--angle': `${i * 60 - 90}deg`, '--counter-angle': `${90 - i * 60}deg` } as React.CSSProperties}>
           <span className={styles.label}><Icon size={24} aria-hidden="true" /><span className={styles.name}>{quest.name}</span></span>
         </Link>;
       })}</nav>
