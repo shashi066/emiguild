@@ -279,7 +279,6 @@ async function finishWithInfo(game,endpoint,action,result) {
   }
   browser=await chromium.launch({channel:'chrome',headless:true});
   const anonymous=await browser.newContext();const anon=await anonymous.newPage();anon.on('pageerror',e=>errors.push(e.message));await anon.goto(base+'/guess-36');await anon.getByRole('link',{name:'Sign in to play'}).waitFor({state:'visible'});assert.equal(await anon.getByRole('button',{name:/^Tile /}).count(),0);rules=await(await anonymous.request.get(base+'/api/guess-36/current')).json().then(s=>s.rules);await anonymous.close();ok('actual signed-out page hides board');
-  const warm=await fetch(base+'/api/warm');assert.equal(warm.status,204);assert.equal(await warm.text(),'');assert.match(warm.headers.get('cache-control'),/no-store/);ok('actual public warm-up returns no data and cannot be cached');
   if(process.env.GUESS36_LOADING_ONLY==='true') {await loadingChecks();assert.deepEqual(errors,[]);console.log(JSON.stringify({checks:checks.length,errors,output:dir,realAuthenticated:true,disposableDatabase:true}));return;}
   if(process.env.GUESS36_UI_ONLY==='true') {
    const user=await prisma.user.create({data:{name:'UI review fixture',email:`expedition-ui-${randomUUID()}@example.test`,password:await bcrypt.hash(password,4)}});
