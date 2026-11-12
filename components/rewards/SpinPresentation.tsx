@@ -42,8 +42,10 @@ export function SpinPresentation({ gridItems, highlighted, spinning, reward, str
   return <div className="spin-presentation">
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes cellPop  { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+        @keyframes spinHighlightPulse { 0%,100% { opacity: 0.35; } 50% { opacity: 0.85; } }
         @keyframes winPop   { 0% { transform: scale(0.85); opacity: 0; } 80% { transform: scale(1.06); } 100% { transform: scale(1); opacity: 1; } }
-        .spin-presentation .spin-cell-highlighted { animation: cellPop 0.25s ease; }
+        .spin-presentation .spin-cell-highlighted { position: relative; animation: cellPop 0.25s ease; }
+        .spin-presentation .spin-cell-highlighted::after { content: ''; position: absolute; inset: -2px; border: 2px solid var(--hl-color); border-radius: inherit; pointer-events: none; opacity: 0.35; animation: spinHighlightPulse 600ms ease-in-out infinite; }
         .spin-presentation .spin-cell-winner { position: relative; z-index: 2; animation: winPop 0.3s ease both; outline: 2px solid var(--hl-color); outline-offset: 2px; }
         .reward-reveal         { animation: winPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
       ` }} />
@@ -188,5 +190,5 @@ export function SpinPresentation({ gridItems, highlighted, spinning, reward, str
           </div>
         )}
 
-<style>{`@media(prefers-reduced-motion:reduce) { .spin-presentation * { animation: none !important; transition: none !important; } }`}</style></div>;
+<style>{`@media(prefers-reduced-motion:reduce) { .spin-presentation *, .spin-presentation *::before, .spin-presentation *::after { animation: none !important; transition: none !important; } }`}</style></div>;
 }
