@@ -11,13 +11,18 @@ import {
 const GUILD_PLAN_SETTING_KEY = 'guild_membership_plans';
 const SERIALIZABLE_RETRY_LIMIT = 2;
 
+// Throws on failure, so a cache never stores the fallback plans as if they were real prices.
+export async function readGuildMembershipPlans(): Promise<GuildMembershipPlan[]> {
+  const setting = await prisma.setting.findUnique({
+    where: { key: GUILD_PLAN_SETTING_KEY },
+    select: { value: true },
+  });
+  return normalizeGuildMembershipPlans(setting ? JSON.parse(setting.value) : null);
+}
+
 export async function loadGuildMembershipPlans(): Promise<GuildMembershipPlan[]> {
   try {
-    const setting = await prisma.setting.findUnique({
-      where: { key: GUILD_PLAN_SETTING_KEY },
-      select: { value: true },
-    });
-    return normalizeGuildMembershipPlans(setting ? JSON.parse(setting.value) : null);
+    return await readGuildMembershipPlans();
   } catch (error) {
     console.error('[guild-membership] Failed to load plan settings:', error);
     return normalizeGuildMembershipPlans(null);

@@ -215,6 +215,8 @@ export async function PATCH(req: NextRequest) {
       });
       const { invalidateAssistantKnowledge } = await import('@/lib/assistant/knowledge-cache');
       invalidateAssistantKnowledge();
+      const { invalidateGuildMembershipPlans } = await import('@/lib/public-catalog-cache');
+      invalidateGuildMembershipPlans();
       return NextResponse.json({ plan });
     }
 

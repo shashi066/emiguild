@@ -9,6 +9,8 @@ import { auth } from '@/auth';
 import { z } from 'zod';
 import { PS5_RENTAL_STATUSES } from '@/lib/ps5-rental';
 import { invalidateAssistantKnowledge } from '@/lib/assistant/knowledge-cache';
+import { invalidateGuildMembershipPlans } from '@/lib/public-catalog-cache';
+import { HOME_POPUP_SETTING_KEY, validateHomePopup } from '@/lib/home-popup';
 
 const INTERNAL_SETTING_KEYS = new Set([
   HAPPY_CONFIG_KEY, SPIN_SELECTION_KEY,
@@ -81,6 +83,13 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: 'PS5 rental prices must be whole numbers from 0 to 100,000.' }, { status: 400 });
       }
     }
+    if (setting.key === HOME_POPUP_SETTING_KEY) {
+      let parsed: unknown;
+      try { parsed = JSON.parse(setting.value); } catch { parsed = null; }
+      const popup = validateHomePopup(parsed);
+      if (!popup.ok) return NextResponse.json({ error: `Home popup: ${popup.error}` }, { status: 400 });
+      setting.value = JSON.stringify(popup.config);
+    }
   }
 
   const updated = await Promise.all(
@@ -94,5 +103,6 @@ export async function PUT(req: NextRequest) {
   );
 
   invalidateAssistantKnowledge();
+  if (result.data.some((setting) => setting.key === 'guild_membership_plans')) invalidateGuildMembershipPlans();
   return NextResponse.json({ settings: updated });
 }

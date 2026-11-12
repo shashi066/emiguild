@@ -1,0 +1,167 @@
+/* The shell supplies the overlay, focus trap and scroll lock; the visible card lives inside. */
+.dialog.dialog {
+  max-width: 400px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+/* Focus moves to the dialog on open; the card itself is the visual frame, so no ring around it. */
+.dialog.dialog:focus { outline: none; }
+.card {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  padding: 28px 24px 24px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 140, 90, 0.32);
+  background:
+    radial-gradient(120% 70% at 100% 0%, rgba(255, 79, 154, 0.2), transparent 60%),
+    radial-gradient(90% 60% at 0% 100%, rgba(255, 170, 0, 0.12), transparent 60%),
+    var(--color-bg-card);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  animation: popIn .32s cubic-bezier(.2, .9, .3, 1.2) both;
+}
+.preview { animation: none; box-shadow: none; }
+.preview .price { animation: none; }
+.close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.close:hover, .close:focus-visible { background: rgba(255, 255, 255, 0.12); color: var(--color-text-primary); }
+.eyebrow {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(0, 230, 118, 0.35);
+  background: rgba(0, 230, 118, 0.1);
+  color: var(--color-accent-success);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.title {
+  margin: 0;
+  font-family: Orbitron, sans-serif;
+  font-size: clamp(2.2rem, 10vw, 2.9rem);
+  font-weight: 900;
+  line-height: 1.05;
+  background: linear-gradient(100deg, #ff4f9a 0%, #ff8a3d 55%, #ffd23f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  overflow-wrap: anywhere;
+}
+.subtitle { margin: 0; color: var(--color-text-secondary); font-size: .95rem; line-height: 1.5; }
+.prices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.prices[data-wide-prices] { grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); }
+/* Each tile takes the next accent: the title's sunset stops first (pink → orange → gold), then violet, cyan, green. */
+.price {
+  --tile: #ff4f9a;
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 14px 8px 12px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-color: color-mix(in srgb, var(--tile) 45%, transparent);
+  background: rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tile) 20%, transparent), color-mix(in srgb, var(--tile) 5%, transparent));
+  box-shadow: 0 8px 22px -14px var(--tile);
+  animation: tileIn .32s ease-out both;
+}
+.price::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--tile);
+}
+.price:nth-child(6n + 2) { --tile: #ff8a3d; animation-delay: 60ms; }
+.price:nth-child(6n + 3) { --tile: #ffd23f; animation-delay: 120ms; }
+.price:nth-child(6n + 4) { --tile: #a78bfa; animation-delay: 180ms; }
+.price:nth-child(6n + 5) { --tile: #38bdf8; animation-delay: 240ms; }
+.price:nth-child(6n + 6) { --tile: #34d399; animation-delay: 300ms; }
+.priceLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  color: color-mix(in srgb, var(--tile) 55%, #e2e8f0);
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.priceAmount {
+  min-width: 0;
+  white-space: nowrap;
+  color: var(--tile);
+  font-family: Orbitron, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--tile) 55%, transparent);
+}
+.note { margin: 0; color: var(--color-text-muted); font-size: .8rem; line-height: 1.5; }
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  background: #25d366;
+  color: #062b16;
+  font-weight: 800;
+  font-size: .95rem;
+  text-decoration: none;
+  transition: background .15s, transform .15s;
+}
+.action:hover, .action:focus-visible { background: #3ee07b; color: #062b16; transform: translateY(-1px); }
+.linkAction { background: linear-gradient(100deg, #ff4f9a, #ff8a3d); color: #1a0710; }
+.linkAction:hover, .linkAction:focus-visible { background: linear-gradient(100deg, #ff6aab, #ffa05c); color: #1a0710; }
+@keyframes popIn { from { opacity: 0; transform: translateY(12px) scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes tileIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.75); } }
+@media (max-width: 360px) {
+  .card { padding: 24px 16px 18px; }
+  .prices { gap: 8px; }
+  .price { padding: 10px 4px; }
+  .priceAmount { font-size: 1.05rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .dot, .price { animation: none; }
+  .action { transition: none; }
+}
