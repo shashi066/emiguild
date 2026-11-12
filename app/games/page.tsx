@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Gamepad2, Calendar, ChevronRight, Award } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
+import { loadCachedActiveGames } from '@/lib/public-catalog-cache';
 
 const CATEGORIES = [
   'Single-Player Adventures',
@@ -8,21 +8,8 @@ const CATEGORIES = [
   'Racing & Simulator Experience',
 ];
 
-async function getGames() {
-  try {
-    const games = await prisma.game.findMany({
-      where: { isActive: true },
-      orderBy: [{ category: 'asc' }, { position: 'asc' }, { name: 'asc' }],
-    });
-    return games;
-  } catch (error) {
-    console.error('Error fetching games:', error);
-    return [];
-  }
-}
-
 export default async function GamesPage() {
-  const games = await getGames();
+  const games = await loadCachedActiveGames();
 
   // Group games by category
   const groupedGames = games.reduce((acc, game) => {

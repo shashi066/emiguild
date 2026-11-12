@@ -1,0 +1,30 @@
+.loader {
+  min-height: calc(100svh - 72px);
+  min-height: calc(100dvh - 72px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  gap: 20px;
+  background: var(--color-bg-base);
+}
+.fan { width: min(100%, 300px); height: auto; flex-shrink: 0; overflow: visible; stroke-linecap: round; stroke-linejoin: round; }
+.card { opacity: 0; transform: translateY(16px) scale(.96); transform-box: fill-box; transform-origin: center bottom; animation: deal .3s ease-out both; }
+.face { fill: #0d1522; stroke: var(--tier); stroke-width: 2; }
+.stripe { fill: none; stroke: var(--tier); stroke-width: 6; stroke-opacity: .55; }
+.emblem { fill: var(--tier); fill-opacity: .2; stroke: var(--tier); stroke-width: 1.5; }
+.hours { fill: none; stroke: var(--tier); stroke-width: 3; stroke-opacity: .7; }
+.apex { animation-name: dealApex; }
+.caption { margin: 0; color: var(--color-text-secondary); font-size: .95rem; line-height: 1.5; text-align: center; }
+@keyframes deal { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes dealApex {
+  from { opacity: 0; transform: translateY(16px) scale(.96); }
+  70% { opacity: 1; transform: translateY(-2px) scale(1.05); }
+  to { opacity: 1; transform: translateY(-2px) scale(1.04); }
+}
+.complete .card { animation: none; opacity: 1; transform: none; }
+.complete .apex { transform: translateY(-2px) scale(1.04); }
+@media (prefers-reduced-motion: reduce) {
+  .card, .apex { animation: none; opacity: 1; transform: none; }
+}

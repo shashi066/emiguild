@@ -10,8 +10,8 @@ async function loadFixture(t) {
     session: { user: { id: 'catalog-admin', role: 'ADMIN' } },
     settings: new Map([['guild_membership_plans', JSON.stringify({ GUILD_HERO: { price: 599 } })]]),
     cached: new Map(), invalidations: [], planReads: 0, gameReads: 0,
-    failPlanReads: 0, failGameReads: 0,
-    games: [{ id: 'game-1', name: 'Test game', category: 'Single-Player Adventures' }],
+    failPlanReads: 0, failGameReads: 0, failGameWrites: false,
+    games: [{ id: 'game-1', name: 'Test game', category: 'Single-Player Adventures', isActive: true }],
   };
   globalThis.__catalogFixture = state;
   t.after(() => { delete globalThis.__catalogFixture; });
@@ -25,7 +25,13 @@ async function loadFixture(t) {
         const row=s.settings.has(a.where.key)?a.update:a.create;
         s.settings.set(a.where.key,row.value);return {key:a.where.key,...row};}
     },game:{findMany:async()=>{const s=globalThis.__catalogFixture;s.gameReads++;
-      if(s.failGameReads>0){s.failGameReads--;throw Error('Game read failed');}return s.games;}}};`,
+      if(s.failGameReads>0){s.failGameReads--;throw Error('Game read failed');}return s.games.filter(game=>game.isActive!==false).map(game=>({...game}));},
+      create:async({data})=>{const s=globalThis.__catalogFixture;if(s.failGameWrites)throw Error('Game write failed');
+        const game={id:'game-new',isActive:true,...data};s.games=[...s.games,game];return game;},
+      update:async({where,data})=>{const s=globalThis.__catalogFixture;if(s.failGameWrites)throw Error('Game write failed');
+        const game=s.games.find(game=>game.id===where.id);if(!game)throw Error('Game not found');Object.assign(game,data);return game;},
+      delete:async({where})=>{const s=globalThis.__catalogFixture;if(s.failGameWrites)throw Error('Game write failed');
+        s.games=s.games.filter(game=>game.id!==where.id);return {id:where.id};}}};`,
     'next/cache': `export const unstable_cache=(read,keys,options)=>async()=>{
       const s=globalThis.__catalogFixture,key=keys.join(':');
       if(s.cached.has(key))return s.cached.get(key).value;
@@ -42,6 +48,7 @@ async function loadFixture(t) {
   const bundled = await build({
     stdin: { contents: `export { PUT } from './app/api/admin/settings/route';
       export { PATCH } from './app/api/admin/passes/route';
+      export * as games from './app/api/games/route';
       export { loadCachedGuildMembershipPlans, loadCachedActiveGames } from './lib/public-catalog-cache';
       export { readGuildMembershipPlans } from './lib/guild-membership-server';`,
     resolveDir: process.cwd(), sourcefile: 'catalog-fixture.ts', loader: 'ts' },
@@ -57,7 +64,7 @@ async function loadFixture(t) {
   return { state, api: mod.exports };
 }
 
-const request = (method, body) => new Request('http://localhost/api/admin/settings', {
+const request = (method, body, url = '/api/admin/settings') => new Request(`http://localhost${url}`, {
   method, headers: { 'Content-Type': 'application/json', origin: 'http://localhost' }, body: JSON.stringify(body),
 });
 const heroPrice = plans => plans.find(plan => plan.type === 'GUILD_HERO').price;
@@ -109,4 +116,47 @@ test('non-admin users cannot update prices or invalidate their cache', async t =
   assert.equal((await api.PATCH(request('PATCH', { action: 'updatePlan' }))).status, 403);
   assert.equal(state.planReads, 0);
   assert.deepEqual(state.invalidations, []);
+});
+
+test('creating, editing, deactivating and deleting games each invalidate the public list', async t => {
+  const { state, api } = await loadFixture(t);
+  assert.equal((await api.loadCachedActiveGames()).length, 1);
+  assert.equal((await api.games.POST(request('POST', { name: 'New game', category: 'Single-Player Adventures' }, '/api/games'))).status, 201);
+  assert.equal((await api.loadCachedActiveGames()).length, 2);
+  assert.equal((await api.games.PATCH(request('PATCH', { id: 'game-new', name: 'Renamed game' }, '/api/games'))).status, 200);
+  assert.equal((await api.loadCachedActiveGames()).find(game => game.id === 'game-new').name, 'Renamed game');
+  assert.equal((await api.games.PATCH(request('PATCH', { id: 'game-new', isActive: false }, '/api/games'))).status, 200);
+  assert.equal((await api.loadCachedActiveGames()).some(game => game.id === 'game-new'), false);
+  assert.equal((await api.games.DELETE(request('DELETE', undefined, '/api/games?id=game-1'))).status, 200);
+  assert.deepEqual(await api.loadCachedActiveGames(), []);
+  assert.deepEqual(state.invalidations, Array.from({ length: 4 }, () => ({ tag: 'public-active-games', profile: { expire: 0 } })));
+  assert.equal(state.gameReads, 5);
+});
+
+test('rejected or failed game writes leave the cache intact', async t => {
+  const { state, api } = await loadFixture(t);
+  t.mock.method(console, 'error', () => {});
+  await api.loadCachedActiveGames();
+  assert.equal((await api.games.POST(request('POST', { name: '', category: 'test' }, '/api/games'))).status, 400);
+  assert.equal((await api.games.PATCH(request('PATCH', {}, '/api/games'))).status, 400);
+  assert.equal((await api.games.DELETE(request('DELETE', undefined, '/api/games'))).status, 400);
+  state.failGameWrites = true;
+  assert.equal((await api.games.POST(request('POST', { name: 'New game', category: 'test' }, '/api/games'))).status, 500);
+  assert.equal((await api.games.PATCH(request('PATCH', { id: 'game-1', name: 'Rename' }, '/api/games'))).status, 500);
+  assert.equal((await api.games.DELETE(request('DELETE', undefined, '/api/games?id=game-1'))).status, 500);
+  assert.deepEqual(state.invalidations, []);
+  await api.loadCachedActiveGames(); assert.equal(state.gameReads, 1);
+});
+
+test('game mutations remain admin-only and public reads do not invalidate anything', async t => {
+  const { state, api } = await loadFixture(t);
+  state.session = null;
+  assert.equal((await api.games.GET()).status, 200);
+  assert.equal((await api.games.POST(request('POST', { name: 'New game', category: 'test' }, '/api/games'))).status, 401);
+  assert.equal((await api.games.PATCH(request('PATCH', { id: 'game-1', name: 'Rename' }, '/api/games'))).status, 401);
+  assert.equal((await api.games.DELETE(request('DELETE', undefined, '/api/games?id=game-1'))).status, 401);
+  state.session = { user: { id: 'ordinary-user', role: 'USER' } };
+  assert.equal((await api.games.POST(request('POST', { name: 'New game', category: 'test' }, '/api/games'))).status, 401);
+  assert.deepEqual(state.invalidations, []);
+  assert.equal(state.games.length, 1);
 });
