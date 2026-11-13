@@ -8,7 +8,7 @@ import {
   GuildMembershipPlan,
   getGuildMembershipPlan,
 } from '@/lib/guild-membership';
-import { loadGuildMembershipPlans } from '@/lib/guild-membership-server';
+import { loadCachedGuildMembershipPlans } from '@/lib/public-catalog-cache';
 
 export const metadata: Metadata = {
   title: 'Monthly Gaming Passes',
@@ -327,7 +327,7 @@ function GuildMembershipSection({ plans }: { plans: GuildMembershipPlan[] }) {
 }
 
 export default async function PassesPage() {
-  const guildPlans = await loadGuildMembershipPlans();
+  const guildPlans = await loadCachedGuildMembershipPlans();
 
   return (
     <div style={{ minHeight: '100vh', paddingTop: 80 }}>

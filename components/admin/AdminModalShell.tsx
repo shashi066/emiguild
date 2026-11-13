@@ -11,6 +11,7 @@ export type AdminModalShellProps = {
   children: ReactNode;
   size?: AdminModalShellSize;
   lightweight?: boolean;
+  dialogClassName?: string;
 };
 
 const FOCUSABLE_ELEMENT_SELECTOR = [
@@ -50,6 +51,7 @@ export function AdminModalShell({
   children,
   size = 'default',
   lightweight = false,
+  dialogClassName,
 }: AdminModalShellProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -164,7 +166,7 @@ export function AdminModalShell({
     >
       <div
         ref={dialogRef}
-        className={`admin-modal-dialog admin-booking-modal-dialog admin-modal-dialog--${size}${lightweight ? ' admin-modal-dialog--lightweight' : ''} card`}
+        className={`admin-modal-dialog admin-booking-modal-dialog admin-modal-dialog--${size}${lightweight ? ' admin-modal-dialog--lightweight' : ''} card${dialogClassName ? ` ${dialogClassName}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}

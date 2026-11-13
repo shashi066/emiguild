@@ -142,21 +142,29 @@ export function animateDailySpin<T extends { reward: { id: string } }>(
     let steps = 0;
     let result: T | undefined;
     let done = false;
-    const stop = () => { if (timer) clearTimeout(timer); signal.removeEventListener('abort', abort); };
-    const abort = () => { done = true; stop(); reject(new Error('Animation closed')); };
-    const tick = () => {
-      if (done) return;
-      steps++;
-      if (result && (reducedMotion || steps >= 28)) {
-        const winner = items.findIndex(item => item.id === result!.reward.id);
-        highlight(winner < 0 ? null : winner);
-        timer = setTimeout(() => { done = true; stop(); resolve(result!); }, reducedMotion ? 0 : 600);
-        return;
-      }
-      if (!reducedMotion && items.length) highlight(Math.floor(Math.random() * items.length));
-      timer = setTimeout(tick, reducedMotion ? 100 : steps < 20 ? 60 : Math.min(760, 120 + (steps - 20) * 80));
+    let finishing = false;
+    const stop = () => { clearTimeout(timer); timer = undefined; signal.removeEventListener('abort', abort); };
+    const abort = () => { if (done) return; done = true; stop(); reject(new Error('Animation closed')); };
+    const finishIfReady = () => {
+      if (done || finishing) return true;
+      if (!result || (!reducedMotion && steps < 28)) return false;
+      finishing = true;
+      clearTimeout(timer);
+      const committed = result;
+      const winner = items.findIndex(item => item.id === committed.reward.id);
+      highlight(winner < 0 ? null : winner);
+      if (!done) timer = setTimeout(() => { done = true; stop(); resolve(committed); }, reducedMotion ? 0 : 600);
+      return true;
     };
-    operation.then(value => { result = value; }, error => { if (!done) { done = true; stop(); reject(error); } });
+    const tick = () => {
+      if (done || finishing) return;
+      steps++;
+      if (finishIfReady()) return;
+      if (!reducedMotion && items.length) highlight(Math.floor(Math.random() * items.length));
+      if (!done) timer = setTimeout(tick, reducedMotion ? 100 : steps < 20 ? 60 : Math.min(760, 120 + (steps - 20) * 80));
+    };
+    // A late response can land immediately once the original sequence has run.
+    operation.then(value => { if (!done) { result = value; finishIfReady(); } }, error => { if (!done) { done = true; stop(); reject(error); } });
     if (signal.aborted) { abort(); return; }
     signal.addEventListener('abort', abort, { once: true });
     timer = setTimeout(tick, reducedMotion ? 0 : 60);

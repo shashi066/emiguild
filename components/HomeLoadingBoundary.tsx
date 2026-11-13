@@ -63,6 +63,16 @@ export function useHomeHeroReady() {
   const controller = useContext(ProgressContext);
   useEffect(() => { controller?.mark('hero'); }, [controller]);
 }
+const noController = () => () => {};
+/** True once the branded home loader has handed over to the page (or when no loader runs). */
+export function useHomeRevealed() {
+  const controller = useContext(ProgressContext);
+  return useSyncExternalStore(
+    controller?.subscribe ?? noController,
+    () => !controller || controller.getPhase() === 'ready',
+    () => false,
+  );
+}
 export function HomePageReady() {
   const controller = useContext(ProgressContext);
   useEffect(() => { controller?.mark('page'); }, [controller]);

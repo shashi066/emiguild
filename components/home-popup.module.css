@@ -1,0 +1,138 @@
+/* The shell supplies the overlay, focus trap and scroll lock; the visible card lives inside. */
+.dialog.dialog {
+  max-width: 400px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+/* Focus moves to the dialog on open; the card itself is the visual frame, so no ring around it. */
+.dialog.dialog:focus { outline: none; }
+.card {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 79, 154, 0.28);
+  background: var(--color-bg-card);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  text-align: left;
+  animation: enter .2s ease-out both;
+}
+.preview { animation: none; box-shadow: none; }
+.close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.close:hover, .close:focus-visible { background: rgba(255, 255, 255, 0.08); color: var(--color-text-primary); }
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 40px;
+  color: var(--color-accent-success);
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.title {
+  margin: 0;
+  padding-right: 40px;
+  color: #ff4f9a;
+  font-family: Orbitron, sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.subtitle { margin: 0; color: var(--color-text-secondary); font-size: .95rem; line-height: 1.5; }
+.prices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.prices[data-wide-prices] { grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); }
+/* One flat colour per tile, from the title's pink through orange and gold; rows 4–6 add violet, cyan, green. */
+.price {
+  --tile: #ff4f9a;
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-color: color-mix(in srgb, var(--tile) 40%, transparent);
+  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--tile) 10%, transparent);
+}
+.price:nth-child(6n + 2) { --tile: #ff8a3d; }
+.price:nth-child(6n + 3) { --tile: #ffd23f; }
+.price:nth-child(6n + 4) { --tile: #a78bfa; }
+.price:nth-child(6n + 5) { --tile: #38bdf8; }
+.price:nth-child(6n + 6) { --tile: #34d399; }
+.priceLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  font-size: .8rem;
+  font-weight: 600;
+}
+.priceAmount {
+  min-width: 0;
+  white-space: nowrap;
+  color: var(--tile);
+  font-family: Orbitron, sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.note { margin: 0; color: var(--color-text-secondary); font-size: .8rem; line-height: 1.5; }
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  background: #25d366;
+  color: #062b16;
+  font-weight: 700;
+  font-size: .95rem;
+  text-decoration: none;
+  transition: background .15s;
+}
+.action:hover, .action:focus-visible { background: #3ee07b; color: #062b16; }
+.linkAction { background: var(--color-accent-primary); color: #fff; }
+.linkAction:hover, .linkAction:focus-visible { background: #7d75ff; color: #fff; }
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 360px) {
+  .card { padding: 20px 16px 16px; }
+  .price { padding: 10px 8px; }
+  .priceAmount { font-size: 1.05rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card { animation: none; }
+  .close, .action { transition: none; }
+}

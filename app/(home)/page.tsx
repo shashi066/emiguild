@@ -5,6 +5,8 @@ import SideQuestShowcase from '@/components/SideQuestShowcase';
 import HomeVaultButton from '@/components/HomeVaultButton';
 import vaultButtonStyles from '@/components/home-vault-button.module.css';
 import HomepageVisitTracker from '@/components/HomepageVisitTracker';
+import HomePopup from '@/components/HomePopup';
+import { HOME_POPUP_SETTING_KEY, parseHomePopup } from '@/lib/home-popup';
 import { StationAvailabilityBoard } from '@/components/StationAvailabilityBoard';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
@@ -110,12 +112,13 @@ export default async function HomePage() {
     getStats(),
     sessionPromise,
     loadActiveSpecialOpening(now),
-    prisma.setting.findMany({ where: { key: { in: ['show_stations_availability', 'ps5_rental_status', 'ps5_rental_enabled'] } } }),
+    prisma.setting.findMany({ where: { key: { in: ['show_stations_availability', 'ps5_rental_status', 'ps5_rental_enabled', HOME_POPUP_SETTING_KEY] } } }),
     towerPromptPromise,
   ]);
   const homeSettingsMap = Object.fromEntries(homeSettings.map((setting) => [setting.key, setting.value]));
   const showStationsAvailability = homeSettingsMap.show_stations_availability !== 'false';
   const ps5RentalStatus = resolvePs5RentalAvailability(homeSettingsMap);
+  const homePopup = parseHomePopup(homeSettingsMap[HOME_POPUP_SETTING_KEY]);
   const indiaClock = getIndiaClock(now);
   const specialOpeningNotice = getSpecialOpeningNotice(
     specialOpening,
@@ -127,6 +130,7 @@ export default async function HomePage() {
     <>
       <HomePageReady />
       <HomepageVisitTracker />
+      <HomePopup config={homePopup} />
 
       {/* ── HERO ─────────────────────────────────────────── */}
       <section className="hero">

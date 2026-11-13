@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { animateDailySpin, DailyRewardError, executeDailyReward } from '../../lib/daily-reward-client';
 
@@ -137,4 +137,105 @@ test('reduced motion skips random highlights and never falls back to the wrong t
   await Promise.resolve(); t.mock.timers.tick(100); t.mock.timers.tick(1);
   await result;
   assert.deepEqual(values, [null]);
+});
+
+function advanceOriginalSpin(t: TestContext) {
+  for (let step = 0; step < 20; step++) t.mock.timers.tick(60);
+  for (let delay = 120; delay <= 680; delay += 80) t.mock.timers.tick(delay);
+}
+
+for (const responseAt of [4401, 5000, 6000]) {
+  test(`a result at ${responseAt}ms lands immediately and reveals 600ms later, once`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    t.mock.method(Math, 'random', () => 0);
+    const started = Date.now();
+    let accept!: (data: { reward: typeof reward }) => void;
+    const pending = new Promise<{ reward: typeof reward }>(resolve => { accept = resolve; });
+    const highlights: [number, number | null][] = [];
+    let completions = 0;
+    const result = animateDailySpin([{ id: 'other' }, reward], pending,
+      index => highlights.push([Date.now() - started, index]), new AbortController().signal);
+    void result.then(() => { completions++; });
+    advanceOriginalSpin(t);
+    t.mock.timers.tick(responseAt - 4400);
+    assert.equal(completions, 0);
+    accept({ reward }); await Promise.resolve();
+    assert.deepEqual(highlights.at(-1), [responseAt, 1]);
+    const count = highlights.length;
+    t.mock.timers.tick(599); await Promise.resolve();
+    assert.equal(completions, 0);
+    t.mock.timers.tick(1);
+    assert.equal((await result).reward.id, reward.id);
+    assert.equal(Date.now() - started, responseAt + 600);
+    t.mock.timers.tick(10000); await Promise.resolve();
+    assert.equal(completions, 1);
+    assert.equal(highlights.length, count);
+  });
+}
+
+test('cancelling during the winner pause prevents completion and further highlights', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const controller = new AbortController();
+  const highlights: (number | null)[] = [];
+  let completions = 0;
+  const result = animateDailySpin([reward], Promise.resolve({ reward }), value => highlights.push(value), controller.signal);
+  void result.then(() => { completions++; }, () => {});
+  await Promise.resolve(); advanceOriginalSpin(t);
+  controller.abort();
+  await assert.rejects(result, /closed/);
+  const count = highlights.length;
+  t.mock.timers.tick(10000);
+  assert.equal(completions, 0);
+  assert.equal(highlights.length, count);
+});
+
+test('a response arriving after cancellation cannot restart the animation', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let accept!: (data: { reward: typeof reward }) => void;
+  const pending = new Promise<{ reward: typeof reward }>(resolve => { accept = resolve; });
+  const controller = new AbortController();
+  const highlights: (number | null)[] = [];
+  const result = animateDailySpin([reward], pending, value => highlights.push(value), controller.signal);
+  t.mock.timers.tick(60); controller.abort();
+  await assert.rejects(result, /closed/);
+  const count = highlights.length;
+  accept({ reward }); await Promise.resolve(); t.mock.timers.tick(10000);
+  assert.equal(highlights.length, count);
+});
+
+test('a failed operation stops pending highlights without revealing a reward', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let fail!: (cause: Error) => void;
+  const pending = new Promise<{ reward: typeof reward }>((_, reject) => { fail = reject; });
+  const highlights: (number | null)[] = [];
+  const result = animateDailySpin([reward], pending, value => highlights.push(value), new AbortController().signal);
+  t.mock.timers.tick(60); fail(new Error('Server rejected spin'));
+  await assert.rejects(result, /Server rejected/);
+  const count = highlights.length;
+  t.mock.timers.tick(10000);
+  assert.equal(highlights.length, count);
+});
+
+test('reduced motion reacts to a confirmed result without waiting for its next polling tick', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let accept!: (data: { reward: typeof reward }) => void;
+  const pending = new Promise<{ reward: typeof reward }>(resolve => { accept = resolve; });
+  const highlights: (number | null)[] = [];
+  const result = animateDailySpin([reward], pending, value => highlights.push(value), new AbortController().signal, true);
+  t.mock.timers.tick(50);
+  assert.deepEqual(highlights, []);
+  accept({ reward }); await Promise.resolve();
+  assert.deepEqual(highlights, [0]);
+  t.mock.timers.tick(0);
+  assert.equal((await result).reward.id, reward.id);
+});
+
+test('an unknown committed reward is returned without highlighting an unrelated cell', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const highlights: (number | null)[] = [];
+  const result = animateDailySpin([{ id: 'other' }], Promise.resolve({ reward }), value => highlights.push(value), new AbortController().signal);
+  await Promise.resolve(); advanceOriginalSpin(t);
+  assert.equal(highlights.at(-1), null);
+  t.mock.timers.tick(600);
+  assert.equal((await result).reward.id, reward.id);
 });

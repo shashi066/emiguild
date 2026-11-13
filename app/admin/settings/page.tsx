@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Save, CheckCircle, AlertCircle,
-  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor, Package, Bot, Search,
+  Gamepad2, RefreshCw, Clock, Edit2, X, Monitor, Package, Bot, Search, Megaphone, Plus, Trash2,
 } from 'lucide-react';
 import {
   SPECIAL_OPENING_DATE_KEY,
@@ -16,8 +16,14 @@ import {
 import { parsePs5RentalPrice, resolvePs5RentalAvailability } from '@/lib/ps5-rental';
 import { AdminModalShell } from '@/components/admin/AdminModalShell';
 import { AssistantAISettings } from '@/components/admin/AssistantAISettings';
+import { HomePopupCard } from '@/components/HomePopup';
+import {
+  HOME_POPUP_DEFAULT_LABELS, HOME_POPUP_MAX_PRICES, HOME_POPUP_SETTING_KEY, isHomePopupAction, parseHomePopup,
+  validateHomePopup, type HomePopupConfig,
+} from '@/lib/home-popup';
 
 const SETTINGS_SEARCH = {
+  home_popup: ['venue', 'home popup announcement gta pre-booking whatsapp'],
   ai_config: ['assistant', 'emiily ai api key model daily request limit'],
   controller_price: ['venue', 'extra controller price booking charge'],
   venue_capacity: ['venue', 'venue capacity simultaneous booking screens'],
@@ -30,7 +36,7 @@ const SETTINGS_SEARCH = {
 } as const;
 
 type Setting = { id: string; key: string; value: string; label: string | null };
-type ModalId  = 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | 'ps5_rental_status' | 'ps5_rental_price' | 'ps5_rental_controller' | 'assistant' | null;
+type ModalId  = 'home_popup' | 'controller_price' | 'venue_capacity' | 'opening_boost' | 'stations_availability' | 'ps5_rental_status' | 'ps5_rental_price' | 'ps5_rental_controller' | 'assistant' | null;
 type SettingsCategory = 'all' | 'venue' | 'rentals' | 'assistant';
 const SETTINGS_TABS: Array<{ id: SettingsCategory; label: string }> = [
   { id: 'all', label: 'All settings' }, { id: 'venue', label: 'Venue & Booking' },
@@ -49,6 +55,7 @@ export default function AdminSettingsPage() {
   const [saving,  setSaving]  = useState(false);
   const [category, setCategory] = useState<SettingsCategory>('all');
   const [search, setSearch] = useState('');
+  const [popupDraft, setPopupDraft] = useState<HomePopupConfig | null>(null);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const showToast = (type: 'success' | 'error', msg: string) => {
@@ -80,11 +87,12 @@ export default function AdminSettingsPage() {
       nextDraft[SPECIAL_OPENING_DATE_KEY] = indiaClock.date;
     }
 
+    if (id === 'home_popup') setPopupDraft(parseHomePopup(settings[HOME_POPUP_SETTING_KEY]));
     setDraft(nextDraft);   // seed draft with current saved values
     setModalId(id);
   };
 
-  const closeModal = () => { setModalId(null); setDraft({}); };
+  const closeModal = () => { setModalId(null); setDraft({}); setPopupDraft(null); };
 
   const persist = async (payload: { key: string; value: string; label: string }[]) => {
     setSaving(true);
@@ -187,6 +195,27 @@ export default function AdminSettingsPage() {
     return persist([{ key: 'ps5_rental_extra_controller', value: String(value), label: 'PS5 Rental Extra Controller Price Per Day' }]);
   };
 
+  const homePopup = parseHomePopup(settings[HOME_POPUP_SETTING_KEY]);
+  const updatePopup = (patch: Partial<HomePopupConfig>) => setPopupDraft((previous) => previous && { ...previous, ...patch });
+  const updatePopupPrice = (index: number, patch: Partial<HomePopupConfig['prices'][number]>) => setPopupDraft((previous) => previous && {
+    ...previous,
+    prices: previous.prices.map((price, priceIndex) => priceIndex === index ? { ...price, ...patch } : price),
+  });
+  // Swap in the new action's suggested label unless the admin already wrote their own.
+  const changePopupAction = (value: string) => setPopupDraft((previous) => {
+    if (!previous || !isHomePopupAction(value)) return previous;
+    const suggested: string[] = Object.values(HOME_POPUP_DEFAULT_LABELS);
+    const keepLabel = previous.buttonLabel && !suggested.includes(previous.buttonLabel);
+    const buttonLabel = value === 'none' || keepLabel ? previous.buttonLabel : HOME_POPUP_DEFAULT_LABELS[value];
+    return { ...previous, actionType: value, buttonLabel };
+  });
+  const saveHomePopup = () => {
+    if (!popupDraft) return;
+    const result = validateHomePopup(popupDraft);
+    if (!result.ok) return showToast('error', result.error);
+    return persist([{ key: HOME_POPUP_SETTING_KEY, value: JSON.stringify(result.config), label: 'Home Popup' }]);
+  };
+
   const saveAssistant = () => persist([
     { key: 'assistant_release_mode', value: draft['assistant_release_mode'] ?? 'OFF', label: 'Emi Assistant Release Mode' },
   ]);
@@ -238,6 +267,16 @@ export default function AdminSettingsPage() {
           <div className="admin-settings-result-count">{visibleCount} setting{visibleCount === 1 ? '' : 's'}</div>
           <div className="admin-settings-grid">
           <AssistantAISettings hidden={!visible('ai_config')} />
+
+          {/* ── Home Popup ── */}
+          {visible('home_popup') && <SettingCard
+            icon={<Megaphone size={20} />}
+            title="Home Popup"
+            description="Announcement card that pops up every time someone opens the home page. Optional button opens WhatsApp or any website link."
+            value={homePopup.enabled ? `On — ${homePopup.title}` : 'Off'}
+            badge={homePopup.enabled ? 'active' : undefined}
+            onEdit={() => openModal('home_popup')}
+          />}
 
           {/* ── Controller Price ── */}
           {visible('controller_price') && <SettingCard
@@ -566,6 +605,87 @@ export default function AdminSettingsPage() {
         </Modal>
       )}
 
+      {modalId === 'home_popup' && popupDraft && (
+        <Modal
+          title="Home Popup"
+          icon={<Megaphone size={18} />}
+          onClose={closeModal}
+          onSave={saveHomePopup}
+          saving={saving}
+        >
+          <div style={{ display: 'grid', gap: 'var(--space-md)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+              padding: '12px 16px', borderRadius: 'var(--radius-md)',
+              background: popupDraft.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${popupDraft.enabled ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.1)'}`,
+            }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{popupDraft.enabled ? 'Popup is on' : 'Popup is off'}</div>
+                <div style={{ fontSize: '0.73rem', color: 'var(--color-text-muted)', marginTop: 2 }}>Shows on every home page visit while on.</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={popupDraft.enabled}
+                aria-label="Show home popup"
+                onClick={() => updatePopup({ enabled: !popupDraft.enabled })}
+                style={{
+                  width: 48, height: 26, borderRadius: 13, flexShrink: 0, border: 'none', cursor: 'pointer', position: 'relative',
+                  background: popupDraft.enabled ? '#10b981' : 'rgba(255,255,255,0.15)', transition: 'background 0.2s',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 3, left: popupDraft.enabled ? 25 : 3, width: 20, height: 20, borderRadius: '50%',
+                  background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.3)', transition: 'left 0.2s', display: 'block',
+                }} />
+              </button>
+            </div>
+
+            <PopupField id="popup-eyebrow" label="Small tag" value={popupDraft.eyebrow} maxLength={40} onChange={(eyebrow) => updatePopup({ eyebrow })} />
+            <PopupField id="popup-title" label="Title" value={popupDraft.title} maxLength={60} onChange={(title) => updatePopup({ title })} />
+            <PopupField id="popup-subtitle" label="Subtitle" value={popupDraft.subtitle} maxLength={160} onChange={(subtitle) => updatePopup({ subtitle })} />
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <span className="form-label">Prices</span>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {popupDraft.prices.map((price, index) => (
+                  <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 8, alignItems: 'center' }}>
+                    <input className="form-input" aria-label={`Price ${index + 1} label`} placeholder="1 hr" maxLength={20} value={price.label} onChange={(event) => updatePopupPrice(index, { label: event.target.value })} />
+                    <div className="admin-price-input"><span>₹</span><input className="form-input" aria-label={`Price ${index + 1} amount`} type="number" min={0} max={100000} step={1} value={price.amount} onChange={(event) => updatePopupPrice(index, { amount: Number(event.target.value) || 0 })} /></div>
+                    <button type="button" className="btn btn-ghost btn-sm" aria-label={`Remove price ${index + 1}`} onClick={() => updatePopup({ prices: popupDraft.prices.filter((_, priceIndex) => priceIndex !== index) })}><Trash2 size={15} /></button>
+                  </div>
+                ))}
+                {popupDraft.prices.length < HOME_POPUP_MAX_PRICES && (
+                  <button type="button" className="btn btn-ghost btn-sm" style={{ justifySelf: 'start' }} onClick={() => updatePopup({ prices: [...popupDraft.prices, { label: '', amount: 0 }] })}><Plus size={15} /> Add price</button>
+                )}
+              </div>
+            </div>
+
+            <PopupField id="popup-note" label="Note" value={popupDraft.note} maxLength={160} onChange={(note) => updatePopup({ note })} />
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" htmlFor="popup-action">Button</label>
+              <select id="popup-action" className="form-input" value={popupDraft.actionType} onChange={(event) => changePopupAction(event.target.value)}>
+                <option value="none">No button (information only)</option>
+                <option value="whatsapp">WhatsApp chat</option>
+                <option value="link">Custom link (e.g. emiguildwars.in)</option>
+              </select>
+            </div>
+            {popupDraft.actionType !== 'none' && <PopupField id="popup-button" label="Button label" value={popupDraft.buttonLabel} maxLength={40} onChange={(buttonLabel) => updatePopup({ buttonLabel })} />}
+            {popupDraft.actionType === 'link' && <PopupField id="popup-link-url" label="Website link" value={popupDraft.linkUrl} maxLength={300} placeholder="https://emiguildwars.in" onChange={(linkUrl) => updatePopup({ linkUrl })} />}
+            {popupDraft.actionType === 'whatsapp' && <>
+              <PopupField id="popup-whatsapp-number" label="WhatsApp number (country code + number, digits only)" value={popupDraft.whatsappNumber} maxLength={15} inputMode="numeric" onChange={(whatsappNumber) => updatePopup({ whatsappNumber: whatsappNumber.replace(/\D/g, '') })} />
+              <PopupField id="popup-whatsapp-message" label="WhatsApp message" value={popupDraft.whatsappMessage} maxLength={300} multiline onChange={(whatsappMessage) => updatePopup({ whatsappMessage })} />
+            </>}
+
+            <div>
+              <span className="form-label">Preview</span>
+              <HomePopupCard config={popupDraft} preview />
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {modalId === 'assistant' && (
         <Modal
           title="Emi Assistant"
@@ -585,6 +705,27 @@ export default function AdminSettingsPage() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ── PopupField ─────────────────────────────────────────────────────────────────
+function PopupField({ id, label, value, maxLength, multiline = false, inputMode, placeholder, onChange }: {
+  id: string;
+  label: string;
+  value: string;
+  maxLength: number;
+  multiline?: boolean;
+  inputMode?: 'numeric';
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="form-group" style={{ margin: 0 }}>
+      <label className="form-label" htmlFor={id}>{label}</label>
+      {multiline
+        ? <textarea id={id} className="form-input" rows={2} maxLength={maxLength} value={value} onChange={(event) => onChange(event.target.value)} />
+        : <input id={id} className="form-input" maxLength={maxLength} inputMode={inputMode} placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />}
     </div>
   );
 }
